@@ -59,26 +59,26 @@ describe("ProviderForm OpenClaw suggested defaults", () => {
       .getAllByRole("button")
       .find(
         (button) =>
-          button.querySelector("span.truncate")?.textContent === "OpenRouter",
+          button.querySelector("span.truncate")?.textContent === "DeepSeek",
       );
     fireEvent.click(row!);
     fireEvent.change(container.querySelector("#openclaw-key")!, {
-      target: { value: "my-or" },
+      target: { value: "my-deepseek" },
     });
     const editor = screen.getByTestId("json-editor") as HTMLTextAreaElement;
     const config = JSON.parse(editor.value);
     config.apiKey = "sk-test";
     config.models = [
-      { id: "anthropic/claude-sonnet-5.5", name: "Claude Sonnet 5.5" },
-      { id: "stealth/ox-alpha", name: "Ox Alpha" },
+      { id: "deepseek-flash", name: "DeepSeek V4.1 Flash" },
+      { id: "custom/experimental", name: "Experimental Model" },
     ];
     fireEvent.change(editor, { target: { value: JSON.stringify(config) } });
     fireEvent.click(screen.getByRole("button", { name: "save-provider" }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect(onSubmit.mock.calls[0][0].suggestedDefaults.modelCatalog).toEqual({
-      "my-or/anthropic/claude-sonnet-5.5": { alias: "Sonnet" },
-      "my-or/stealth/ox-alpha": {},
+      "my-deepseek/deepseek-flash": { alias: "Flash" },
+      "my-deepseek/custom/experimental": {},
     });
   });
 });

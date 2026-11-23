@@ -52,11 +52,10 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
     icon: "gemini",
     iconColor: "#4285F4",
   },
-  // ===== 赞助商预设：文件顺序与 README 赞助商表对齐（仅维护约定；应用内一律按显示名排序，不置顶）=====
+  // 保留原有预设顺序和索引以兼容已有配置；第三方平台不再提供内置添加选项。
   {
     name: "PackyCode",
     websiteUrl: "https://www.packyapi.ai",
-    apiKeyUrl: "https://www.packyapi.ai/register?aff=cc-switch",
     settingsConfig: {
       env: {
         GOOGLE_GEMINI_BASE_URL: "https://www.packyapi.ai",
@@ -80,7 +79,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "APINebula",
     websiteUrl: "https://apinebula.ai",
-    apiKeyUrl: "https://apinebula.ai/VjM74M",
     settingsConfig: {
       env: {
         GOOGLE_GEMINI_BASE_URL: "https://apinebula.ai",
@@ -100,7 +98,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "AICodeMirror",
     websiteUrl: "https://www.aicodemirror.ai",
-    apiKeyUrl: "https://www.aicodemirror.ai/register?invitecode=9915W3",
     settingsConfig: {
       env: {
         GOOGLE_GEMINI_BASE_URL: "https://api.aicodemirror.ai/api/gemini",
@@ -120,7 +117,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "PatewayAI",
     websiteUrl: "https://pateway.ai",
-    apiKeyUrl: "https://pateway.ai/?ch=etzpm8&aff=WB6M6F67#/",
     // /v1beta 用假 Key 探测为 401、乱写路径 404（2026-10-31）；模型列表要登录才能看，模型 ID 按官方最新填写，未用真 Key 验证
     settingsConfig: {
       env: {
@@ -140,7 +136,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "hao.ai",
     websiteUrl: "https://hao.ai",
-    apiKeyUrl: "https://hao.ai/invite/DTBZS3OR",
     // Gemini 原生接口在 /gemini 前缀下（2026-10-31 假 Key 探测：/gemini/v1beta 401、
     // 乱写路径 404）。目录里的 ID 带 provider/ 前缀，原生路由用不带前缀的 ID，未用真 Key 验证
     settingsConfig: {
@@ -161,8 +156,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "FennoAI",
     websiteUrl: "https://api.fenno.ai",
-    apiKeyUrl:
-      "https://api.fenno.ai/register?redirect=/purchase?tab=subscription%26group=16&aff=P9MR3D3PLCNL",
     // /v1beta 回 Google 格式的 401（2026-10-31）；当天定价接口里最新的 Flash 是
     // gemini-3-flash-preview，没有 3.8，未用真 Key 验证
     settingsConfig: {
@@ -183,7 +176,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "RunAPI",
     websiteUrl: "https://runapi.host",
-    apiKeyUrl: "https://runapi.host/register?aff=iOKB",
     // runapi.host/api/pricing（2026-10-31）：Gemini 模型带 gemini 端点类型，原生 /v1beta 在站点根
     settingsConfig: {
       env: {
@@ -204,7 +196,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "OpenModel",
     websiteUrl: "https://www.openmodel.ai",
-    apiKeyUrl: "https://www.openmodel.ai?ref=cc-switch",
     settingsConfig: {
       env: {
         GOOGLE_GEMINI_BASE_URL: "https://api.openmodel.ai",
@@ -222,7 +213,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "GrooRoute Pro",
     websiteUrl: "https://grooroute.pro",
-    apiKeyUrl: "https://grooroute.pro/sign-up?aff=qqm9",
     // grooroute.pro/api/pricing（2026-10-31）：gemini-3.8-flash / gemini-4-argon 带 gemini 端点类型
     settingsConfig: {
       env: {
@@ -243,7 +233,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "BuyToken",
     websiteUrl: "https://buytoken.work",
-    apiKeyUrl: "https://buytoken.work/sign-up?aff=cc-switch",
     // 官网定价页列出 gemini-3.8-flash / gemini-4-argon；/v1beta 用假 Key 探测为 401、乱写路径 404
     // （2026-10-31）。Key 按分组发，要用 Gemini 分组的 Key
     settingsConfig: {
@@ -264,7 +253,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "V-API",
     websiteUrl: "https://gpt.ge",
-    apiKeyUrl: "https://gpt.ge/signup?aff=URNP",
     // Gemini 原生 /v1beta（含 streamGenerateContent）在站点根，令牌选 gemini 或
     // gemini_cli 分组（gpt.ge/models/gemini-3.8-flash，2026-10-23）
     settingsConfig: {
@@ -293,8 +281,7 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "Shengsuanyun",
     nameKey: "providerForm.presets.shengsuanyun",
-    websiteUrl: "https://www.shengsuanyun.com/?from=CH_4HHXMRYF",
-    apiKeyUrl: "https://www.shengsuanyun.com/?from=CH_4HHXMRYF",
+    websiteUrl: "https://www.shengsuanyun.com/",
     settingsConfig: {
       env: {
         GOOGLE_GEMINI_BASE_URL: "https://router.shengsuanyun.com/api",
@@ -312,7 +299,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "AIGoCode",
     websiteUrl: "https://aigocode.net",
-    apiKeyUrl: "https://aigocode.net/invite/CC-SWITCH",
     settingsConfig: {
       env: {
         GOOGLE_GEMINI_BASE_URL: "https://api.aigocode.dev",
@@ -335,8 +321,7 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "Qiniu",
     nameKey: "providerForm.presets.qiniu",
-    websiteUrl: "https://s.qiniu.com/nMvAvy",
-    apiKeyUrl: "https://s.qiniu.com/nMvAvy",
+    websiteUrl: "https://www.qiniu.com/",
     settingsConfig: {
       env: {
         GOOGLE_GEMINI_BASE_URL: "https://api.qnaigc.com/bypass/vertex",
@@ -358,7 +343,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "AICoding",
     websiteUrl: "https://aicoding.inc",
-    apiKeyUrl: "https://aicoding.inc/i/CCSWITCH",
     settingsConfig: {
       env: {
         GOOGLE_GEMINI_BASE_URL: "https://api.aicoding.inc",
@@ -378,7 +362,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "SubRouter",
     websiteUrl: "https://subrouter.ai",
-    apiKeyUrl: "https://subrouter.ai/register?aff=l3ri",
     settingsConfig: {
       env: {
         GOOGLE_GEMINI_BASE_URL: "https://subrouter.ai/v1beta",
@@ -397,7 +380,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "OspreyAI",
     websiteUrl: "https://open.ospreyai.cn",
-    apiKeyUrl: "https://open.ospreyai.cn",
     // open.ospreyai.cn/api/pricing（2026-10-31）：只有 gemini-4-argon 带 gemini 端点类型，
     // gemini-3.5-flash / 3.1-pro-preview 只标 openai，走不了原生 /v1beta
     settingsConfig: {
@@ -418,7 +400,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "88API",
     websiteUrl: "https://88api.ai",
-    apiKeyUrl: "https://88api.ai/sign-up?aff=HSGY",
     settingsConfig: {
       env: {
         GOOGLE_GEMINI_BASE_URL: "https://api.88api.ai",
@@ -438,7 +419,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "APIKEY.FUN",
     websiteUrl: "https://apikey.fan",
-    apiKeyUrl: "https://apikey.fan/register?aff=CCSwitch",
     settingsConfig: {
       env: {
         GOOGLE_GEMINI_BASE_URL: "https://api.apikey.fan",
@@ -461,8 +441,7 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   },
   {
     name: "9527CODE",
-    websiteUrl: "https://9527.codes/register?channel=ccs",
-    apiKeyUrl: "https://9527.codes/register?channel=ccs",
+    websiteUrl: "https://9527.codes/register",
     settingsConfig: {
       env: {
         GOOGLE_GEMINI_BASE_URL: "https://9527.codes",
@@ -486,8 +465,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "TeamoRouter",
     websiteUrl: "https://teamorouter.com",
-    apiKeyUrl:
-      "https://teamorouter.com/?utm_source=cc_switch&utm_medium=referral&utm_campaign=ai_directory",
     // 接入文档 teamorouter.com/zh/docs/install-gemini-cli（2026-10-31）：Key 以 Bearer 发送
     settingsConfig: {
       env: {
@@ -509,7 +486,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "Code0",
     websiteUrl: "https://code0.ai",
-    apiKeyUrl: "https://code0.ai/agent/register/B2XHxGjGmRvqgznY",
     settingsConfig: {
       env: {
         GOOGLE_GEMINI_BASE_URL: "https://code0.ai",
@@ -525,7 +501,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "A6API",
     websiteUrl: "https://www.a6api.vip",
-    apiKeyUrl: "https://a6api.vip/register?aff=AqNr",
     settingsConfig: {
       env: {
         GOOGLE_GEMINI_BASE_URL: "https://api.a6api.vip",
@@ -544,8 +519,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
     name: "Compshare",
     nameKey: "providerForm.presets.ucloud",
     websiteUrl: "https://www.compshare.cn",
-    apiKeyUrl:
-      "https://www.compshare.cn/coding-plan?ytag=GPU_YY_YX_git_cc-switch",
     // api.modelverse.cn/v1beta/models（2026-10-31）公开列出 gemini-3.8-flash 等原生模型；
     // 编程套餐地址 cp.compshare.cn 没有 /v1beta，所以只收按量版
     settingsConfig: {
@@ -568,7 +541,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "CCSub",
     websiteUrl: "https://www.ccsub.net",
-    apiKeyUrl: "https://www.ccsub.net/register?ref=Y6Z8DXEA",
     // www.ccsub.net/v1/models（2026-10-31）：Gemini 最新只有 gemini-3.5-flash；/v1beta 回 Google 格式的 401
     settingsConfig: {
       env: {
@@ -587,7 +559,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "SSSAiCode",
     websiteUrl: "https://sssaicodeapi.com",
-    apiKeyUrl: "https://sssaicodeapi.com/register?ref=DCP0SM",
     settingsConfig: {
       env: {
         GOOGLE_GEMINI_BASE_URL: "https://node-hk.sssaicodeapi.com/api",
@@ -611,7 +582,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "SoleAPI",
     websiteUrl: "https://soleapi.com",
-    apiKeyUrl: "https://soleapi.com/r/ccswitch",
     settingsConfig: {
       env: {
         GOOGLE_GEMINI_BASE_URL: "https://soleapi.com",
@@ -631,7 +601,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "Micu",
     websiteUrl: "https://www.micuapi.ai",
-    apiKeyUrl: "https://www.micuapi.ai/register?aff=aOYQ",
     // /v1beta 用假 Key 探测为 401、乱写路径 404（2026-10-31）；模型列表要登录才能看，模型 ID 按官方最新填写，未用真 Key 验证
     settingsConfig: {
       env: {
@@ -653,7 +622,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "Cubence",
     websiteUrl: "https://cubence.com",
-    apiKeyUrl: "https://cubence.com/signup?code=CCSWITCH&source=ccs",
     settingsConfig: {
       env: {
         GOOGLE_GEMINI_BASE_URL: "https://api.cubence.com",
@@ -678,7 +646,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "CrazyRouter",
     websiteUrl: "https://www.crazyrouter.com",
-    apiKeyUrl: "https://www.crazyrouter.com/register?aff=OZcm&ref=cc-switch",
     settingsConfig: {
       env: {
         GOOGLE_GEMINI_BASE_URL: "https://cn.crazyrouter.com",
@@ -698,7 +665,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "DMXAPI",
     websiteUrl: "https://www.dmxapi.cn",
-    apiKeyUrl: "https://www.dmxapi.cn",
     // /v1beta 用假 Key 探测为 401、乱写路径 404（2026-10-31）；模型列表要登录才能看，模型 ID 按官方最新填写，未用真 Key 验证
     settingsConfig: {
       env: {
@@ -719,8 +685,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "SudoCode.chat",
     websiteUrl: "https://sudocode.chat",
-    apiKeyUrl:
-      "https://sudocode.chat/sign-up?aff=CC-SWITCH&utm_source=cc-switch&utm_medium=sponsor&utm_campaign=ccswitch",
     // /v1beta 用假 Key 探测为 401、乱写路径 404（2026-10-31）；模型列表要登录才能看，模型 ID 按官方最新填写，未用真 Key 验证
     settingsConfig: {
       env: {
@@ -744,7 +708,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "SudoCode.us",
     websiteUrl: "https://sudocode.us",
-    apiKeyUrl: "https://sudocode.us",
     settingsConfig: {
       env: {
         GOOGLE_GEMINI_BASE_URL: "https://sudocode.us",
@@ -763,7 +726,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "XycAi",
     websiteUrl: "https://xycai.us",
-    apiKeyUrl: "https://xycai.us/register?aff=Uhu9",
     settingsConfig: {
       env: {
         GOOGLE_GEMINI_BASE_URL: "https://apicdn.xycai.us",
@@ -783,8 +745,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "Modelflare",
     websiteUrl: "https://modelflare.dev",
-    apiKeyUrl:
-      "https://modelflare.dev/sign-up?utm_medium=referral&utm_source=ccswitch",
     // 官方 Gemini CLI 文档（docs.modelflare.dev/guides/clients/gemini-cli，
     // 2026-10-15 核对）：base 用站点根。Gemini CLI 走 /v1beta，只有
     // modelflare.dev 提供，origin 子域不提供，故不加备用端点
@@ -806,7 +766,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
   {
     name: "AllTokens",
     websiteUrl: "https://alltokens.cc",
-    apiKeyUrl: "https://alltokens.cc/register",
     // Sub2API 网关：Key 绑定单个分组，须用 Gemini 分组的 Key（分组与模型见
     // alltokens.cc/api/v1/model-plaza，2026-10-17 核对）
     settingsConfig: {
@@ -828,7 +787,6 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
     name: "AllTokens SI",
     websiteUrl: "https://alltokens.si",
     // 站点关闭了个人注册（/api/status 的 register_enabled=false），只能企业注册
-    apiKeyUrl: "https://alltokens.si/enterprise-register",
     // Gemini 分组不在默认自动分组里，须用 Gemini 分组的 Key；目录里唯一
     // 规范的 3.8 Flash ID 是 gemini-3.8-flash-high（alltokens.si/api/pricing，
     // 2026-10-19 核对）
@@ -847,7 +805,7 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
     partnerPromotionKey: "alltokens_si",
     icon: "alltokens-si",
   },
-  // ===== 非赞助商预设：应用内展示按显示名排序，此处文件顺序不影响展示 =====
+  // ===== 其他预设：应用内展示按显示名排序，此处文件顺序不影响展示 =====
   {
     name: "Tu-zi",
     nameKey: "providerForm.presets.tuzi",

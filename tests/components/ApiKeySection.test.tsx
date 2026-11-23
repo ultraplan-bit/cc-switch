@@ -13,7 +13,7 @@ const { toast } = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/toast", () => ({ toast }));
 
-// 测试的 i18n 是空资源，推广语传了 defaultValue: "" 会变成空串；这里让 t() 原样返回 key
+// 让 t() 原样返回 key，以便检查旧的合作伙伴信息不会再显示推广文案。
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
@@ -35,15 +35,16 @@ function renderSection(
 }
 
 describe("ApiKeySection", () => {
-  it("shows the preset's promotion under the input next to the API Key link", () => {
-    renderSection();
+  it("keeps the API Key link and hint without rendering legacy promotions", () => {
+    renderSection({ isPartner: true, hint: "API Key help" });
 
     expect(
       screen.getByRole("link", { name: /providerForm\.getApiKey/ }),
     ).toHaveAttribute("href", "https://example.com/keys");
     expect(
-      screen.getByText("providerForm.partnerPromotion.kimi"),
-    ).toBeInTheDocument();
+      screen.queryByText("providerForm.partnerPromotion.kimi"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("API Key help")).toBeInTheDocument();
   });
 
   it("hides the promotion when the API Key link is hidden", () => {

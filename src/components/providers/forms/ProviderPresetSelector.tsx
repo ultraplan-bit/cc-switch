@@ -41,6 +41,7 @@ import {
   PRESET_GROUP_ORDER,
   familyDisplayName,
   groupPresetRows,
+  isSelectablePreset,
   loginAccountKey,
   matchPresetRow,
   presetDisplayName,
@@ -99,11 +100,13 @@ export function filterPresetEntries(
   query: string,
   t: PresetTranslator,
 ): PresetEntry[] {
-  if (!query.trim()) return entries;
-  return entries.filter((entry) => presetMatches(entry, query, t));
+  return entries.filter(
+    (entry) =>
+      isSelectablePreset(entry.preset) && presetMatches(entry, query, t),
+  );
 }
 
-/** 一律按名称排（中文名按拼音插进字母序），不再有官方 / 赞助商置顶 */
+/** 一律按名称排（中文名按拼音插进字母序） */
 export function getVisiblePresetEntries(
   entries: PresetEntry[],
   { query, t }: { query: string; t: PresetTranslator },
@@ -122,7 +125,9 @@ export function getVisiblePresetRows(
   entries: PresetEntry[],
   { query, t }: { query: string; t: PresetTranslator },
 ): VisiblePresetRow[] {
-  const found = groupPresetRows(entries).flatMap((row) => {
+  const found = groupPresetRows(
+    entries.filter((entry) => isSelectablePreset(entry.preset)),
+  ).flatMap((row) => {
     const match = matchPresetRow(row, query, t);
     return match ? [{ row, hits: match.versions }] : [];
   });
@@ -155,6 +160,10 @@ export function ProviderPresetSelector({
   onManageUniversalProviders,
   barAction,
 }: Readonly<ProviderPresetSelectorProps>) {
+  const availablePresets = useMemo(
+    () => presetEntries.filter((entry) => isSelectablePreset(entry.preset)),
+    [presetEntries],
+  );
   const step = usePresetStep();
   const registerSelector = step?.registerSelector;
   useEffect(() => registerSelector?.(), [registerSelector]);
@@ -168,7 +177,7 @@ export function ProviderPresetSelector({
     return createPortal(
       <PresetPicker
         appId={step.appId}
-        entries={presetEntries}
+        entries={availablePresets}
         onPick={pick}
         onUniversalPresetSelect={onUniversalPresetSelect}
         onManageUniversalProviders={onManageUniversalProviders}
@@ -179,17 +188,17 @@ export function ProviderPresetSelector({
 
   const entry =
     selectedPresetId && selectedPresetId !== "custom"
-      ? presetEntries.find((item) => item.id === selectedPresetId)
+      ? availablePresets.find((item) => item.id === selectedPresetId)
       : undefined;
 
   if (!step) {
     // 没有两步外壳（单独渲染的表单）：就地显示选择列表，选中多版本的那一家时下面跟版本切换
-    const versions = entry ? presetVersions(presetEntries, entry) : [];
+    const versions = entry ? presetVersions(availablePresets, entry) : [];
     return (
       <div className="space-y-3" data-preset-selector="">
         <div className="h-[420px] overflow-hidden rounded-panel border border-border">
           <PresetPicker
-            entries={presetEntries}
+            entries={availablePresets}
             onPick={onPresetChange}
             selectedPresetId={selectedPresetId}
             onUniversalPresetSelect={onUniversalPresetSelect}
@@ -212,7 +221,7 @@ export function ProviderPresetSelector({
       action={barAction}
       appId={step.appId}
       entry={entry}
-      versions={entry ? presetVersions(presetEntries, entry) : []}
+      versions={entry ? presetVersions(availablePresets, entry) : []}
       onChange={() => step.setStep("pick")}
       // 换版本 = 选了同一家的另一个预设，表单按它重填
       onVersionChange={onPresetChange}

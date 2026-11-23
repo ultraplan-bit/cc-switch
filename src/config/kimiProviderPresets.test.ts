@@ -65,6 +65,11 @@ describe("kimiProviderPresets", () => {
       "TokenFactory",
     ]) {
       expect(presetGroup(find(name))).toBe("thirdparty");
+    }
+    for (const name of ["88API", "A6API", "AICodeMirror"]) {
+      expect(find(name).apiKeyUrl).toBeUndefined();
+    }
+    for (const name of ["OpenRouter", "TokenFactory"]) {
       expect(find(name).apiKeyUrl).toBeTruthy();
     }
     expect(find("Third-party platform")).toBeUndefined();

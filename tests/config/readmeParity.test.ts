@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 // README 是整页文档，没有逐句回退：哪份漏改了，读者就看到一份半新半旧的页面。
-// 这里拦住最容易漏的两类改动：章节结构和赞助商表。
+// 这里拦住最容易漏的改动：章节结构、链接和图片。
 const ROOT = path.resolve(__dirname, "../..");
 
 const READMES = [
@@ -17,26 +17,15 @@ const READMES = [
   ["README_DE.md", "Deutsch"],
 ] as const;
 
-// 简体中文版面向大陆读者，赞助商表有地区版本（国内活动页、中文横幅），
-// 只校验行数；其余各版与英文版逐个链接对齐。
-const REGIONAL_SPONSOR_VARIANTS = new Set(["README_ZH.md"]);
-
 const read = (file: string) => readFileSync(path.join(ROOT, file), "utf8");
 
 const headingLevels = (text: string) =>
   [...text.matchAll(/^(#{1,4}) /gm)].map((m) => m[1].length);
 
-const sponsorSection = (text: string) => {
-  const start = text.search(/^## /m);
-  const next = text.slice(start + 3).search(/^## /m);
-  return text.slice(start, start + 3 + next);
-};
-
 const htmlLinks = (text: string) =>
-  [...text.matchAll(/(?:href|src)="([^"]+)"/g)].map((m) => m[1]);
-
-const sponsorRows = (text: string) =>
-  (sponsorSection(text).match(/<tr>/g) ?? []).length;
+  [...text.matchAll(/(?:href|src)="([^"]+)"/g)].map((m) =>
+    m[1].replace(/^(assets\/release-notes\/.+)-zh(\.png)$/, "$1-en$2"),
+  );
 
 const english = read("README.md");
 
@@ -68,13 +57,7 @@ describe.each(READMES)("%s", (file) => {
     expect(headingLevels(text)).toEqual(headingLevels(english));
   });
 
-  it("keeps the same number of sponsor rows as the English README", () => {
-    expect(sponsorRows(text)).toBe(sponsorRows(english));
+  it("keeps every HTML link and image in the same order as the English README", () => {
+    expect(htmlLinks(text)).toEqual(htmlLinks(english));
   });
-
-  if (!REGIONAL_SPONSOR_VARIANTS.has(file)) {
-    it("keeps every HTML link and image in the same order as the English README", () => {
-      expect(htmlLinks(text)).toEqual(htmlLinks(english));
-    });
-  }
 });

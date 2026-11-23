@@ -280,16 +280,15 @@ export const codexProviderPresets: CodexProviderPreset[] = [
     icon: "github",
     iconColor: "#000000",
   },
-  // ===== 赞助商预设：文件顺序与 README 赞助商表对齐（仅维护约定；应用内一律按显示名排序，不置顶）=====
+  // 保留原有预设顺序和索引以兼容已有配置；第三方平台不再提供内置添加选项。
   {
     name: "Kimi",
     family: "kimi",
     planKey: "payg",
     regionKey: "cn",
     primePartner: true,
-    websiteUrl:
-      "https://platform.kimi.com?track_id=track-7cf2b91dcde043eda6ef9a95951a042c&aff=cc-switch",
-    apiKeyUrl: "https://platform.kimi.com/console/api-keys?aff=cc-switch",
+    websiteUrl: "https://platform.kimi.com",
+    apiKeyUrl: "https://platform.kimi.com/console/api-keys",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "kimi",
@@ -353,9 +352,8 @@ export const codexProviderPresets: CodexProviderPreset[] = [
     family: "kimi",
     planKey: "payg",
     regionKey: "intl",
-    websiteUrl:
-      "https://platform.kimi.ai?track_id=track-674ed6e2af924a5682a87421f7cf753a&aff=cc-switch",
-    apiKeyUrl: "https://platform.kimi.ai/console/api-keys?aff=cc-switch",
+    websiteUrl: "https://platform.kimi.ai",
+    apiKeyUrl: "https://platform.kimi.ai/console/api-keys",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "kimi",
@@ -391,8 +389,8 @@ export const codexProviderPresets: CodexProviderPreset[] = [
     planKey: "coding",
     regionKey: "cn",
     primePartner: true,
-    websiteUrl: "https://www.kimi.com/code/?aff=cc-switch",
-    apiKeyUrl: "https://www.kimi.com/code/?aff=cc-switch",
+    websiteUrl: "https://www.kimi.com/code/",
+    apiKeyUrl: "https://www.kimi.com/code/",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "kimi_coding",
@@ -459,8 +457,8 @@ export const codexProviderPresets: CodexProviderPreset[] = [
     family: "kimi",
     planKey: "coding",
     regionKey: "intl",
-    websiteUrl: "https://www.kimi.ai/code?aff=cc-switch",
-    apiKeyUrl: "https://www.kimi.ai/code?aff=cc-switch",
+    websiteUrl: "https://www.kimi.ai/code",
+    apiKeyUrl: "https://www.kimi.ai/code",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "kimi_coding",
@@ -509,7 +507,6 @@ export const codexProviderPresets: CodexProviderPreset[] = [
   {
     name: "PackyCode",
     websiteUrl: "https://www.packyapi.ai",
-    apiKeyUrl: "https://www.packyapi.ai/register?aff=cc-switch",
     category: "third_party",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
@@ -530,7 +527,6 @@ export const codexProviderPresets: CodexProviderPreset[] = [
   {
     name: "APINebula",
     websiteUrl: "https://apinebula.ai",
-    apiKeyUrl: "https://apinebula.ai/VjM74M",
     category: "third_party",
     auth: generateThirdPartyAuth(""),
     config: `model_provider = "custom"
@@ -552,7 +548,6 @@ requires_openai_auth = true`,
   {
     name: "AICodeMirror",
     websiteUrl: "https://www.aicodemirror.ai",
-    apiKeyUrl: "https://www.aicodemirror.ai/register?invitecode=9915W3",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "aicodemirror",
@@ -570,7 +565,6 @@ requires_openai_auth = true`,
   {
     name: "PatewayAI",
     websiteUrl: "https://pateway.ai",
-    apiKeyUrl: "https://pateway.ai/?ch=etzpm8&aff=WB6M6F67#/",
     category: "third_party",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
@@ -586,8 +580,6 @@ requires_openai_auth = true`,
   {
     name: "Modelflare",
     websiteUrl: "https://modelflare.dev",
-    apiKeyUrl:
-      "https://modelflare.dev/sign-up?utm_medium=referral&utm_source=ccswitch",
     category: "aggregator",
     auth: generateThirdPartyAuth(""),
     // 官方 Codex 文档（docs.modelflare.dev/guides/clients/codex，2026-10-15
@@ -609,7 +601,6 @@ requires_openai_auth = true`,
   {
     name: "hao.ai",
     websiteUrl: "https://hao.ai",
-    apiKeyUrl: "https://hao.ai/invite/DTBZS3OR",
     category: "aggregator",
     auth: generateThirdPartyAuth(""),
     // 接入文档 hao.ai/docs/integrations/codex/model-provider：/v1 + Responses；
@@ -626,8 +617,6 @@ requires_openai_auth = true`,
   {
     name: "FennoAI",
     websiteUrl: "https://api.fenno.ai",
-    apiKeyUrl:
-      "https://api.fenno.ai/register?redirect=/purchase?tab=subscription%26group=16&aff=P9MR3D3PLCNL",
     category: "aggregator",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
@@ -643,7 +632,6 @@ requires_openai_auth = true`,
   {
     name: "RunAPI",
     websiteUrl: "https://runapi.host",
-    apiKeyUrl: "https://runapi.host/register?aff=iOKB",
     category: "aggregator",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
@@ -659,7 +647,6 @@ requires_openai_auth = true`,
   {
     name: "OpenModel",
     websiteUrl: "https://www.openmodel.ai",
-    apiKeyUrl: "https://www.openmodel.ai?ref=cc-switch",
     category: "aggregator",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
@@ -674,7 +661,6 @@ requires_openai_auth = true`,
   {
     name: "GrooRoute Pro",
     websiteUrl: "https://grooroute.pro",
-    apiKeyUrl: "https://grooroute.pro/sign-up?aff=qqm9",
     category: "aggregator",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
@@ -693,7 +679,6 @@ requires_openai_auth = true`,
   {
     name: "BuyToken",
     websiteUrl: "https://buytoken.work",
-    apiKeyUrl: "https://buytoken.work/sign-up?aff=cc-switch",
     category: "aggregator",
     auth: generateThirdPartyAuth(""),
     // 须用 Codex 分组的 Key；地址必须带 /v1（buytoken.work/docs，2026-10-23）
@@ -709,7 +694,6 @@ requires_openai_auth = true`,
   {
     name: "V-API",
     websiteUrl: "https://gpt.ge",
-    apiKeyUrl: "https://gpt.ge/signup?aff=URNP",
     category: "aggregator",
     auth: generateThirdPartyAuth(""),
     // gpt-5.6-sol 支持 /v1/responses，令牌选 codex 或 default 分组
@@ -804,14 +788,13 @@ requires_openai_auth = true`,
     // "修正"）；标注 Coming soon 的 deepseek-v4-pro-0813 不收；
     // 2026-10-24 产品页已列 glm-5.3 / deepseek-v4.1-flash，新增为前置行（窗口取站点调研值，
     // 未经 Key 实测），旧型号仍保留。
-    // Kimi K2.6 是定稿赞助文案点名的模型，FluxA 产品页模型表与百度国际站
+    // Kimi K2.6 未列在 FluxA 产品页模型表或百度国际站
     // team 文档都没列它：id / 窗口取 FluxA baidu-ai-cloud 模型目录（categories
     // 只有 text）与国内 Token Plan 预设（262144）双重印证，非臆造。
     // 思考档位（codexChatReasoning）国内版有、国际 team 部署未实测，先不声明，
     // 拿到 key 实测后再补
     name: "FluxA Token Plan",
     websiteUrl: "https://agentmarket.fluxapay.xyz/",
-    apiKeyUrl: "https://agentmarket.fluxapay.xyz/marketplace/tokenplans",
     category: "aggregator",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
@@ -886,7 +869,6 @@ requires_openai_auth = true`,
   {
     name: "AIGoCode",
     websiteUrl: "https://aigocode.net",
-    apiKeyUrl: "https://aigocode.net/invite/CC-SWITCH",
     category: "third_party",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
@@ -906,8 +888,7 @@ requires_openai_auth = true`,
   {
     name: "Qiniu",
     nameKey: "providerForm.presets.qiniu",
-    websiteUrl: "https://s.qiniu.com/nMvAvy",
-    apiKeyUrl: "https://s.qiniu.com/nMvAvy",
+    websiteUrl: "https://www.qiniu.com/",
     category: "aggregator",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
@@ -926,7 +907,6 @@ requires_openai_auth = true`,
   {
     name: "AICoding",
     websiteUrl: "https://aicoding.inc",
-    apiKeyUrl: "https://aicoding.inc/i/CCSWITCH",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "aicoding",
@@ -942,7 +922,6 @@ requires_openai_auth = true`,
   {
     name: "SubRouter",
     websiteUrl: "https://subrouter.ai",
-    apiKeyUrl: "https://subrouter.ai/register?aff=l3ri",
     category: "aggregator",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
@@ -958,7 +937,6 @@ requires_openai_auth = true`,
   {
     name: "OspreyAI",
     websiteUrl: "https://open.ospreyai.cn",
-    apiKeyUrl: "https://open.ospreyai.cn",
     category: "aggregator",
     auth: generateThirdPartyAuth(""),
     // 目录（open.ospreyai.cn/api/pricing，2026-10-30）有 gpt-6.1-sol，令牌选 GPT 分组；
@@ -975,8 +953,7 @@ requires_openai_auth = true`,
   {
     name: "Shengsuanyun",
     nameKey: "providerForm.presets.shengsuanyun",
-    websiteUrl: "https://www.shengsuanyun.com/?from=CH_4HHXMRYF",
-    apiKeyUrl: "https://www.shengsuanyun.com/?from=CH_4HHXMRYF",
+    websiteUrl: "https://www.shengsuanyun.com/",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "shengsuanyun",
@@ -991,7 +968,6 @@ requires_openai_auth = true`,
   {
     name: "88API",
     websiteUrl: "https://88api.ai",
-    apiKeyUrl: "https://88api.ai/sign-up?aff=HSGY",
     category: "aggregator",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
@@ -1007,7 +983,6 @@ requires_openai_auth = true`,
   {
     name: "APIKEY.FUN",
     websiteUrl: "https://apikey.fan",
-    apiKeyUrl: "https://apikey.fan/register?aff=CCSwitch",
     category: "third_party",
     auth: generateThirdPartyAuth(""),
     config: `model_provider = "custom"
@@ -1032,8 +1007,7 @@ requires_openai_auth = true`,
   },
   {
     name: "9527CODE",
-    websiteUrl: "https://9527.codes/register?channel=ccs",
-    apiKeyUrl: "https://9527.codes/register?channel=ccs",
+    websiteUrl: "https://9527.codes/register",
     category: "aggregator",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
@@ -1053,7 +1027,6 @@ requires_openai_auth = true`,
   {
     name: "Code0",
     websiteUrl: "https://code0.ai",
-    apiKeyUrl: "https://code0.ai/agent/register/B2XHxGjGmRvqgznY",
     category: "aggregator",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
@@ -1067,8 +1040,6 @@ requires_openai_auth = true`,
   {
     name: "TeamoRouter",
     websiteUrl: "https://teamorouter.com",
-    apiKeyUrl:
-      "https://teamorouter.com/?utm_source=cc_switch&utm_medium=referral&utm_campaign=ai_directory",
     category: "aggregator",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
@@ -1084,7 +1055,6 @@ requires_openai_auth = true`,
   {
     name: "PPIO",
     websiteUrl: "https://ppio.com",
-    apiKeyUrl: "https://ppio.com/activity/ccswitch",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "ppio",
@@ -1117,7 +1087,6 @@ requires_openai_auth = true`,
   {
     name: "ClaudeCN",
     websiteUrl: "https://claudecn.top",
-    apiKeyUrl: "https://claudecn.ai/register?aff=HEL9",
     category: "third_party",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
@@ -1133,10 +1102,8 @@ requires_openai_auth = true`,
     name: "火山 Agent Plan",
     family: "volcengine",
     planKey: "agentPlan",
-    websiteUrl:
-      "https://www.volcengine.com/activity/agentplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_source=OWO&utm_medium=devrel-1&utm_campaign=hw&utm_term=ccswitch&utm_content=hw",
-    apiKeyUrl:
-      "https://www.volcengine.com/activity/agentplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_source=OWO&utm_medium=devrel-1&utm_campaign=hw&utm_term=ccswitch&utm_content=hw",
+    websiteUrl: "https://www.volcengine.com/activity/agentplan",
+    apiKeyUrl: "https://www.volcengine.com/activity/agentplan",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "ark_agentplan",
@@ -1172,10 +1139,8 @@ requires_openai_auth = true`,
     name: "火山 Coding Plan",
     family: "volcengine",
     planKey: "codingPlan",
-    websiteUrl:
-      "https://www.volcengine.com/activity/codingplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
-    apiKeyUrl:
-      "https://www.volcengine.com/activity/codingplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+    websiteUrl: "https://www.volcengine.com/activity/codingplan",
+    apiKeyUrl: "https://www.volcengine.com/activity/codingplan",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "ark_codingplan",
@@ -1207,10 +1172,8 @@ requires_openai_auth = true`,
   },
   {
     name: "BytePlus",
-    websiteUrl:
-      "https://www.byteplus.com/en/product/modelark?utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
-    apiKeyUrl:
-      "https://www.byteplus.com/en/product/modelark?utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+    websiteUrl: "https://www.byteplus.com/en/product/modelark",
+    apiKeyUrl: "https://www.byteplus.com/en/product/modelark",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "byteplus",
@@ -1248,9 +1211,9 @@ requires_openai_auth = true`,
     planKey: "payg",
     nameKey: "providerForm.presets.doubaoseed",
     websiteUrl:
-      "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D",
     apiKeyUrl:
-      "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "doubaoseed",
@@ -1284,7 +1247,6 @@ requires_openai_auth = true`,
     family: "siliconflow",
     regionKey: "cn",
     websiteUrl: "https://siliconflow.cn",
-    apiKeyUrl: "https://cloud.siliconflow.cn/i/YflgU2Ve",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "siliconflow",
@@ -1326,7 +1288,6 @@ requires_openai_auth = true`,
     family: "siliconflow",
     regionKey: "intl",
     websiteUrl: "https://siliconflow.com",
-    apiKeyUrl: "https://cloud.siliconflow.cn/i/YflgU2Ve",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "siliconflow_en",
@@ -1355,7 +1316,6 @@ requires_openai_auth = true`,
   {
     name: "A6API",
     websiteUrl: "https://www.a6api.vip",
-    apiKeyUrl: "https://a6api.vip/register?aff=AqNr",
     category: "aggregator",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
@@ -1374,8 +1334,6 @@ requires_openai_auth = true`,
     planKey: "payg",
     nameKey: "providerForm.presets.ucloud",
     websiteUrl: "https://www.compshare.cn",
-    apiKeyUrl:
-      "https://www.compshare.cn/coding-plan?ytag=GPU_YY_YX_git_cc-switch",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "compshare",
@@ -1395,8 +1353,6 @@ requires_openai_auth = true`,
     planKey: "codingPlan",
     nameKey: "providerForm.presets.ucloudCoding",
     websiteUrl: "https://www.compshare.cn",
-    apiKeyUrl:
-      "https://www.compshare.cn/coding-plan?ytag=GPU_YY_YX_git_cc-switch",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "compshare_coding",
@@ -1413,7 +1369,6 @@ requires_openai_auth = true`,
   {
     name: "CCSub",
     websiteUrl: "https://www.ccsub.net",
-    apiKeyUrl: "https://www.ccsub.net/register?ref=Y6Z8DXEA",
     category: "aggregator",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
@@ -1428,7 +1383,6 @@ requires_openai_auth = true`,
   {
     name: "SSSAiCode",
     websiteUrl: "https://sssaicodeapi.com",
-    apiKeyUrl: "https://sssaicodeapi.com/register?ref=DCP0SM",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "sssaicode",
@@ -1449,7 +1403,6 @@ requires_openai_auth = true`,
   {
     name: "SoleAPI",
     websiteUrl: "https://soleapi.com",
-    apiKeyUrl: "https://soleapi.com/r/ccswitch",
     category: "aggregator",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
@@ -1465,7 +1418,6 @@ requires_openai_auth = true`,
   {
     name: "Micu",
     websiteUrl: "https://www.micuapi.ai",
-    apiKeyUrl: "https://www.micuapi.ai/register?aff=aOYQ",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "micu",
@@ -1482,7 +1434,6 @@ requires_openai_auth = true`,
   {
     name: "RightCode",
     websiteUrl: "https://www.rightapi.ai",
-    apiKeyUrl: "https://www.rightapi.ai/register?aff=CCSWITCH",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "rightcode",
@@ -1498,7 +1449,6 @@ requires_openai_auth = true`,
   {
     name: "Cubence",
     websiteUrl: "https://cubence.com",
-    apiKeyUrl: "https://cubence.com/signup?code=CCSWITCH&source=ccs",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "cubence",
@@ -1520,7 +1470,6 @@ requires_openai_auth = true`,
   {
     name: "CrazyRouter",
     websiteUrl: "https://www.crazyrouter.com",
-    apiKeyUrl: "https://www.crazyrouter.com/register?aff=OZcm&ref=cc-switch",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "crazyrouter",
@@ -1552,8 +1501,6 @@ requires_openai_auth = true`,
     name: "SudoCode.chat",
     family: "sudocode",
     websiteUrl: "https://sudocode.chat",
-    apiKeyUrl:
-      "https://sudocode.chat/sign-up?aff=CC-SWITCH&utm_source=cc-switch&utm_medium=sponsor&utm_campaign=ccswitch",
     category: "third_party",
     auth: generateThirdPartyAuth(""),
     config: `model_provider = "custom"
@@ -1579,7 +1526,6 @@ requires_openai_auth = true`,
     name: "SudoCode.us",
     family: "sudocode",
     websiteUrl: "https://sudocode.us",
-    apiKeyUrl: "https://sudocode.us",
     category: "third_party",
     auth: generateThirdPartyAuth(""),
     config: `model_provider = "custom"
@@ -1601,7 +1547,6 @@ requires_openai_auth = true`,
   {
     name: "XycAi",
     websiteUrl: "https://xycai.us",
-    apiKeyUrl: "https://xycai.us/register?aff=Uhu9",
     category: "aggregator",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
@@ -1620,7 +1565,6 @@ requires_openai_auth = true`,
   {
     name: "AllTokens",
     websiteUrl: "https://alltokens.cc",
-    apiKeyUrl: "https://alltokens.cc/register",
     category: "aggregator",
     auth: generateThirdPartyAuth(""),
     // Sub2API 网关：Key 绑定单个分组，须用 GPT 分组的 Key（分组与模型见
@@ -1638,7 +1582,6 @@ requires_openai_auth = true`,
     name: "AllTokens SI",
     websiteUrl: "https://alltokens.si",
     // 站点关闭了个人注册（/api/status 的 register_enabled=false），只能企业注册
-    apiKeyUrl: "https://alltokens.si/enterprise-register",
     category: "aggregator",
     auth: generateThirdPartyAuth(""),
     // GPT 分组（alltokens.si/api/pricing，2026-10-19）。目录只声明 Chat，但
@@ -1652,7 +1595,7 @@ requires_openai_auth = true`,
     partnerPromotionKey: "alltokens_si",
     icon: "alltokens-si",
   },
-  // ===== 非赞助商预设：应用内展示按显示名排序，此处文件顺序不影响展示 =====
+  // ===== 其他预设：应用内展示按显示名排序，此处文件顺序不影响展示 =====
   {
     name: "Tu-zi",
     nameKey: "providerForm.presets.tuzi",
@@ -2083,9 +2026,8 @@ requires_openai_auth = true`,
     name: "千问AI平台",
     family: "qianwen",
     planKey: "payg",
-    websiteUrl: "https://platform.qianwenai.com/?utm_content=g_20000002971",
-    apiKeyUrl:
-      "https://platform.qianwenai.com/home/api-keys?utm_content=g_20000002972",
+    websiteUrl: "https://platform.qianwenai.com/",
+    apiKeyUrl: "https://platform.qianwenai.com/home/api-keys",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "qianwenai",
@@ -2142,10 +2084,8 @@ requires_openai_auth = true`,
     name: "千问AI平台 Token Plan",
     family: "qianwen",
     planKey: "tokenPlan",
-    websiteUrl:
-      "https://platform.qianwenai.com/pricing/token-plan?utm_content=g_20000002977",
-    apiKeyUrl:
-      "https://platform.qianwenai.com/home/api-keys?utm_content=g_20000002978",
+    websiteUrl: "https://platform.qianwenai.com/pricing/token-plan",
+    apiKeyUrl: "https://platform.qianwenai.com/home/api-keys",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "qianwenai_token_plan",
@@ -2188,8 +2128,8 @@ requires_openai_auth = true`,
     name: "QwenCloud",
     family: "qwencloud",
     planKey: "payg",
-    websiteUrl: "https://home.qwencloud.com/?utm_content=g_20000002974",
-    apiKeyUrl: "https://home.qwencloud.com/api-keys?utm_content=g_20000002975",
+    websiteUrl: "https://home.qwencloud.com/",
+    apiKeyUrl: "https://home.qwencloud.com/api-keys",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "qwencloud",
@@ -2294,9 +2234,8 @@ requires_openai_auth = true`,
     name: "QwenCloud Token Plan",
     family: "qwencloud",
     planKey: "tokenPlan",
-    websiteUrl:
-      "https://www.qwencloud.com/pricing/token-plan?utm_content=g_20000002980",
-    apiKeyUrl: "https://home.qwencloud.com/api-keys?utm_content=g_20000002981",
+    websiteUrl: "https://www.qwencloud.com/pricing/token-plan",
+    apiKeyUrl: "https://home.qwencloud.com/api-keys",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "qwencloud_token_plan",
@@ -3040,8 +2979,7 @@ requires_openai_auth = true`,
     family: "streamlake",
     regionKey: "cn",
     websiteUrl: "https://www.streamlake.com",
-    apiKeyUrl:
-      "https://console.streamlake.com/console/wanqing/api-key?channel=ccswitch",
+    apiKeyUrl: "https://console.streamlake.com/console/wanqing/api-key",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "streamlake",
@@ -3065,7 +3003,7 @@ requires_openai_auth = true`,
     family: "streamlake",
     regionKey: "intl",
     websiteUrl: "https://console.streamlake.ai",
-    apiKeyUrl: "https://console.streamlake.ai/console/api-key?channel=ccswitch",
+    apiKeyUrl: "https://console.streamlake.ai/console/api-key",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
       "streamlake_en",
@@ -4510,7 +4448,6 @@ requires_openai_auth = true`,
     family: "opencode",
     planKey: "coding",
     websiteUrl: "https://opencode.ai/go",
-    apiKeyUrl: "https://opencode.ai/go",
     partnerPromotionKey: "opencode_go",
     auth: generateThirdPartyAuth(""),
     config: generateThirdPartyConfig(
@@ -4683,7 +4620,6 @@ model_auto_compact_token_limit = 9000000`,
   {
     name: "PIPELLM",
     websiteUrl: "https://code.pipellm.ai",
-    apiKeyUrl: "https://code.pipellm.ai/login?ref=uvw650za",
     auth: {
       OPENAI_API_KEY: "",
     },
@@ -5043,7 +4979,6 @@ base_url = "https://cc-api.pipellm.ai/v1"`,
   {
     name: "TokenPlus",
     websiteUrl: "https://www.tokenplus.cn/",
-    apiKeyUrl: "https://www.tokenplus.cn/workspace",
     category: "aggregator",
     partnerPromotionKey: "tokenplus",
     icon: "tokenplus",

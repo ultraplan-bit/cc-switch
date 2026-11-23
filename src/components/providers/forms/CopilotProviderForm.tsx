@@ -548,8 +548,6 @@ export function CopilotProviderForm({
         official: t("providerForm.categoryOfficial"),
         custom: t("providerPreset.custom"),
         cn_official: t("providerForm.categoryCnOfficial"),
-        third_party: t("providerPreset.group.thirdparty"),
-        aggregator: t("providerPreset.group.thirdparty"),
         cloud_provider: t("providerPreset.group.cloud"),
         local: t("providerPreset.group.local"),
       }}

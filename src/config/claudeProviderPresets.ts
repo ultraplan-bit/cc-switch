@@ -78,7 +78,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "TokenPlus",
     websiteUrl: "https://www.tokenplus.cn/",
-    apiKeyUrl: "https://www.tokenplus.cn/workspace",
     category: "aggregator",
     partnerPromotionKey: "tokenplus",
     icon: "tokenplus",
@@ -112,15 +111,14 @@ export const providerPresets: ProviderPreset[] = [
     icon: "anthropic",
     iconColor: "#D4915D",
   },
-  // ===== 赞助商预设：文件顺序与 README 赞助商表对齐（仅维护约定；应用内一律按显示名排序，不置顶）=====
+  // 保留原有预设顺序和索引以兼容已有配置；第三方平台不再提供内置添加选项。
   {
     name: "Kimi",
     family: "kimi",
     planKey: "payg",
     regionKey: "cn",
     primePartner: true,
-    websiteUrl:
-      "https://platform.kimi.com?track_id=track-7cf2b91dcde043eda6ef9a95951a042c&aff=cc-switch",
+    websiteUrl: "https://platform.kimi.com",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.moonshot.cn/anthropic",
@@ -144,8 +142,7 @@ export const providerPresets: ProviderPreset[] = [
     family: "kimi",
     planKey: "payg",
     regionKey: "intl",
-    websiteUrl:
-      "https://platform.kimi.ai?track_id=track-674ed6e2af924a5682a87421f7cf753a&aff=cc-switch",
+    websiteUrl: "https://platform.kimi.ai",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.moonshot.ai/anthropic",
@@ -169,7 +166,7 @@ export const providerPresets: ProviderPreset[] = [
     planKey: "coding",
     regionKey: "cn",
     primePartner: true,
-    websiteUrl: "https://www.kimi.com/code/?aff=cc-switch",
+    websiteUrl: "https://www.kimi.com/code/",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.kimi.com/coding/",
@@ -195,7 +192,7 @@ export const providerPresets: ProviderPreset[] = [
     family: "kimi",
     planKey: "coding",
     regionKey: "intl",
-    websiteUrl: "https://www.kimi.ai/code?aff=cc-switch",
+    websiteUrl: "https://www.kimi.ai/code",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.kimi.ai/coding/",
@@ -215,7 +212,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "PackyCode",
     websiteUrl: "https://www.packyapi.ai",
-    apiKeyUrl: "https://www.packyapi.ai/register?aff=cc-switch",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://www.packyapi.ai",
@@ -237,7 +233,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "APINebula",
     websiteUrl: "https://apinebula.ai",
-    apiKeyUrl: "https://apinebula.ai/VjM74M",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://apinebula.ai",
@@ -253,7 +248,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "AICodeMirror",
     websiteUrl: "https://www.aicodemirror.ai",
-    apiKeyUrl: "https://www.aicodemirror.ai/register?invitecode=9915W3",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.aicodemirror.ai/api/claudecode",
@@ -270,7 +264,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "PatewayAI",
     websiteUrl: "https://pateway.ai",
-    apiKeyUrl: "https://pateway.ai/?ch=etzpm8&aff=WB6M6F67#/",
     apiKeyField: "ANTHROPIC_API_KEY",
     settingsConfig: {
       env: {
@@ -286,8 +279,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "Modelflare",
     websiteUrl: "https://modelflare.dev",
-    apiKeyUrl:
-      "https://modelflare.dev/sign-up?utm_medium=referral&utm_source=ccswitch",
     // 官方 Claude Code 文档（docs.modelflare.dev/guides/clients/claude-code，
     // 2026-10-15 核对）：Anthropic 客户端 base 用站点根（不带 /v1）、Key 填
     // AUTH_TOKEN。主模型与 Sonnet / Opus 跟随 Claude Code 默认；Haiku 档按
@@ -313,7 +304,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "hao.ai",
     websiteUrl: "https://hao.ai",
-    apiKeyUrl: "https://hao.ai/invite/DTBZS3OR",
     // 接入文档 hao.ai/docs/integrations/claude-code/model-provider 与
     // hao.ai/vibe-coding（2026-10-21 核对）：Anthropic Messages 在 /anthropic，
     // 只配地址和 Key、模型留空即用 Claude Code 默认模型。目录里的 ID 带 anthropic/
@@ -332,8 +322,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "FennoAI",
     websiteUrl: "https://api.fenno.ai",
-    apiKeyUrl:
-      "https://api.fenno.ai/register?redirect=/purchase?tab=subscription%26group=16&aff=P9MR3D3PLCNL",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.fenno.ai",
@@ -348,7 +336,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "RunAPI",
     websiteUrl: "https://runapi.host",
-    apiKeyUrl: "https://runapi.host/register?aff=iOKB",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://runapi.host",
@@ -364,7 +351,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "OpenModel",
     websiteUrl: "https://www.openmodel.ai",
-    apiKeyUrl: "https://www.openmodel.ai?ref=cc-switch",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.openmodel.ai",
@@ -379,7 +365,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "GrooRoute Pro",
     websiteUrl: "https://grooroute.pro",
-    apiKeyUrl: "https://grooroute.pro/sign-up?aff=qqm9",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://grooroute.pro",
@@ -396,7 +381,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "BuyToken",
     websiteUrl: "https://buytoken.work",
-    apiKeyUrl: "https://buytoken.work/sign-up?aff=cc-switch",
     // 接入文档 buytoken.work/docs（2026-10-23 核对）：Anthropic Messages 在
     // 站点根，Key 按分组发（Claude 分组的 Key 调不了 gpt-*）。Haiku 只有带日期的
     // claude-haiku-4-5-20251001，不带日期会失败
@@ -415,7 +399,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "V-API",
     websiteUrl: "https://gpt.ge",
-    apiKeyUrl: "https://gpt.ge/signup?aff=URNP",
     // 模型详情页 gpt.ge/models/<id>（2026-10-23 核对）：Claude 走 /v1/messages，
     // haiku-5-5 / sonnet-5-5 / opus-5-5 都在，不用覆盖模型。令牌须选 Claude
     // 分组，haiku-5-5 只在 claude_max 分组
@@ -477,7 +460,6 @@ export const providerPresets: ProviderPreset[] = [
     // deepseek-v4.1-flash（未经 Key 实测）
     name: "FluxA Token Plan",
     websiteUrl: "https://agentmarket.fluxapay.xyz/",
-    apiKeyUrl: "https://agentmarket.fluxapay.xyz/marketplace/tokenplans",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL:
@@ -500,7 +482,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "AIGoCode",
     websiteUrl: "https://aigocode.net",
-    apiKeyUrl: "https://aigocode.net/invite/CC-SWITCH",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.aigocode.dev",
@@ -521,8 +502,7 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "Qiniu",
     nameKey: "providerForm.presets.qiniu",
-    websiteUrl: "https://s.qiniu.com/nMvAvy",
-    apiKeyUrl: "https://s.qiniu.com/nMvAvy",
+    websiteUrl: "https://www.qiniu.com/",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.qnaigc.com",
@@ -538,7 +518,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "AICoding",
     websiteUrl: "https://aicoding.inc",
-    apiKeyUrl: "https://aicoding.inc/i/CCSWITCH",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.aicoding.inc",
@@ -555,7 +534,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "SubRouter",
     websiteUrl: "https://subrouter.ai",
-    apiKeyUrl: "https://subrouter.ai/register?aff=l3ri",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://subrouter.ai",
@@ -570,7 +548,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "OspreyAI",
     websiteUrl: "https://open.ospreyai.cn",
-    apiKeyUrl: "https://open.ospreyai.cn",
     // open.ospreyai.cn/api/pricing（2026-10-30）：Claude 走 /v1/messages，Haiku 只有
     // 不带日期的 claude-haiku-4-5（没有 haiku-5-5）
     settingsConfig: {
@@ -588,8 +565,7 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "Shengsuanyun",
     nameKey: "providerForm.presets.shengsuanyun",
-    websiteUrl: "https://www.shengsuanyun.com/?from=CH_4HHXMRYF",
-    apiKeyUrl: "https://www.shengsuanyun.com/?from=CH_4HHXMRYF",
+    websiteUrl: "https://www.shengsuanyun.com/",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://router.shengsuanyun.com/api",
@@ -608,7 +584,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "88API",
     websiteUrl: "https://88api.ai",
-    apiKeyUrl: "https://88api.ai/sign-up?aff=HSGY",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.88api.ai",
@@ -624,7 +599,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "APIKEY.FUN",
     websiteUrl: "https://apikey.fan",
-    apiKeyUrl: "https://apikey.fan/register?aff=CCSwitch",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.apikey.fan",
@@ -643,8 +617,7 @@ export const providerPresets: ProviderPreset[] = [
   },
   {
     name: "9527CODE",
-    websiteUrl: "https://9527.codes/register?channel=ccs",
-    apiKeyUrl: "https://9527.codes/register?channel=ccs",
+    websiteUrl: "https://9527.codes/register",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://9527.codes",
@@ -664,7 +637,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "ClaudeAPI",
     websiteUrl: "https://www.apito.ai",
-    apiKeyUrl: "https://console.apito.ai/agent/register/pQBql2buaqiX3dDS",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://gw.apito.ai",
@@ -677,7 +649,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "Code0",
     websiteUrl: "https://code0.ai",
-    apiKeyUrl: "https://code0.ai/agent/register/B2XHxGjGmRvqgznY",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://code0.ai",
@@ -690,8 +661,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "TeamoRouter",
     websiteUrl: "https://teamorouter.com",
-    apiKeyUrl:
-      "https://teamorouter.com/?utm_source=cc_switch&utm_medium=referral&utm_campaign=ai_directory",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.teamorouter.com",
@@ -707,7 +676,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "PPIO",
     websiteUrl: "https://ppio.com",
-    apiKeyUrl: "https://ppio.com/activity/ccswitch",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.ppio.com/anthropic",
@@ -729,7 +697,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "ClaudeCN",
     websiteUrl: "https://claudecn.top",
-    apiKeyUrl: "https://claudecn.ai/register?aff=HEL9",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://claudecn.top",
@@ -745,10 +712,8 @@ export const providerPresets: ProviderPreset[] = [
     name: "火山 Agent Plan",
     family: "volcengine",
     planKey: "agentPlan",
-    websiteUrl:
-      "https://www.volcengine.com/activity/agentplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_source=OWO&utm_medium=devrel-1&utm_campaign=hw&utm_term=ccswitch&utm_content=hw",
-    apiKeyUrl:
-      "https://www.volcengine.com/activity/agentplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_source=OWO&utm_medium=devrel-1&utm_campaign=hw&utm_term=ccswitch&utm_content=hw",
+    websiteUrl: "https://www.volcengine.com/activity/agentplan",
+    apiKeyUrl: "https://www.volcengine.com/activity/agentplan",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://ark.cn-beijing.volces.com/api/plan",
@@ -769,10 +734,8 @@ export const providerPresets: ProviderPreset[] = [
     name: "火山 Coding Plan",
     family: "volcengine",
     planKey: "codingPlan",
-    websiteUrl:
-      "https://www.volcengine.com/activity/codingplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
-    apiKeyUrl:
-      "https://www.volcengine.com/activity/codingplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+    websiteUrl: "https://www.volcengine.com/activity/codingplan",
+    apiKeyUrl: "https://www.volcengine.com/activity/codingplan",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://ark.cn-beijing.volces.com/api/coding",
@@ -791,10 +754,8 @@ export const providerPresets: ProviderPreset[] = [
   },
   {
     name: "BytePlus",
-    websiteUrl:
-      "https://www.byteplus.com/en/product/modelark?utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
-    apiKeyUrl:
-      "https://www.byteplus.com/en/product/modelark?utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+    websiteUrl: "https://www.byteplus.com/en/product/modelark",
+    apiKeyUrl: "https://www.byteplus.com/en/product/modelark",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL:
@@ -818,9 +779,9 @@ export const providerPresets: ProviderPreset[] = [
     planKey: "payg",
     nameKey: "providerForm.presets.doubaoseed",
     websiteUrl:
-      "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D",
     apiKeyUrl:
-      "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://ark.cn-beijing.volces.com/api/compatible",
@@ -842,7 +803,6 @@ export const providerPresets: ProviderPreset[] = [
     family: "siliconflow",
     regionKey: "cn",
     websiteUrl: "https://siliconflow.cn",
-    apiKeyUrl: "https://cloud.siliconflow.cn/i/YflgU2Ve",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.siliconflow.cn",
@@ -865,7 +825,6 @@ export const providerPresets: ProviderPreset[] = [
     family: "siliconflow",
     regionKey: "intl",
     websiteUrl: "https://siliconflow.com",
-    apiKeyUrl: "https://cloud.siliconflow.cn/i/YflgU2Ve",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.siliconflow.com",
@@ -885,7 +844,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "A6API",
     websiteUrl: "https://www.a6api.vip",
-    apiKeyUrl: "https://a6api.vip/register?aff=AqNr",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.a6api.vip",
@@ -903,8 +861,6 @@ export const providerPresets: ProviderPreset[] = [
     planKey: "payg",
     nameKey: "providerForm.presets.ucloud",
     websiteUrl: "https://www.compshare.cn",
-    apiKeyUrl:
-      "https://www.compshare.cn/coding-plan?ytag=GPU_YY_YX_git_cc-switch",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.modelverse.cn",
@@ -924,8 +880,6 @@ export const providerPresets: ProviderPreset[] = [
     planKey: "codingPlan",
     nameKey: "providerForm.presets.ucloudCoding",
     websiteUrl: "https://www.compshare.cn",
-    apiKeyUrl:
-      "https://www.compshare.cn/coding-plan?ytag=GPU_YY_YX_git_cc-switch",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://cp.compshare.cn",
@@ -942,7 +896,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "CCSub",
     websiteUrl: "https://www.ccsub.net",
-    apiKeyUrl: "https://www.ccsub.net/register?ref=Y6Z8DXEA",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://www.ccsub.net",
@@ -956,7 +909,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "SSSAiCode",
     websiteUrl: "https://sssaicodeapi.com",
-    apiKeyUrl: "https://sssaicodeapi.com/register?ref=DCP0SM",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://node-hk.sssaicodeapi.com/api",
@@ -977,7 +929,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "SoleAPI",
     websiteUrl: "https://soleapi.com",
-    apiKeyUrl: "https://soleapi.com/r/ccswitch",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://soleapi.com",
@@ -993,7 +944,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "Micu",
     websiteUrl: "https://www.micuapi.ai",
-    apiKeyUrl: "https://www.micuapi.ai/register?aff=aOYQ",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://www.micuapi.ai",
@@ -1010,7 +960,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "RightCode",
     websiteUrl: "https://www.rightapi.ai",
-    apiKeyUrl: "https://www.rightapi.ai/register?aff=CCSWITCH",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://www.rightapi.ai/claude",
@@ -1026,7 +975,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "Cubence",
     websiteUrl: "https://cubence.com",
-    apiKeyUrl: "https://cubence.com/signup?code=CCSWITCH&source=ccs",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.cubence.com",
@@ -1048,7 +996,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "CrazyRouter",
     websiteUrl: "https://www.crazyrouter.com",
-    apiKeyUrl: "https://www.crazyrouter.com/register?aff=OZcm&ref=cc-switch",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://cn.crazyrouter.com",
@@ -1065,7 +1012,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "DMXAPI",
     websiteUrl: "https://www.dmxapi.cn",
-    apiKeyUrl: "https://www.dmxapi.cn",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://www.dmxapi.cn",
@@ -1083,8 +1029,6 @@ export const providerPresets: ProviderPreset[] = [
     name: "SudoCode.chat",
     family: "sudocode",
     websiteUrl: "https://sudocode.chat",
-    apiKeyUrl:
-      "https://sudocode.chat/sign-up?aff=CC-SWITCH&utm_source=cc-switch&utm_medium=sponsor&utm_campaign=ccswitch",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.sudocode.chat",
@@ -1104,7 +1048,6 @@ export const providerPresets: ProviderPreset[] = [
     name: "SudoCode.us",
     family: "sudocode",
     websiteUrl: "https://sudocode.us",
-    apiKeyUrl: "https://sudocode.us",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://sudocode.us",
@@ -1119,7 +1062,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "XycAi",
     websiteUrl: "https://xycai.us",
-    apiKeyUrl: "https://xycai.us/register?aff=Uhu9",
     // 说明：该供应商使用 ANTHROPIC_API_KEY（而非 ANTHROPIC_AUTH_TOKEN）
     apiKeyField: "ANTHROPIC_API_KEY",
     settingsConfig: {
@@ -1137,7 +1079,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "AllTokens",
     websiteUrl: "https://alltokens.cc",
-    apiKeyUrl: "https://alltokens.cc/register",
     // Sub2API 网关：Key 绑定单个分组，须用 Claude 分组的 Key（分组与模型见
     // alltokens.cc/api/v1/model-plaza，2026-10-17 核对）
     settingsConfig: {
@@ -1155,7 +1096,6 @@ export const providerPresets: ProviderPreset[] = [
     name: "AllTokens SI",
     websiteUrl: "https://alltokens.si",
     // 站点关闭了个人注册（/api/status 的 register_enabled=false），只能企业注册
-    apiKeyUrl: "https://alltokens.si/enterprise-register",
     // 官方 CC Switch 接入文档（alltokens.si/docs/cc-switch/configure）：Anthropic
     // base 用站点根。目录里 Claude ID 用点号（claude-sonnet-5.5，非 5-5），没有
     // Haiku（alltokens.si/api/pricing，2026-10-19），故四档全部写明、Haiku 指向 Sonnet
@@ -1174,7 +1114,7 @@ export const providerPresets: ProviderPreset[] = [
     partnerPromotionKey: "alltokens_si",
     icon: "alltokens-si",
   },
-  // ===== 非赞助商预设：应用内展示按显示名排序，此处文件顺序不影响展示 =====
+  // ===== 其他预设：应用内展示按显示名排序，此处文件顺序不影响展示 =====
   {
     name: "Tu-zi",
     nameKey: "providerForm.presets.tuzi",
@@ -1293,7 +1233,6 @@ export const providerPresets: ProviderPreset[] = [
     family: "opencode",
     planKey: "coding",
     websiteUrl: "https://opencode.ai/go",
-    apiKeyUrl: "https://opencode.ai/go",
     partnerPromotionKey: "opencode_go",
     // Go 网关 /v1/messages 只认 x-api-key（Bearer 被静默忽略），
     // 必须用 ANTHROPIC_API_KEY，不能换回 ANTHROPIC_AUTH_TOKEN。
@@ -1674,9 +1613,8 @@ export const providerPresets: ProviderPreset[] = [
     name: "千问AI平台",
     family: "qianwen",
     planKey: "payg",
-    websiteUrl: "https://platform.qianwenai.com/?utm_content=g_20000002971",
-    apiKeyUrl:
-      "https://platform.qianwenai.com/home/api-keys?utm_content=g_20000002972",
+    websiteUrl: "https://platform.qianwenai.com/",
+    apiKeyUrl: "https://platform.qianwenai.com/home/api-keys",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://maas.qianwenaiapi.com/apps/anthropic",
@@ -1719,10 +1657,8 @@ export const providerPresets: ProviderPreset[] = [
     name: "千问AI平台 Token Plan",
     family: "qianwen",
     planKey: "tokenPlan",
-    websiteUrl:
-      "https://platform.qianwenai.com/pricing/token-plan?utm_content=g_20000002977",
-    apiKeyUrl:
-      "https://platform.qianwenai.com/home/api-keys?utm_content=g_20000002978",
+    websiteUrl: "https://platform.qianwenai.com/pricing/token-plan",
+    apiKeyUrl: "https://platform.qianwenai.com/home/api-keys",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL:
@@ -1753,8 +1689,8 @@ export const providerPresets: ProviderPreset[] = [
     name: "QwenCloud",
     family: "qwencloud",
     planKey: "payg",
-    websiteUrl: "https://home.qwencloud.com/?utm_content=g_20000002974",
-    apiKeyUrl: "https://home.qwencloud.com/api-keys?utm_content=g_20000002975",
+    websiteUrl: "https://home.qwencloud.com/",
+    apiKeyUrl: "https://home.qwencloud.com/api-keys",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL:
@@ -1799,9 +1735,8 @@ export const providerPresets: ProviderPreset[] = [
     name: "QwenCloud Token Plan",
     family: "qwencloud",
     planKey: "tokenPlan",
-    websiteUrl:
-      "https://www.qwencloud.com/pricing/token-plan?utm_content=g_20000002980",
-    apiKeyUrl: "https://home.qwencloud.com/api-keys?utm_content=g_20000002981",
+    websiteUrl: "https://www.qwencloud.com/pricing/token-plan",
+    apiKeyUrl: "https://home.qwencloud.com/api-keys",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL:
@@ -1888,8 +1823,7 @@ export const providerPresets: ProviderPreset[] = [
     family: "streamlake",
     regionKey: "cn",
     websiteUrl: "https://www.streamlake.com",
-    apiKeyUrl:
-      "https://console.streamlake.com/console/wanqing/api-key?channel=ccswitch",
+    apiKeyUrl: "https://console.streamlake.com/console/wanqing/api-key",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL:
@@ -1909,7 +1843,7 @@ export const providerPresets: ProviderPreset[] = [
     family: "streamlake",
     regionKey: "intl",
     websiteUrl: "https://console.streamlake.ai",
-    apiKeyUrl: "https://console.streamlake.ai/console/api-key?channel=ccswitch",
+    apiKeyUrl: "https://console.streamlake.ai/console/api-key",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL:
@@ -2875,7 +2809,6 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "PIPELLM",
     websiteUrl: "https://code.pipellm.ai",
-    apiKeyUrl: "https://code.pipellm.ai/login?ref=uvw650za",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://cc-api.pipellm.ai",

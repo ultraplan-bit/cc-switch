@@ -14,8 +14,6 @@ const CLAUDE_MODELS = [
   "claude-sonnet-5-5",
   "claude-fable-5-1",
 ];
-const API_KEY_URL =
-  "https://teamorouter.com/?utm_source=cc_switch&utm_medium=referral&utm_campaign=ai_directory";
 
 function find<T extends { name: string }>(list: T[], name: string): T {
   const preset = list.find((item) => item.name === name);
@@ -35,12 +33,12 @@ describe("TeamoRouter Claude presets", () => {
       const claude = find(list, "TeamoRouter Claude");
       expect(claude).toMatchObject({
         websiteUrl: "https://teamorouter.com",
-        apiKeyUrl: API_KEY_URL,
         category: "aggregator",
         isPartner: true,
         partnerPromotionKey: "teamorouter",
         icon: "teamorouter",
       });
+      expect(claude).not.toHaveProperty("apiKeyUrl");
     }
   });
 

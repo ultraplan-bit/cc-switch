@@ -35,7 +35,7 @@ const LINK_CATEGORIES: ReadonlyArray<ProviderCategory | undefined> = [
   "third_party",
 ];
 
-/** 链接指向：这三类优先用 apiKeyUrl（可能带推广参数），其余用官网 */
+/** 链接指向：这三类优先用 API Key 控制台地址，其余用官网。 */
 function presetLinkUrl(preset: PresetEntry["preset"]): string {
   if (LINK_CATEGORIES.includes(preset.category)) {
     return preset.apiKeyUrl || preset.websiteUrl || "";
@@ -99,7 +99,7 @@ export function useApiKeyLink({
   }, [selectedPresetId, presetEntries]);
 
   // 没选预设（编辑已有供应商）：供应商不记来源预设，按请求地址反查。
-  // 同一地址的几个预设链接或推广语不一致（如同一家的不同版本）时不猜，退回官网链接。
+  // 同一地址的预设链接或兼容标记不一致（如同一家的不同版本）时不猜，退回官网链接。
   const matchedPreset = useMemo(() => {
     if (currentPresetEntry) return undefined;
     const target = normalizeBaseUrl(formBaseUrl);

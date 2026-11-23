@@ -278,7 +278,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "TokenPlus",
     websiteUrl: "https://www.tokenplus.cn/",
-    apiKeyUrl: "https://www.tokenplus.cn/workspace",
     category: "aggregator",
     partnerPromotionKey: "tokenplus",
     icon: "tokenplus",
@@ -298,15 +297,14 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       ],
     },
   },
-  // ===== 赞助商预设：文件顺序与 README 赞助商表对齐（仅维护约定；应用内一律按显示名排序，不置顶）=====
+  // 保留原有预设顺序和索引以兼容已有配置；第三方平台不再提供内置添加选项。
   {
     name: "Kimi",
     family: "kimi",
     planKey: "payg",
     regionKey: "cn",
     primePartner: true,
-    websiteUrl:
-      "https://platform.kimi.com?track_id=track-7cf2b91dcde043eda6ef9a95951a042c&aff=cc-switch",
+    websiteUrl: "https://platform.kimi.com",
     settingsConfig: {
       name: "kimi",
       base_url: "https://api.moonshot.cn/v1",
@@ -330,8 +328,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     family: "kimi",
     planKey: "payg",
     regionKey: "intl",
-    websiteUrl:
-      "https://platform.kimi.ai?track_id=track-674ed6e2af924a5682a87421f7cf753a&aff=cc-switch",
+    websiteUrl: "https://platform.kimi.ai",
     settingsConfig: {
       name: "kimi",
       base_url: "https://api.moonshot.ai/v1",
@@ -355,7 +352,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     planKey: "coding",
     regionKey: "cn",
     primePartner: true,
-    websiteUrl: "https://www.kimi.com/code/?aff=cc-switch",
+    websiteUrl: "https://www.kimi.com/code/",
     settingsConfig: {
       name: "kimi_coding",
       base_url: "https://api.kimi.com/coding/",
@@ -376,7 +373,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     family: "kimi",
     planKey: "coding",
     regionKey: "intl",
-    websiteUrl: "https://www.kimi.ai/code?aff=cc-switch",
+    websiteUrl: "https://www.kimi.ai/code",
     settingsConfig: {
       name: "kimi_coding",
       base_url: "https://api.kimi.ai/coding/",
@@ -394,7 +391,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "PackyCode",
     websiteUrl: "https://www.packyapi.ai",
-    apiKeyUrl: "https://www.packyapi.ai/register?aff=cc-switch",
     settingsConfig: {
       name: "packycode",
       base_url: "https://www.packyapi.ai",
@@ -413,7 +409,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "APINebula",
     websiteUrl: "https://apinebula.ai",
-    apiKeyUrl: "https://apinebula.ai/VjM74M",
     settingsConfig: {
       name: "apinebula",
       base_url: "https://apinebula.ai/v1",
@@ -432,7 +427,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "AICodeMirror",
     websiteUrl: "https://www.aicodemirror.ai",
-    apiKeyUrl: "https://www.aicodemirror.ai/register?invitecode=9915W3",
     settingsConfig: {
       name: "aicodemirror",
       base_url: "https://api.aicodemirror.ai/api/claudecode",
@@ -464,7 +458,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "hao.ai",
     websiteUrl: "https://hao.ai",
-    apiKeyUrl: "https://hao.ai/invite/DTBZS3OR",
     settingsConfig: {
       name: "hao_ai",
       base_url: "https://api.hao.ai/anthropic",
@@ -494,8 +487,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "FennoAI",
     websiteUrl: "https://api.fenno.ai",
-    apiKeyUrl:
-      "https://api.fenno.ai/register?redirect=/purchase?tab=subscription%26group=16&aff=P9MR3D3PLCNL",
     settingsConfig: {
       name: "fenno",
       base_url: "https://api.fenno.ai/v1",
@@ -514,7 +505,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "RunAPI",
     websiteUrl: "https://runapi.host",
-    apiKeyUrl: "https://runapi.host/register?aff=iOKB",
     settingsConfig: {
       name: "runapi",
       base_url: "https://runapi.host",
@@ -540,7 +530,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "OpenModel",
     websiteUrl: "https://www.openmodel.ai",
-    apiKeyUrl: "https://www.openmodel.ai?ref=cc-switch",
     settingsConfig: {
       name: "openmodel",
       base_url: "https://api.openmodel.ai",
@@ -559,7 +548,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "GrooRoute Pro",
     websiteUrl: "https://grooroute.pro",
-    apiKeyUrl: "https://grooroute.pro/sign-up?aff=qqm9",
     settingsConfig: {
       name: "grooroute_pro",
       base_url: "https://grooroute.pro",
@@ -578,7 +566,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "BuyToken",
     websiteUrl: "https://buytoken.work",
-    apiKeyUrl: "https://buytoken.work/sign-up?aff=cc-switch",
     settingsConfig: {
       name: "buytoken",
       base_url: "https://api.buytoken.work",
@@ -597,7 +584,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "V-API",
     websiteUrl: "https://gpt.ge",
-    apiKeyUrl: "https://gpt.ge/signup?aff=URNP",
     settingsConfig: {
       name: "vapi",
       base_url: "https://api.gpt.ge",
@@ -656,12 +642,11 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     // chat_completions。阵容与窗口按 FluxA 产品页模型表
     // （glm-5.2 500k ≠ 国内版千帆平台 1M，国际 team 部署口径，勿按国内预设
     // "修正"）；标注 Coming soon 的 deepseek-v4-pro-0813 / glm-5.3 不收。
-    // Kimi K2.6 是定稿赞助文案点名的模型，FluxA 产品页模型表与百度国际站
+    // Kimi K2.6 未列在 FluxA 产品页模型表或百度国际站
     // team 文档都没列它：id / 窗口取 FluxA baidu-ai-cloud 模型目录（categories
     // 只有 text）与国内 Token Plan 预设（262144）双重印证，非臆造
     name: "FluxA Token Plan",
     websiteUrl: "https://agentmarket.fluxapay.xyz/",
-    apiKeyUrl: "https://agentmarket.fluxapay.xyz/marketplace/tokenplans",
     settingsConfig: {
       name: "fluxa_tokenplan",
       base_url: "https://api.baiduqianfan.ai/v2/tokenplan/team",
@@ -688,7 +673,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "AIGoCode",
     websiteUrl: "https://aigocode.net",
-    apiKeyUrl: "https://aigocode.net/invite/CC-SWITCH",
     settingsConfig: {
       name: "aigocode",
       base_url: "https://api.aigocode.dev",
@@ -708,8 +692,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "Qiniu",
     nameKey: "providerForm.presets.qiniu",
-    websiteUrl: "https://s.qiniu.com/nMvAvy",
-    apiKeyUrl: "https://s.qiniu.com/nMvAvy",
+    websiteUrl: "https://www.qiniu.com/",
     settingsConfig: {
       name: "qiniu",
       base_url: "https://api.qnaigc.com/v1",
@@ -737,7 +720,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "AICoding",
     websiteUrl: "https://aicoding.inc",
-    apiKeyUrl: "https://aicoding.inc/i/CCSWITCH",
     settingsConfig: {
       name: "aicoding",
       base_url: "https://api.aicoding.inc",
@@ -757,7 +739,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "SubRouter",
     websiteUrl: "https://subrouter.ai",
-    apiKeyUrl: "https://subrouter.ai/register?aff=l3ri",
     settingsConfig: {
       name: "subrouter",
       base_url: "https://subrouter.ai/v1",
@@ -776,7 +757,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "OspreyAI",
     websiteUrl: "https://open.ospreyai.cn",
-    apiKeyUrl: "https://open.ospreyai.cn",
     settingsConfig: {
       name: "ospreyai",
       base_url: "https://open.ospreyai.cn",
@@ -795,8 +775,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "Shengsuanyun",
     nameKey: "providerForm.presets.shengsuanyun",
-    websiteUrl: "https://www.shengsuanyun.com/?from=CH_4HHXMRYF",
-    apiKeyUrl: "https://www.shengsuanyun.com/?from=CH_4HHXMRYF",
+    websiteUrl: "https://www.shengsuanyun.com/",
     settingsConfig: {
       name: "shengsuanyun",
       base_url: "https://router.shengsuanyun.com/api/v1",
@@ -823,7 +802,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "88API",
     websiteUrl: "https://88api.ai",
-    apiKeyUrl: "https://88api.ai/sign-up?aff=HSGY",
     settingsConfig: {
       name: "88api",
       base_url: "https://api.88api.ai",
@@ -842,7 +820,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "APIKEY.FUN",
     websiteUrl: "https://apikey.fan",
-    apiKeyUrl: "https://apikey.fan/register?aff=CCSwitch",
     settingsConfig: {
       name: "apikeyfun",
       base_url: "https://api.apikey.fan",
@@ -860,8 +837,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   },
   {
     name: "9527CODE",
-    websiteUrl: "https://9527.codes/register?channel=ccs",
-    apiKeyUrl: "https://9527.codes/register?channel=ccs",
+    websiteUrl: "https://9527.codes/register",
     settingsConfig: {
       name: "9527code",
       base_url: "https://9527.codes",
@@ -880,7 +856,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "Code0",
     websiteUrl: "https://code0.ai",
-    apiKeyUrl: "https://code0.ai/agent/register/B2XHxGjGmRvqgznY",
     settingsConfig: {
       name: "code0",
       base_url: "https://code0.ai/v1",
@@ -897,8 +872,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "TeamoRouter",
     websiteUrl: "https://teamorouter.com",
-    apiKeyUrl:
-      "https://teamorouter.com/?utm_source=cc_switch&utm_medium=referral&utm_campaign=ai_directory",
     settingsConfig: {
       name: "teamorouter",
       base_url: "https://api.teamorouter.com/v1",
@@ -921,8 +894,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "TeamoRouter Claude",
     websiteUrl: "https://teamorouter.com",
-    apiKeyUrl:
-      "https://teamorouter.com/?utm_source=cc_switch&utm_medium=referral&utm_campaign=ai_directory",
     settingsConfig: {
       name: "teamorouter_claude",
       base_url: "https://api.teamorouter.com",
@@ -941,7 +912,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "PPIO",
     websiteUrl: "https://ppio.com",
-    apiKeyUrl: "https://ppio.com/activity/ccswitch",
     settingsConfig: {
       name: "ppio",
       base_url: "https://api.ppio.com/openai/v1",
@@ -976,7 +946,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "ClaudeCN",
     websiteUrl: "https://claudecn.top",
-    apiKeyUrl: "https://claudecn.ai/register?aff=HEL9",
     settingsConfig: {
       name: "claudecn",
       base_url: "https://claudecn.top",
@@ -1003,10 +972,8 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     name: "火山 Agent Plan",
     family: "volcengine",
     planKey: "agentPlan",
-    websiteUrl:
-      "https://www.volcengine.com/activity/agentplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_source=OWO&utm_medium=devrel-1&utm_campaign=hw&utm_term=ccswitch&utm_content=hw",
-    apiKeyUrl:
-      "https://www.volcengine.com/activity/agentplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_source=OWO&utm_medium=devrel-1&utm_campaign=hw&utm_term=ccswitch&utm_content=hw",
+    websiteUrl: "https://www.volcengine.com/activity/agentplan",
+    apiKeyUrl: "https://www.volcengine.com/activity/agentplan",
     settingsConfig: {
       name: "ark_agentplan",
       base_url: "https://ark.cn-beijing.volces.com/api/plan",
@@ -1030,10 +997,8 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     name: "火山 Coding Plan",
     family: "volcengine",
     planKey: "codingPlan",
-    websiteUrl:
-      "https://www.volcengine.com/activity/codingplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
-    apiKeyUrl:
-      "https://www.volcengine.com/activity/codingplan?ac=MMAP8JTTCAQ2&rc=6J6FV5N2&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+    websiteUrl: "https://www.volcengine.com/activity/codingplan",
+    apiKeyUrl: "https://www.volcengine.com/activity/codingplan",
     settingsConfig: {
       name: "ark_codingplan",
       base_url: "https://ark.cn-beijing.volces.com/api/coding",
@@ -1055,10 +1020,8 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   },
   {
     name: "BytePlus",
-    websiteUrl:
-      "https://www.byteplus.com/en/product/modelark?utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
-    apiKeyUrl:
-      "https://www.byteplus.com/en/product/modelark?utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+    websiteUrl: "https://www.byteplus.com/en/product/modelark",
+    apiKeyUrl: "https://www.byteplus.com/en/product/modelark",
     settingsConfig: {
       name: "byteplus",
       base_url: "https://ark.ap-southeast.bytepluses.com/api/coding",
@@ -1084,9 +1047,9 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     planKey: "payg",
     nameKey: "providerForm.presets.doubaoseed",
     websiteUrl:
-      "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D",
     apiKeyUrl:
-      "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D&utm_campaign=hw&utm_content=ccswitch&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccswitch",
+      "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D",
     settingsConfig: {
       name: "doubao_seed",
       base_url: "https://ark.cn-beijing.volces.com/api/compatible",
@@ -1116,7 +1079,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     family: "siliconflow",
     regionKey: "cn",
     websiteUrl: "https://siliconflow.cn",
-    apiKeyUrl: "https://cloud.siliconflow.cn/i/YflgU2Ve",
     settingsConfig: {
       name: "siliconflow",
       base_url: "https://api.siliconflow.cn/v1",
@@ -1148,7 +1110,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     family: "siliconflow",
     regionKey: "intl",
     websiteUrl: "https://siliconflow.com",
-    apiKeyUrl: "https://cloud.siliconflow.cn/i/YflgU2Ve",
     settingsConfig: {
       name: "siliconflow_en",
       base_url: "https://api.siliconflow.com/v1",
@@ -1187,7 +1148,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "A6API",
     websiteUrl: "https://www.a6api.vip",
-    apiKeyUrl: "https://a6api.vip/register?aff=AqNr",
     settingsConfig: {
       name: "a6api",
       base_url: "https://api.a6api.vip/v1",
@@ -1209,8 +1169,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     planKey: "payg",
     nameKey: "providerForm.presets.ucloud",
     websiteUrl: "https://www.compshare.cn",
-    apiKeyUrl:
-      "https://www.compshare.cn/coding-plan?ytag=GPU_YY_YX_git_cc-switch",
     settingsConfig: {
       name: "compshare",
       base_url: "https://api.modelverse.cn/v1",
@@ -1244,8 +1202,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     planKey: "codingPlan",
     nameKey: "providerForm.presets.ucloudCoding",
     websiteUrl: "https://www.compshare.cn",
-    apiKeyUrl:
-      "https://www.compshare.cn/coding-plan?ytag=GPU_YY_YX_git_cc-switch",
     settingsConfig: {
       name: "compshare_coding",
       base_url: "https://cp.compshare.cn/v1",
@@ -1265,7 +1221,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "CCSub",
     websiteUrl: "https://www.ccsub.net",
-    apiKeyUrl: "https://www.ccsub.net/register?ref=Y6Z8DXEA",
     settingsConfig: {
       name: "ccsub",
       base_url: "https://www.ccsub.net/v1",
@@ -1285,7 +1240,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "SSSAiCode",
     websiteUrl: "https://sssaicodeapi.com",
-    apiKeyUrl: "https://sssaicodeapi.com/register?ref=DCP0SM",
     settingsConfig: {
       name: "sssaicode",
       base_url: "https://node-hk.sssaicodeapi.com/api",
@@ -1305,7 +1259,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "SoleAPI",
     websiteUrl: "https://soleapi.com",
-    apiKeyUrl: "https://soleapi.com/r/ccswitch",
     settingsConfig: {
       name: "soleapi",
       base_url: "https://soleapi.com",
@@ -1324,7 +1277,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "Micu",
     websiteUrl: "https://www.micuapi.ai",
-    apiKeyUrl: "https://www.micuapi.ai/register?aff=aOYQ",
     settingsConfig: {
       name: "micu",
       base_url: "https://www.micuapi.ai",
@@ -1344,7 +1296,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "RightCode",
     websiteUrl: "https://www.rightapi.ai",
-    apiKeyUrl: "https://www.rightapi.ai/register?aff=CCSWITCH",
     settingsConfig: {
       name: "rightcode",
       base_url: "https://www.rightapi.ai/claude",
@@ -1364,7 +1315,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "Cubence",
     websiteUrl: "https://cubence.com",
-    apiKeyUrl: "https://cubence.com/signup?code=CCSWITCH&source=ccs",
     settingsConfig: {
       name: "cubence",
       base_url: "https://api.cubence.com",
@@ -1384,7 +1334,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "CrazyRouter",
     websiteUrl: "https://www.crazyrouter.com",
-    apiKeyUrl: "https://www.crazyrouter.com/register?aff=OZcm&ref=cc-switch",
     settingsConfig: {
       name: "crazyrouter",
       base_url: "https://cn.crazyrouter.com",
@@ -1404,7 +1353,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "DMXAPI",
     websiteUrl: "https://www.dmxapi.cn",
-    apiKeyUrl: "https://www.dmxapi.cn",
     settingsConfig: {
       name: "dmxapi",
       base_url: "https://www.dmxapi.cn/v1",
@@ -1424,8 +1372,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     name: "SudoCode.chat",
     family: "sudocode",
     websiteUrl: "https://sudocode.chat",
-    apiKeyUrl:
-      "https://sudocode.chat/sign-up?aff=CC-SWITCH&utm_source=cc-switch&utm_medium=sponsor&utm_campaign=ccswitch",
     settingsConfig: {
       name: "sudocode",
       base_url: "https://api.sudocode.chat/v1",
@@ -1450,7 +1396,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     name: "SudoCode.us",
     family: "sudocode",
     websiteUrl: "https://sudocode.us",
-    apiKeyUrl: "https://sudocode.us",
     settingsConfig: {
       name: "sudocode_us",
       base_url: "https://sudocode.us/v1",
@@ -1468,7 +1413,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "XycAi",
     websiteUrl: "https://xycai.us",
-    apiKeyUrl: "https://xycai.us/register?aff=Uhu9",
     settingsConfig: {
       name: "xycai",
       base_url: "https://apicdn.xycai.us/v1",
@@ -1487,8 +1431,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "Modelflare",
     websiteUrl: "https://modelflare.dev",
-    apiKeyUrl:
-      "https://modelflare.dev/sign-up?utm_medium=referral&utm_source=ccswitch",
     settingsConfig: {
       name: "modelflare",
       // Chat Completions + /v1（docs.modelflare.dev/guides/endpoints，
@@ -1509,7 +1451,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "AllTokens",
     websiteUrl: "https://alltokens.cc",
-    apiKeyUrl: "https://alltokens.cc/register",
     settingsConfig: {
       name: "alltokens",
       // Sub2API 网关：Key 绑定单个分组，须用 GPT 分组的 Key；GPT 账号池原生走
@@ -1535,7 +1476,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     name: "AllTokens SI",
     websiteUrl: "https://alltokens.si",
     // 站点关闭了个人注册（/api/status 的 register_enabled=false），只能企业注册
-    apiKeyUrl: "https://alltokens.si/enterprise-register",
     settingsConfig: {
       name: "alltokens_si",
       // new-api 网关，目录见 alltokens.si/api/pricing（2026-10-19 核对）：GPT 分组
@@ -1553,7 +1493,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     partnerPromotionKey: "alltokens_si",
     icon: "alltokens-si",
   },
-  // ===== 非赞助商预设：应用内展示按显示名排序，此处文件顺序不影响展示 =====
+  // ===== 其他预设：应用内展示按显示名排序，此处文件顺序不影响展示 =====
   {
     name: "Tu-zi",
     nameKey: "providerForm.presets.tuzi",
@@ -2066,9 +2006,8 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     name: "千问AI平台",
     family: "qianwen",
     planKey: "payg",
-    websiteUrl: "https://platform.qianwenai.com/?utm_content=g_20000002971",
-    apiKeyUrl:
-      "https://platform.qianwenai.com/home/api-keys?utm_content=g_20000002972",
+    websiteUrl: "https://platform.qianwenai.com/",
+    apiKeyUrl: "https://platform.qianwenai.com/home/api-keys",
     settingsConfig: {
       name: "qianwenai",
       base_url: "https://maas.qianwenaiapi.com/compatible-mode/v1",
@@ -2116,10 +2055,8 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     name: "千问AI平台 Token Plan",
     family: "qianwen",
     planKey: "tokenPlan",
-    websiteUrl:
-      "https://platform.qianwenai.com/pricing/token-plan?utm_content=g_20000002977",
-    apiKeyUrl:
-      "https://platform.qianwenai.com/home/api-keys?utm_content=g_20000002978",
+    websiteUrl: "https://platform.qianwenai.com/pricing/token-plan",
+    apiKeyUrl: "https://platform.qianwenai.com/home/api-keys",
     settingsConfig: {
       name: "qianwenai_token_plan",
       base_url: "https://token-plan.maas.qianwenaiapi.com/apps/anthropic",
@@ -2142,8 +2079,8 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     name: "QwenCloud",
     family: "qwencloud",
     planKey: "payg",
-    websiteUrl: "https://home.qwencloud.com/?utm_content=g_20000002974",
-    apiKeyUrl: "https://home.qwencloud.com/api-keys?utm_content=g_20000002975",
+    websiteUrl: "https://home.qwencloud.com/",
+    apiKeyUrl: "https://home.qwencloud.com/api-keys",
     settingsConfig: {
       name: "qwencloud",
       base_url: "https://ap-southeast-1.maas.qwencloudapi.com/apps/anthropic",
@@ -2194,9 +2131,8 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     name: "QwenCloud Token Plan",
     family: "qwencloud",
     planKey: "tokenPlan",
-    websiteUrl:
-      "https://www.qwencloud.com/pricing/token-plan?utm_content=g_20000002980",
-    apiKeyUrl: "https://home.qwencloud.com/api-keys?utm_content=g_20000002981",
+    websiteUrl: "https://www.qwencloud.com/pricing/token-plan",
+    apiKeyUrl: "https://home.qwencloud.com/api-keys",
     settingsConfig: {
       name: "qwencloud_token_plan",
       base_url: "https://token-plan.maas.qwencloudapi.com/apps/anthropic",
@@ -2282,8 +2218,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     family: "streamlake",
     regionKey: "cn",
     websiteUrl: "https://www.streamlake.com",
-    apiKeyUrl:
-      "https://console.streamlake.com/console/wanqing/api-key?channel=ccswitch",
+    apiKeyUrl: "https://console.streamlake.com/console/wanqing/api-key",
     settingsConfig: {
       name: "streamlake",
       base_url:
@@ -2303,7 +2238,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     family: "streamlake",
     regionKey: "intl",
     websiteUrl: "https://console.streamlake.ai",
-    apiKeyUrl: "https://console.streamlake.ai/console/api-key?channel=ccswitch",
+    apiKeyUrl: "https://console.streamlake.ai/console/api-key",
     settingsConfig: {
       name: "streamlake_en",
       base_url:
@@ -3308,7 +3243,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
   {
     name: "PIPELLM",
     websiteUrl: "https://code.pipellm.ai",
-    apiKeyUrl: "https://code.pipellm.ai/login?ref=uvw650za",
     settingsConfig: {
       name: "pipellm",
       base_url: "https://cc-api.pipellm.ai",

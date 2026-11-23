@@ -27,7 +27,6 @@ const ppioChatCompletionsEndpoint = `${ppioOpenAiEndpoint}/chat/completions`;
 const ppioModelsEndpoint = `${ppioOpenAiEndpoint}/models`;
 const ppioBrandFields = {
   websiteUrl: "https://ppio.com",
-  apiKeyUrl: "https://ppio.com/activity/ccswitch",
   category: "aggregator",
   isPartner: true,
   partnerPromotionKey: "ppio",

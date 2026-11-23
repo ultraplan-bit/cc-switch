@@ -20,7 +20,7 @@ interface ApiKeySectionProps {
   required?: boolean;
   isPartner?: boolean;
   partnerPromotionKey?: string;
-  /** 输入框下方的说明；有推广语时让位给推广语 */
+  /** 输入框下方的说明 */
   hint?: ReactNode;
 }
 
@@ -35,7 +35,6 @@ export function ApiKeySection({
   placeholder,
   disabled,
   required = false,
-  partnerPromotionKey,
   hint,
 }: ApiKeySectionProps) {
   const { t } = useTranslation();
@@ -58,14 +57,6 @@ export function ApiKeySection({
     category !== "cloud_provider";
 
   const showLink = shouldShowLink && Boolean(websiteUrl);
-  // 推广语跟着「获取 API Key」走，按输入框说明文字的样式写在框下面（v7 不画推广框）
-  const promotion =
-    showLink && partnerPromotionKey
-      ? t(`providerForm.partnerPromotion.${partnerPromotionKey}`, {
-          defaultValue: "",
-        })
-      : "";
-
   return (
     <ApiKeyInput
       id={id}
@@ -91,7 +82,7 @@ export function ApiKeySection({
           </a>
         ) : null
       }
-      hint={promotion || hint || undefined}
+      hint={hint}
     />
   );
 }

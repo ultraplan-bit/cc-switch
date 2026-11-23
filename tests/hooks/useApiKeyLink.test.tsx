@@ -59,7 +59,7 @@ describe("useApiKeyLink", () => {
     });
     expect(link.shouldShowApiKeyLink).toBe(true);
     expect(link.websiteUrl).toBe("https://hub.example/key?ref=cc");
-    // 推广语跟着链接一起带出来，和添加页一致
+    // 保留旧配置元数据；API Key 表单不再显示推广文案。
     expect(link.isPartner).toBe(true);
     expect(link.partnerPromotionKey).toBe("hub");
   });

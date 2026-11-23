@@ -5,8 +5,8 @@ import { I18nextProvider } from "react-i18next";
 import zh from "@/i18n/locales/zh.json";
 import { ApiKeySection } from "@/components/providers/forms/shared/ApiKeySection";
 
-describe("TokenPlus description", () => {
-  it("renders the complete Chinese introduction below the key input", async () => {
+describe("Legacy provider promotions", () => {
+  it("does not render sponsor copy with the Chinese locale", async () => {
     const i18n = createInstance();
     await i18n.init({ lng: "zh", resources: { zh: { translation: zh } } });
     render(
@@ -21,8 +21,7 @@ describe("TokenPlus description", () => {
         />
       </I18nextProvider>,
     );
-    expect(
-      screen.getByText(zh.providerForm.partnerPromotion.tokenplus),
-    ).toBeVisible();
+    expect(screen.queryByText(/TokenPlus/)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /获取 API Key/ })).toBeVisible();
   });
 });

@@ -183,7 +183,6 @@ describe("KimiProviderForm", () => {
 
   it.each([
     { group: "vendor", name: "Kimi" },
-    { group: "thirdparty", name: "88API" },
     { group: "cloud", name: "Microsoft Foundry" },
     { group: "local", name: "Ollama" },
     { group: "local", name: "LM Studio" },
@@ -248,6 +247,36 @@ describe("KimiProviderForm", () => {
       }
     },
   );
+
+  it("omits third-party platforms from the add catalog and search", async () => {
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={createTestQueryClient()}>
+        <KimiProviderForm
+          appId="kimi"
+          submitLabel="Save"
+          onSubmit={vi.fn()}
+          onCancel={() => {}}
+        />
+      </QueryClientProvider>,
+    );
+    expect(
+      screen.queryByRole("button", {
+        name: /providerPreset\.group\.thirdparty/,
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "88API" }),
+    ).not.toBeInTheDocument();
+    await user.type(
+      screen.getByRole("textbox", { name: "providerPreset.searchAriaLabel" }),
+      "88API",
+    );
+    expect(screen.getByText("providerPreset.noResults")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "providerPreset.useCustom" }),
+    ).toBeInTheDocument();
+  });
 
   it.each([
     "custom",

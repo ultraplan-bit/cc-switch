@@ -22,12 +22,13 @@ vi.mock("@/components/JsonEditor", () => ({
 }));
 
 describe("GrokBuildProviderForm", () => {
-  it("offers curated Grok Build presets and applies one", async () => {
+  it("offers official login after removing third-party presets", async () => {
     const user = userEvent.setup();
+    const onSubmit = vi.fn();
     const { container } = render(
       <GrokBuildProviderForm
         submitLabel="Save"
-        onSubmit={() => {}}
+        onSubmit={onSubmit}
         onCancel={() => {}}
       />,
     );
@@ -35,28 +36,59 @@ describe("GrokBuildProviderForm", () => {
     // 国产官方直连（cn_official）不在 Grok Build 预设列表里
     expect(screen.queryByRole("button", { name: /BytePlus/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /Kimi/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /PatewayAI/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /88API/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: /providerPreset\.group\.thirdparty/,
+      }),
+    ).toBeNull();
 
-    await user.click(screen.getByRole("button", { name: /PatewayAI/ }));
+    await user.click(screen.getByRole("button", { name: "Grok Official" }));
 
     const baseUrlInput =
       container.querySelector<HTMLInputElement>("#codexBaseUrl");
     const nameInput =
       container.querySelector<HTMLInputElement>('input[name="name"]');
-    expect(baseUrlInput?.value).toBe("https://api.pateway.ai/v1");
-    expect(nameInput?.value).toBe("PatewayAI");
+    expect(baseUrlInput).toBeNull();
+    expect(nameInput?.value).toBe("Grok Official");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(onSubmit).toHaveBeenCalledOnce();
+    expect(onSubmit.mock.calls[0][0].presetCategory).toBe("official");
+    expect(JSON.parse(onSubmit.mock.calls[0][0].settingsConfig)).toEqual({
+      config: "",
+    });
   });
 
-  it("points the get-API-key link at the preset's apiKeyUrl", async () => {
+  it("keeps existing third-party providers editable", async () => {
     const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    const configToml = `[models]
+default = "grok-4.7"
+
+[model."grok-4.7"]
+model = "grok-4.7"
+base_url = "https://88api.ai/v1"
+name = "88API"
+api_key = "existing-key"
+api_backend = "responses"
+context_window = 500000
+`;
     const { container } = render(
       <GrokBuildProviderForm
         submitLabel="Save"
-        onSubmit={() => {}}
+        providerId="existing-88api"
+        initialData={{
+          name: "88API",
+          category: "third_party",
+          websiteUrl: "https://88api.ai",
+          settingsConfig: { config: configToml },
+          meta: { apiFormat: "openai_responses" },
+        }}
+        onSubmit={onSubmit}
         onCancel={() => {}}
       />,
     );
-
-    await user.click(screen.getByRole("button", { name: /88API/ }));
 
     const websiteInput = container.querySelector<HTMLInputElement>(
       'input[name="websiteUrl"]',
@@ -64,8 +96,25 @@ describe("GrokBuildProviderForm", () => {
     expect(websiteInput?.value).toBe("https://88api.ai");
     expect(screen.getByRole("link", { name: /API Key/ })).toHaveAttribute(
       "href",
-      "https://88api.ai/sign-up?aff=HSGY",
+      "https://88api.ai",
     );
+    fireEvent.change(screen.getByLabelText("API Key"), {
+      target: { value: "updated-key" },
+    });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(onSubmit).toHaveBeenCalledOnce();
+    const submitted = onSubmit.mock.calls[0][0];
+    expect(submitted.presetCategory).toBe("third_party");
+    const settings = JSON.parse(submitted.settingsConfig);
+    const config = parseToml(settings.config) as any;
+    expect(config.model[config.models.default]).toMatchObject({
+      model: "grok-4.7",
+      base_url: "https://88api.ai/v1",
+      name: "88API",
+      api_key: "updated-key",
+      api_backend: "responses",
+      context_window: 500000,
+    });
   });
 
   it("submits a complete config.toml payload with Grok defaults", async () => {

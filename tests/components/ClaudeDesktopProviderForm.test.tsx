@@ -374,18 +374,38 @@ describe("ClaudeDesktopProviderForm", () => {
     expect(screen.queryByText("模型角色")).not.toBeInTheDocument();
   });
 
-  it("直连预设保留预设模型列表", async () => {
+  it("编辑已有第三方直连供应商时保留模型列表", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
-    renderForm(undefined, onSubmit);
-
-    await user.click(screen.getByRole("button", { name: /PackyCode/ }));
+    renderForm(
+      {
+        name: "PackyCode",
+        category: "third_party",
+        settingsConfig: {
+          env: {
+            ANTHROPIC_BASE_URL: "https://www.packyapi.ai",
+            ANTHROPIC_AUTH_TOKEN: "",
+          },
+        },
+        meta: {
+          claudeDesktopMode: "direct",
+          claudeDesktopModelRoutes: {
+            "claude-sonnet-5": { model: "claude-sonnet-5" },
+            "claude-opus-5": { model: "claude-opus-5" },
+            "claude-haiku-4-5": { model: "claude-haiku-4-5" },
+          },
+        },
+      },
+      onSubmit,
+    );
 
     expect(screen.getByDisplayValue("claude-sonnet-5")).toBeInTheDocument();
     expect(screen.getByDisplayValue("claude-opus-5")).toBeInTheDocument();
     expect(screen.getByDisplayValue("claude-haiku-4-5")).toBeInTheDocument();
 
-    await user.clear(screen.getByDisplayValue("claude-sonnet-5"));
+    await user.click(
+      screen.getAllByRole("button", { name: "common.delete" })[0],
+    );
     await user.type(screen.getByLabelText("API Key"), "sk-test");
     await user.click(screen.getByRole("button", { name: "保存" }));
 

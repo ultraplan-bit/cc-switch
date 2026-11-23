@@ -9,7 +9,6 @@ import { opencodeProviderPresets } from "@/config/opencodeProviderPresets";
 import { hasIcon } from "@/icons/extracted";
 
 const WEBSITE_URL = "https://subrouter.ai";
-const API_KEY_URL = "https://subrouter.ai/register?aff=l3ri";
 
 describe("SubRouter provider presets", () => {
   it("uses the Anthropic-compatible root endpoint for Claude", () => {
@@ -17,7 +16,7 @@ describe("SubRouter provider presets", () => {
 
     expect(preset).toBeDefined();
     expect(preset?.websiteUrl).toBe(WEBSITE_URL);
-    expect(preset?.apiKeyUrl).toBe(API_KEY_URL);
+    expect(preset?.apiKeyUrl).toBeUndefined();
     expect(preset?.category).toBe("aggregator");
     expect(preset?.isPartner).toBe(true);
     expect(preset?.partnerPromotionKey).toBe("subrouter");
@@ -35,7 +34,7 @@ describe("SubRouter provider presets", () => {
 
     expect(preset).toBeDefined();
     expect(preset?.websiteUrl).toBe(WEBSITE_URL);
-    expect(preset?.apiKeyUrl).toBe(API_KEY_URL);
+    expect(preset?.apiKeyUrl).toBeUndefined();
     expect(preset?.category).toBe("aggregator");
     expect(preset?.endpointCandidates).toEqual(["https://subrouter.ai/v1"]);
     expect(preset?.auth).toEqual({ OPENAI_API_KEY: "" });

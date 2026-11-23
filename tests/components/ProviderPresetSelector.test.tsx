@@ -200,7 +200,6 @@ describe("preset helpers", () => {
     ).toEqual([
       "alpha",
       "bedrock",
-      "gamma",
       "copilot",
       "huoshan",
       "ollama-local",
@@ -343,11 +342,10 @@ describe("preset families", () => {
     expect(sections("")).toEqual([
       ["login", ["alpha", "copilot"]],
       ["vendor", ["huoshan", "family:kimi", "zhipu"]],
-      ["thirdparty", ["gamma"]],
       ["cloud", ["bedrock"]],
       ["local", ["ollama-local"]],
     ]);
-    expect(sections("gamma")).toEqual([["thirdparty", ["gamma"]]]);
+    expect(sections("gamma")).toEqual([]);
   });
 
   it("has every family name and version label in all four locales", () => {
@@ -446,13 +444,74 @@ describe("ProviderPresetSelector", () => {
     Element.prototype.scrollIntoView ??= vi.fn();
   });
 
+  it.each(["two-step", "standalone"])(
+    "removes third-party platforms from categories, counts and search in the %s picker",
+    async (mode) => {
+      const user = userEvent.setup();
+      const onPresetChange = vi.fn();
+      const presetEntries = [
+        ...entries,
+        {
+          id: "relay",
+          preset: preset("Relay", "third_party", "https://relay.example", {
+            family: "kimi",
+          }),
+        },
+      ];
+      render(
+        mode === "two-step" ? (
+          <TwoSteps
+            presetEntries={presetEntries}
+            onPresetChange={onPresetChange}
+          />
+        ) : (
+          <ProviderPresetSelector
+            presetEntries={presetEntries}
+            selectedPresetId="custom"
+            onPresetChange={onPresetChange}
+          />
+        ),
+      );
+      const picker =
+        mode === "two-step" ? await screen.findByTestId("host") : document.body;
+      expect(
+        within(picker).queryByRole("button", {
+          name: /providerPreset.group.thirdparty/,
+        }),
+      ).not.toBeInTheDocument();
+      expect(within(picker).queryByText("Gamma")).not.toBeInTheDocument();
+      expect(within(picker).queryByText("Relay")).not.toBeInTheDocument();
+      expect(
+        within(picker).getByRole("button", {
+          name: /providerPreset.group.all/,
+        }),
+      ).toHaveTextContent("6");
+      const search = within(picker).getByRole("textbox", {
+        name: "providerPreset.searchAriaLabel",
+      });
+      for (const query of ["gamma", "relay"]) {
+        await user.clear(search);
+        await user.type(search, query);
+        expect(
+          within(picker).getByText("providerPreset.noResults"),
+        ).toBeInTheDocument();
+      }
+      await user.click(
+        within(picker).getByRole("button", {
+          name: "providerPreset.useCustom",
+        }),
+      );
+      expect(onPresetChange).toHaveBeenCalledWith("custom");
+    },
+  );
+
   it("picks a preset in step 1, then shows a preset bar that goes back", async () => {
     const user = userEvent.setup();
     const onPresetChange = vi.fn();
     render(<TwoSteps onPresetChange={onPresetChange} />);
 
     const host = await screen.findByTestId("host");
-    // 自定义配置固定第一行；其余按分类分段（账号登录 → 模型厂商 → 第三方平台 → 云服务商 → 本地），段内按名称
+    // 自定义配置固定第一行；其余按分类分段（账号登录 → 模型厂商 → 云服务商 → 本地），段内按名称
     const rows = within(host)
       .getAllByRole("button")
       .filter((button) => !button.hasAttribute("aria-pressed"));
@@ -464,7 +523,6 @@ describe("ProviderPresetSelector", () => {
     ).toEqual([
       "providerPreset.group.login",
       "providerPreset.group.vendor",
-      "providerPreset.group.thirdparty",
       "providerPreset.group.cloud",
       "providerPreset.group.local",
     ]);
