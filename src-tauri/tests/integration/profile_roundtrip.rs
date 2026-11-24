@@ -407,6 +407,7 @@ fn profile_apply_reports_dangling_references_and_continues() {
         name: "Dangling".to_string(),
         payload: payload.to_string(),
         sort_order: None,
+        project_path: None,
         created_at: Some(1_000),
         updated_at: Some(1_000),
     };

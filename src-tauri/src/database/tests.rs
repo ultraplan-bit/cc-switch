@@ -233,6 +233,80 @@ fn migration_v26_to_v27_adds_skill_repo_host() {
 }
 
 #[test]
+fn profiles_new_schema_has_nullable_project_path() {
+    let conn = Connection::open_in_memory().expect("open memory db");
+    Database::create_tables_on_conn(&conn).expect("create tables");
+
+    let column = get_column_info(&conn, "profiles", "project_path");
+    assert_eq!(column.r#type, "TEXT");
+    assert_eq!(column.notnull, 0);
+    assert_eq!(column.default, None);
+
+    Database::apply_schema_migrations_on_conn(&conn).expect("apply migrations");
+    Database::create_tables_on_conn(&conn).expect("create tables is idempotent");
+    assert_eq!(Database::get_user_version(&conn).unwrap(), 28);
+}
+
+#[test]
+fn profiles_migration_v27_to_v28_adds_project_path_idempotently() {
+    // 分别覆盖直接迁移与实际初始化顺序（先 create_tables，再迁移）。
+    for create_tables_first in [false, true] {
+        let conn = Connection::open_in_memory().expect("open memory db");
+        conn.execute_batch(
+            "CREATE TABLE profiles (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                sort_order INTEGER,
+                created_at INTEGER,
+                updated_at INTEGER
+             );
+             INSERT INTO profiles (id, name, payload) VALUES ('p1', 'Project A', '{}');",
+        )
+        .expect("seed v27 profiles");
+        Database::set_user_version(&conn, 27).expect("set user_version=27");
+        if create_tables_first {
+            Database::create_tables_on_conn(&conn).expect("create tables before migration");
+        }
+
+        Database::apply_schema_migrations_on_conn(&conn).expect("migrate v27 to v28");
+        assert_eq!(Database::get_user_version(&conn).unwrap(), 28);
+        let column = get_column_info(&conn, "profiles", "project_path");
+        assert_eq!(column.r#type, "TEXT");
+        assert_eq!(column.notnull, 0);
+        let (name, payload, path): (String, String, Option<String>) = conn
+            .query_row(
+                "SELECT name, payload, project_path FROM profiles WHERE id = 'p1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("existing profile is preserved");
+        assert_eq!(
+            (name.as_str(), payload.as_str(), path),
+            ("Project A", "{}", None)
+        );
+
+        // 重跑 27 -> 28 时已存在列，数据仍保留。
+        conn.execute(
+            "UPDATE profiles SET project_path = '/projects/demo' WHERE id = 'p1'",
+            [],
+        )
+        .expect("set project path");
+        Database::set_user_version(&conn, 27).expect("replay v27 migration");
+        Database::apply_schema_migrations_on_conn(&conn).expect("migration is idempotent");
+        Database::apply_schema_migrations_on_conn(&conn).expect("v28 migration is a no-op");
+        let bound_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM profiles WHERE project_path = '/projects/demo'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("bound profiles survive migration");
+        assert_eq!(bound_count, 1);
+    }
+}
+
+#[test]
 fn schema_migration_sets_user_version_when_missing() {
     let conn = Connection::open_in_memory().expect("open memory db");
 

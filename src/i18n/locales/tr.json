@@ -3107,6 +3107,35 @@
     "applySuccess": "Uygulanan proje",
     "applyFailed": "Proje uygulanamadı: {{detail}}",
     "applyWarnings": "{{warningCount}} uyarı(lar)ıyla uygulanan proje:\n{{details}}",
+    "projectPath": {
+      "label": "Proje klasörü",
+      "placeholder": "Bağlı klasör yok",
+      "none": "Bağlı klasör yok",
+      "pick": "Klasör seç",
+      "change": "Klasörü değiştir",
+      "clear": "Temizle",
+      "unbind": "Klasör bağlantısını kaldır",
+      "unbindConfirmTitle": "Bağlantıyı kaldırmayı onayla",
+      "unbindConfirmMessage": "“{{name}}” projesinin klasör bağlantısını kaldırmak istediğinizden emin misiniz? Hiçbir yapılandırma değiştirilmeyecek.",
+      "saveSuccess": "Proje klasörü güncellendi",
+      "saveFailed": "Proje klasörü güncellenemedi: {{detail}}",
+      "pickFailed": "Proje klasörü seçilemedi: {{detail}}"
+    },
+    "projectDeploy": {
+      "button": "Projeye dağıt",
+      "pending": "Projeye dağıtılıyor…",
+      "success": "Profil projeye dağıtıldı.",
+      "failed": "Projeye dağıtım başarısız: {{detail}}",
+      "conflictTitle": "Projeye dağıtım çakışmaları",
+      "conflictMessage": "{{files}} dosyada kullanıcıya ait veya düzenlenmiş içerik var. Nasıl işlem yapılsın?",
+      "overwrite": "Çakışmaları üzerine yaz",
+      "keepCurrent": "Mevcut içeriği koru",
+      "skip": "Dağıtımı iptal et",
+      "skipped": "Çakışan öğeler değiştirilmeden bırakıldı.",
+      "unsupportedScope": "Projeye dağıtım yalnızca Claude Code ve Codex için kullanılabilir.",
+      "codexTrustWarning": "Codex, `.codex/` proje yapılandırmasını yalnızca proje güvenilir olarak işaretlendikten sonra yükler.",
+      "sensitiveMcpSkipped": "Gömülü kimlik bilgileri içeren MCP sunucuları atlandı. Açık metin değerleri yerine ortam değişkeni başvuruları kullanın."
+    },
     "clearSuccess": "Hiçbir projeye geçilmedi"
   },
   "workspace": {

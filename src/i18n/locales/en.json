@@ -3178,6 +3178,35 @@
     "applySuccess": "Project applied",
     "applyFailed": "Failed to apply project: {{detail}}",
     "applyWarnings": "Project applied with {{warningCount}} warning(s):\n{{details}}",
+    "projectPath": {
+      "label": "Project folder",
+      "placeholder": "No folder bound",
+      "none": "No folder bound",
+      "pick": "Choose folder",
+      "change": "Change folder",
+      "clear": "Clear",
+      "unbind": "Unbind folder",
+      "unbindConfirmTitle": "Confirm unbinding",
+      "unbindConfirmMessage": "Are you sure you want to unbind the folder from project \"{{name}}\"? No configuration will be changed.",
+      "saveSuccess": "Project folder updated",
+      "saveFailed": "Failed to update project folder: {{detail}}",
+      "pickFailed": "Failed to choose project folder: {{detail}}"
+    },
+    "projectDeploy": {
+      "button": "Deploy to project",
+      "pending": "Deploying to project…",
+      "success": "Profile deployed to project.",
+      "failed": "Project deployment failed: {{detail}}",
+      "conflictTitle": "Project deployment conflicts",
+      "conflictMessage": "{{files}} file(s) already contain user-owned or edited content. How should they be handled?",
+      "overwrite": "Overwrite conflicts",
+      "keepCurrent": "Keep current content",
+      "skip": "Cancel deployment",
+      "skipped": "Conflicting items were left unchanged.",
+      "unsupportedScope": "Project deployment is available only for Claude Code and Codex.",
+      "codexTrustWarning": "Codex loads `.codex/` project configuration only after the project is trusted.",
+      "sensitiveMcpSkipped": "MCP servers with inline credentials were skipped. Use environment-variable references instead."
+    },
     "clearSuccess": "Switched to no project"
   },
   "workspace": {

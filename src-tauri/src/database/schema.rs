@@ -396,7 +396,8 @@ impl Database {
                 payload TEXT NOT NULL,
                 sort_order INTEGER,
                 created_at INTEGER,
-                updated_at INTEGER
+                updated_at INTEGER,
+                project_path TEXT
             )",
             [],
         )
@@ -744,6 +745,11 @@ impl Database {
                             Self::add_column_if_missing(conn, "skills", "repo_host", "TEXT")?;
                         }
                         Self::set_user_version(conn, 27)?;
+                    }
+                    27 => {
+                        log::info!("迁移数据库从 v27 到 v28（Profile 绑定项目目录路径）");
+                        Self::migrate_v27_to_v28(conn)?;
+                        Self::set_user_version(conn, 28)?;
                     }
                     _ => {
                         return Err(AppError::Database(format!(
@@ -1791,6 +1797,15 @@ impl Database {
                 "last_tail_fingerprint",
                 "INTEGER",
             )?;
+        }
+        Ok(())
+    }
+
+    /// v27 -> v28：Profile 绑定项目目录路径，唯一性由 service 层判断。
+    fn migrate_v27_to_v28(conn: &Connection) -> Result<(), AppError> {
+        // 缺表的测试夹具跳过，正常初始化会先创建 profiles 表。
+        if Self::table_exists(conn, "profiles")? {
+            Self::add_column_if_missing(conn, "profiles", "project_path", "TEXT")?;
         }
         Ok(())
     }

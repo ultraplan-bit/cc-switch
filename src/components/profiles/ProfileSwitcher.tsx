@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Check,
@@ -30,8 +30,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { HoverTip } from "@/components/ui/hover-tip";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { settingsApi } from "@/lib/api";
 import type { AppId } from "@/lib/api/types";
 import {
   useApplyProfileMutation,
@@ -42,6 +44,8 @@ import {
 import { ProfileManageDialog } from "./ProfileManageDialog";
 import { APP_PROFILE_SCOPE, hasScopeSnapshot } from "./scope";
 import type { CurrentProfileIds, ProfileScope } from "@/lib/api/profiles";
+import { toast } from "@/lib/toast";
+import { extractErrorMessage } from "@/utils/errorUtils";
 
 const CURRENT_ID_KEY: Record<ProfileScope, keyof CurrentProfileIds> = {
   claude: "claude",
@@ -67,6 +71,8 @@ export function ProfileSwitcher({ activeApp }: ProfileSwitcherProps) {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isManageOpen, setIsManageOpen] = useState(false);
   const [newName, setNewName] = useState("");
+  const [projectPath, setProjectPath] = useState<string | null>(null);
+  const creating = useRef(false);
 
   const { data } = useProfilesQuery();
   const applyMutation = useApplyProfileMutation();
@@ -92,14 +98,41 @@ export function ProfileSwitcher({ activeApp }: ProfileSwitcherProps) {
   };
 
   const closeCreateDialog = () => {
+    if (creating.current) return;
     setIsCreateOpen(false);
     setNewName("");
+    setProjectPath(null);
   };
 
   const handleCreate = () => {
     const name = newName.trim();
-    if (!name) return;
-    createMutation.mutate({ name, scope }, { onSuccess: closeCreateDialog });
+    if (!name || creating.current) return;
+    creating.current = true;
+    createMutation.mutate(
+      { name, scope, projectPath },
+      {
+        onSuccess: () => {
+          creating.current = false;
+          closeCreateDialog();
+        },
+        onSettled: () => {
+          creating.current = false;
+        },
+      },
+    );
+  };
+
+  const pickProjectPath = async () => {
+    try {
+      const pickedPath = await settingsApi.pickDirectory();
+      if (pickedPath !== null) setProjectPath(pickedPath);
+    } catch (error) {
+      toast.error(
+        t("profiles.projectPath.pickFailed", {
+          detail: extractErrorMessage(error) || t("common.unknown"),
+        }),
+      );
+    }
   };
 
   return (
@@ -155,7 +188,17 @@ export function ProfileSwitcher({ activeApp }: ProfileSwitcherProps) {
                             : "opacity-0",
                         )}
                       />
-                      <span className="truncate">{profile.name}</span>
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate">{profile.name}</span>
+                        {profile.projectPath && (
+                          <span
+                            className="max-w-[10rem] truncate text-xs text-fg-2"
+                            title={profile.projectPath}
+                          >
+                            {profile.projectPath}
+                          </span>
+                        )}
+                      </span>
                       {!hasScopeSnapshot(profile, scope) && (
                         <span className="ml-auto shrink-0 pl-2 text-xs text-fg-2">
                           {t("profiles.noSnapshotForScope")}
@@ -172,6 +215,7 @@ export function ProfileSwitcher({ activeApp }: ProfileSwitcherProps) {
                   keywords={[t("profiles.createFromCurrent")]}
                   onSelect={() => {
                     setOpen(false);
+                    setProjectPath(null);
                     setIsCreateOpen(true);
                   }}
                 >
@@ -216,7 +260,7 @@ export function ProfileSwitcher({ activeApp }: ProfileSwitcherProps) {
           if (!open) closeCreateDialog();
         }}
       >
-        <DialogContent className="max-w-sm" zIndex="alert">
+        <DialogContent className="max-w-md" zIndex="alert">
           <DialogHeader className="space-y-3 border-b-0 bg-transparent pb-0">
             <DialogTitle>{t("profiles.createFromCurrent")}</DialogTitle>
             <DialogDescription>
@@ -228,14 +272,62 @@ export function ProfileSwitcher({ activeApp }: ProfileSwitcherProps) {
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder={t("profiles.namePlaceholder")}
+              disabled={createMutation.isPending}
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleCreate();
               }}
             />
+            <div className="mt-3 space-y-1.5">
+              <span className="text-xs text-fg-2">
+                {t("profiles.projectPath.label")}
+              </span>
+              <div className="flex min-w-0 items-center gap-2">
+                <Input
+                  aria-label={t("profiles.projectPath.label")}
+                  value={projectPath ?? ""}
+                  readOnly
+                  placeholder={t("profiles.projectPath.placeholder")}
+                  className="min-w-0 flex-1"
+                />
+                <HoverTip content={t("profiles.projectPath.pick")}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    aria-label={t("profiles.projectPath.pick")}
+                    onClick={pickProjectPath}
+                    disabled={createMutation.isPending}
+                  >
+                    <FolderCog className="mr-1.5 h-4 w-4" />
+                    {t("profiles.projectPath.pick")}
+                  </Button>
+                </HoverTip>
+                {projectPath !== null && (
+                  <HoverTip content={t("profiles.projectPath.clear")}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      aria-label={t("profiles.projectPath.clear")}
+                      onClick={() => setProjectPath(null)}
+                      disabled={createMutation.isPending}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </HoverTip>
+                )}
+              </div>
+            </div>
           </div>
           <DialogFooter className="flex gap-2 border-t-0 bg-transparent pt-2 sm:justify-end">
-            <Button variant="outline" onClick={closeCreateDialog}>
+            <Button
+              variant="outline"
+              onClick={closeCreateDialog}
+              disabled={createMutation.isPending}
+            >
               {t("common.cancel")}
             </Button>
             <Button
@@ -250,6 +342,7 @@ export function ProfileSwitcher({ activeApp }: ProfileSwitcherProps) {
 
       <ProfileManageDialog
         isOpen={isManageOpen}
+        scope={scope}
         onClose={() => setIsManageOpen(false)}
       />
     </>

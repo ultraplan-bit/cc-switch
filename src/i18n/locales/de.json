@@ -3178,6 +3178,35 @@
     "applySuccess": "Projekt angewendet",
     "applyFailed": "Projekt konnte nicht angewendet werden: {{detail}}",
     "applyWarnings": "Projekt mit {{warningCount}} Warnung(en) angewendet:\n{{details}}",
+    "projectPath": {
+      "label": "Projektordner",
+      "placeholder": "Kein Ordner gebunden",
+      "none": "Kein Ordner gebunden",
+      "pick": "Ordner auswählen",
+      "change": "Ordner wechseln",
+      "clear": "Leeren",
+      "unbind": "Ordnerbindung aufheben",
+      "unbindConfirmTitle": "Ordnerbindung aufheben bestätigen",
+      "unbindConfirmMessage": "Möchten Sie die Ordnerbindung für das Projekt „{{name}}“ wirklich aufheben? Es wird keine Konfiguration geändert.",
+      "saveSuccess": "Projektordner aktualisiert",
+      "saveFailed": "Projektordner konnte nicht aktualisiert werden: {{detail}}",
+      "pickFailed": "Projektordner konnte nicht ausgewählt werden: {{detail}}"
+    },
+    "projectDeploy": {
+      "button": "Im Projekt bereitstellen",
+      "pending": "Wird im Projekt bereitgestellt …",
+      "success": "Profil im Projekt bereitgestellt.",
+      "failed": "Bereitstellung im Projekt fehlgeschlagen: {{detail}}",
+      "conflictTitle": "Konflikte bei der Projektbereitstellung",
+      "conflictMessage": "{{files}} Datei(en) enthalten bereits eigene oder geänderte Inhalte. Wie sollen diese behandelt werden?",
+      "overwrite": "Konflikte überschreiben",
+      "keepCurrent": "Aktuelle Inhalte beibehalten",
+      "skip": "Bereitstellung abbrechen",
+      "skipped": "Konfliktbehaftete Inhalte wurden übersprungen.",
+      "unsupportedScope": "Projektbereitstellung ist nur für Claude Code und Codex verfügbar.",
+      "codexTrustWarning": "Codex lädt die Projektkonfiguration in `.codex/` erst, wenn das Projekt als vertrauenswürdig eingestuft wurde.",
+      "sensitiveMcpSkipped": "MCP-Server mit eingebetteten Zugangsdaten wurden übersprungen. Verwenden Sie Umgebungsvariablen statt Klartextwerten."
+    },
     "clearSuccess": "Zu „Kein Projekt“ gewechselt"
   },
   "workspace": {

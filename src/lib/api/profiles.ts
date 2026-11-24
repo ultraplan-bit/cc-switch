@@ -34,9 +34,26 @@ export interface Profile {
   id: string;
   name: string;
   payload: ProfilePayload;
+  projectPath?: string | null;
   createdAt?: number;
   updatedAt?: number;
 }
+
+export type ProjectDeployResolution = "overwrite" | "keepCurrent" | "skip";
+
+export interface ProjectDeployConflict {
+  path: string;
+  reason: string;
+}
+
+export type ProjectDeployResult =
+  | {
+      status: "needsResolution";
+      conflicts: ProjectDeployConflict[];
+      warnings: string[];
+    }
+  | { status: "applied"; changed: string[]; warnings: string[] }
+  | { status: "skipped" };
 
 /** 每个分组当前激活的项目 id（未使用项目时为 null）
  *
@@ -65,8 +82,12 @@ export const profilesApi = {
   /**
    * 创建新项目（只拍发起页所属分组的当前状态，其余分组槽位留空）
    */
-  async create(name: string, scope: ProfileScope): Promise<Profile> {
-    return await invoke("create_profile", { name, scope });
+  async create(
+    name: string,
+    scope: ProfileScope,
+    projectPath: string | null = null,
+  ): Promise<Profile> {
+    return await invoke("create_profile", { name, scope, projectPath });
   },
 
   /**
@@ -83,6 +104,24 @@ export const profilesApi = {
       resnapshot: options.resnapshot,
       scope: options.scope,
     });
+  },
+
+  /**
+   * 绑定项目目录路径；null 表示解绑
+   */
+  async setProjectPath(
+    id: string,
+    projectPath: string | null,
+  ): Promise<Profile> {
+    return await invoke("set_profile_project_path", { id, projectPath });
+  },
+
+  async deployToProject(
+    id: string,
+    scope: ProfileScope,
+    resolution: ProjectDeployResolution | null = null,
+  ): Promise<ProjectDeployResult> {
+    return await invoke("deploy_profile_to_project", { id, scope, resolution });
   },
 
   /**

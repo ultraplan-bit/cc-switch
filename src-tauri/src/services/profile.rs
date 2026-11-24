@@ -14,6 +14,9 @@
 //! apply 为 best-effort：单项失败收集为 warning 继续，不整体回滚。
 
 use std::collections::HashSet;
+#[cfg(windows)]
+use std::path::PathBuf;
+use std::path::{Component, Path};
 
 use serde::{Deserialize, Serialize};
 
@@ -197,6 +200,91 @@ fn plan_toggles(
     (toggles, dangling)
 }
 
+/// 归一化项目目录路径；空串表示解绑，不访问文件系统。
+pub fn normalize_project_path(raw: &str) -> Result<Option<String>, AppError> {
+    if raw.trim().is_empty() {
+        return Ok(None);
+    }
+    #[cfg(windows)]
+    let normalized = raw.replace('/', "\\");
+    #[cfg(not(windows))]
+    let normalized = raw.to_string();
+
+    let path = Path::new(&normalized);
+    if !path.is_absolute() {
+        return Err(AppError::InvalidInput(
+            "项目目录路径必须是绝对路径".to_string(),
+        ));
+    }
+
+    // 根路径保留一个尾分隔符，其余尾分隔符去掉；内部的 `..` 保持原样。
+    let is_root = path
+        .components()
+        .all(|part| matches!(part, Component::Prefix(_) | Component::RootDir));
+    if is_root {
+        #[cfg(windows)]
+        {
+            let mut root = PathBuf::new();
+            for component in path.components() {
+                root.push(component.as_os_str());
+            }
+            return Ok(Some(root.to_string_lossy().into_owned()));
+        }
+        #[cfg(not(windows))]
+        return Ok(Some("/".to_string()));
+    }
+
+    #[cfg(windows)]
+    let trimmed = normalized.trim_end_matches('\\');
+    #[cfg(not(windows))]
+    let trimmed = normalized.trim_end_matches('/');
+    Ok(Some(trimmed.to_string()))
+}
+
+fn project_paths_equal(left: &str, right: &str) -> bool {
+    #[cfg(windows)]
+    {
+        let left = left.to_lowercase();
+        let right = right.to_lowercase();
+        Path::new(&left)
+            .components()
+            .eq(Path::new(&right).components())
+    }
+    #[cfg(not(windows))]
+    {
+        Path::new(left)
+            .components()
+            .eq(Path::new(right).components())
+    }
+}
+
+fn normalize_unique_project_path(
+    state: &AppState,
+    path: Option<String>,
+    except_profile_id: Option<&str>,
+) -> Result<Option<String>, AppError> {
+    let project_path = path
+        .map(|path| normalize_project_path(&path))
+        .transpose()?
+        .flatten();
+    if let Some(path) = &project_path {
+        for other in state.db.get_all_profiles()? {
+            if Some(other.id.as_str()) != except_profile_id
+                && other
+                    .project_path
+                    .as_deref()
+                    .is_some_and(|other_path| project_paths_equal(path, other_path))
+            {
+                return Err(AppError::InvalidInput(format!(
+                    "项目目录路径已被 Profile「{}」绑定",
+                    other.name
+                )));
+            }
+        }
+    }
+    Ok(project_path)
+}
+
 pub struct ProfileService;
 
 impl ProfileService {
@@ -261,10 +349,21 @@ impl ProfileService {
     /// 创建新项目：只拍发起页所属分组的当前状态，其余分组槽位留 None
     /// （其他应用可能正处于别的项目，不能替用户拍进来）
     pub fn create(state: &AppState, name: &str, scope: ProfileScope) -> Result<Profile, AppError> {
+        Self::create_with_project_path(state, name, scope, None)
+    }
+
+    /// 创建项目并可选地原子绑定目录，避免保存 Profile 后再绑定失败留下半成品。
+    pub fn create_with_project_path(
+        state: &AppState,
+        name: &str,
+        scope: ProfileScope,
+        project_path: Option<String>,
+    ) -> Result<Profile, AppError> {
         let name = name.trim();
         if name.is_empty() {
             return Err(AppError::InvalidInput("Profile name is empty".to_string()));
         }
+        let project_path = normalize_unique_project_path(state, project_path, None)?;
         let payload = Self::snapshot_current(state, scope)?;
         let now = chrono::Utc::now().timestamp();
         let profile = Profile {
@@ -273,6 +372,7 @@ impl ProfileService {
             payload: serde_json::to_string(&payload)
                 .map_err(|e| AppError::Config(format!("序列化 profile payload 失败: {e}")))?,
             sort_order: None,
+            project_path,
             created_at: Some(now),
             updated_at: Some(now),
         };
@@ -312,6 +412,23 @@ impl ProfileService {
             profile.payload = serde_json::to_string(&payload)
                 .map_err(|e| AppError::Config(format!("序列化 profile payload 失败: {e}")))?;
         }
+        profile.updated_at = Some(chrono::Utc::now().timestamp());
+        state.db.save_profile(&profile)?;
+        Ok(profile)
+    }
+
+    /// 绑定或解绑项目目录，同一路径只能绑定一个 Profile。
+    pub fn set_project_path(
+        state: &AppState,
+        id: &str,
+        path: Option<String>,
+    ) -> Result<Profile, AppError> {
+        let mut profile = state
+            .db
+            .get_profile(id)?
+            .ok_or_else(|| AppError::InvalidInput(format!("未找到 Profile: {id}")))?;
+        let project_path = normalize_unique_project_path(state, path, Some(id))?;
+        profile.project_path = project_path;
         profile.updated_at = Some(chrono::Utc::now().timestamp());
         state.db.save_profile(&profile)?;
         Ok(profile)
@@ -505,6 +622,215 @@ impl ProfileService {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_profiles_normalize_project_path() {
+        assert_eq!(normalize_project_path(" \t\n ").unwrap(), None);
+        assert!(matches!(
+            normalize_project_path("relative/project"),
+            Err(AppError::InvalidInput(_))
+        ));
+
+        #[cfg(windows)]
+        let (path, root) = (r"C:\Projects\Mixed Case\..\项目", r"C:\");
+        #[cfg(not(windows))]
+        let (path, root) = ("/Projects/Mixed Case/../项目", "/");
+
+        assert_eq!(
+            normalize_project_path(path).unwrap(),
+            Some(path.to_string())
+        );
+        assert_eq!(
+            normalize_project_path(&format!("{path}/")).unwrap(),
+            Some(path.to_string())
+        );
+        assert_eq!(
+            normalize_project_path(root).unwrap(),
+            Some(root.to_string())
+        );
+        assert_eq!(
+            normalize_project_path(&format!("{root}./")).unwrap(),
+            Some(root.to_string())
+        );
+
+        #[cfg(windows)]
+        assert_eq!(
+            normalize_project_path(r"C:/Projects/Team/").unwrap(),
+            Some(r"C:\Projects\Team".to_string())
+        );
+        #[cfg(not(windows))]
+        {
+            assert_eq!(
+                normalize_project_path("/Projects/Team ").unwrap(),
+                Some("/Projects/Team ".to_string())
+            );
+            assert_eq!(
+                normalize_project_path("/Projects/Team\\").unwrap(),
+                Some("/Projects/Team\\".to_string())
+            );
+        }
+
+        #[cfg(windows)]
+        {
+            for invalid in [r"C:relative", r"\Projects", "/"] {
+                assert!(matches!(
+                    normalize_project_path(invalid),
+                    Err(AppError::InvalidInput(_))
+                ));
+            }
+            assert_eq!(
+                normalize_project_path(r"\\server\share").unwrap(),
+                normalize_project_path(r"\\server\share\").unwrap()
+            );
+            assert_eq!(
+                normalize_project_path(r"\\?\C:\").unwrap(),
+                Some(r"\\?\C:\".to_string())
+            );
+        }
+    }
+
+    #[test]
+    fn test_profiles_project_path_comparison() {
+        assert!(project_paths_equal("same", "same"));
+        assert!(!project_paths_equal("one", "other"));
+        #[cfg(windows)]
+        {
+            assert!(project_paths_equal(r"C:\Repo", r"c:\repo\.\"));
+            assert!(project_paths_equal(r"C:\Repo", r"c:\\repo\\"));
+            assert!(!project_paths_equal(r"C:\Repo\a\..\b", r"C:\Repo\b"));
+        }
+        #[cfg(not(windows))]
+        {
+            assert!(project_paths_equal("/repo", "/repo/./"));
+            assert!(project_paths_equal("/repo", "/repo//"));
+            assert!(!project_paths_equal("/repo/a/../b", "/repo/b"));
+        }
+        assert_eq!(project_paths_equal("C:/Repo", "c:/repo"), cfg!(windows));
+        assert_eq!(project_paths_equal("/Équipe", "/équipe"), cfg!(windows));
+    }
+
+    #[test]
+    fn test_profiles_set_project_path() -> Result<(), AppError> {
+        let test_home = tempfile::tempdir().unwrap();
+        let db = std::sync::Arc::new(crate::database::Database::memory()?);
+        let state = AppState {
+            db: db.clone(),
+            proxy_service: crate::services::ProxyService::new(db),
+            usage_cache: std::sync::Arc::new(crate::services::UsageCache::new()),
+            codex_oauth_manager: std::sync::Arc::new(
+                crate::proxy::providers::codex_oauth_auth::CodexOAuthManager::new(
+                    test_home.path().to_path_buf(),
+                ),
+            ),
+        };
+        let original = Profile {
+            id: "a".to_string(),
+            name: "项目 A".to_string(),
+            payload: "{}".to_string(),
+            sort_order: Some(3),
+            project_path: None,
+            created_at: Some(1),
+            updated_at: Some(1),
+        };
+        state.db.save_profile(&original)?;
+        state.db.save_profile(&Profile {
+            id: "b".to_string(),
+            name: "项目 B".to_string(),
+            ..original.clone()
+        })?;
+        #[cfg(windows)]
+        let path = r"C:\Projects\Équipe";
+        #[cfg(not(windows))]
+        let path = "/Projects/Équipe";
+
+        let bound = ProfileService::set_project_path(&state, "a", Some(format!("{path}/")))?;
+        assert_eq!(bound.project_path.as_deref(), Some(path));
+        assert!(bound.updated_at > original.updated_at);
+        assert_eq!(bound.name, original.name);
+        assert_eq!(bound.payload, original.payload);
+        assert_eq!(bound.sort_order, original.sort_order);
+        assert_eq!(bound.created_at, original.created_at);
+        assert_eq!(
+            state.db.get_profile("a")?.unwrap().project_path,
+            bound.project_path
+        );
+        // 重复绑定自身不冲突，其他 Profile 的冲突不能写入数据库。
+        ProfileService::set_project_path(&state, "a", Some(path.to_string()))?;
+        let conflict = ProfileService::set_project_path(&state, "b", Some(path.to_string()));
+        assert!(matches!(
+            conflict,
+            Err(AppError::InvalidInput(ref message)) if message.contains("项目 A")
+        ));
+        assert_eq!(state.db.get_profile("b")?.unwrap().project_path, None);
+        let case_variant = ProfileService::set_project_path(&state, "b", Some(path.to_lowercase()));
+        if cfg!(windows) {
+            assert!(matches!(case_variant, Err(AppError::InvalidInput(_))));
+        } else {
+            assert!(case_variant.is_ok());
+        }
+        #[cfg(windows)]
+        {
+            let separator_variant = path.replace('\\', "/");
+            assert!(matches!(
+                ProfileService::set_project_path(&state, "b", Some(separator_variant)),
+                Err(AppError::InvalidInput(_))
+            ));
+        }
+
+        assert!(matches!(
+            ProfileService::set_project_path(&state, "a", Some("relative".to_string())),
+            Err(AppError::InvalidInput(_))
+        ));
+        assert_eq!(
+            state.db.get_profile("a")?.unwrap().project_path,
+            bound.project_path
+        );
+        assert!(matches!(
+            ProfileService::set_project_path(&state, "missing", None),
+            Err(AppError::InvalidInput(_))
+        ));
+        assert_eq!(
+            ProfileService::set_project_path(&state, "a", None)?.project_path,
+            None
+        );
+        ProfileService::set_project_path(&state, "a", Some(path.to_string()))?;
+        assert_eq!(
+            ProfileService::set_project_path(&state, "a", Some(" \t ".to_string()))?.project_path,
+            None
+        );
+
+        #[cfg(windows)]
+        let create_path = r"C:\Projects\New";
+        #[cfg(not(windows))]
+        let create_path = "/Projects/New";
+        let created = ProfileService::create_with_project_path(
+            &state,
+            "新建并绑定",
+            ProfileScope::Claude,
+            Some(create_path.to_string()),
+        )?;
+        assert_eq!(created.project_path.as_deref(), Some(create_path));
+        let count_before_duplicate = state.db.get_all_profiles()?.len();
+        #[cfg(windows)]
+        let duplicate_path = create_path.replace('\\', "/");
+        #[cfg(not(windows))]
+        let duplicate_path = create_path.to_string();
+        assert!(matches!(
+            ProfileService::create_with_project_path(
+                &state,
+                "重复目录",
+                ProfileScope::Claude,
+                Some(duplicate_path),
+            ),
+            Err(AppError::InvalidInput(_))
+        ));
+        assert_eq!(
+            state.db.get_all_profiles()?.len(),
+            count_before_duplicate,
+            "a path conflict must not leave a partial profile"
+        );
+        Ok(())
+    }
 
     fn ids(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| s.to_string()).collect()

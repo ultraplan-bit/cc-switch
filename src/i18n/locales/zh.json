@@ -3178,7 +3178,36 @@
     "applySuccess": "项目已应用",
     "applyFailed": "应用项目失败: {{detail}}",
     "applyWarnings": "项目已应用，{{warningCount}} 条警告：\n{{details}}",
-    "clearSuccess": "已切换为不使用项目"
+    "clearSuccess": "已切换为不使用项目",
+    "projectPath": {
+      "label": "项目目录",
+      "placeholder": "未绑定目录",
+      "none": "未绑定目录",
+      "pick": "选择目录",
+      "change": "更换目录",
+      "clear": "清除",
+      "unbind": "解绑目录",
+      "unbindConfirmTitle": "确认解绑",
+      "unbindConfirmMessage": "确定要解除项目 \"{{name}}\" 的目录绑定吗？不会改动任何配置。",
+      "saveSuccess": "项目目录已更新",
+      "saveFailed": "更新项目目录失败：{{detail}}",
+      "pickFailed": "选择项目目录失败：{{detail}}"
+    },
+    "projectDeploy": {
+      "button": "部署到项目",
+      "pending": "正在部署到项目…",
+      "success": "已将 Profile 部署到项目。",
+      "failed": "部署到项目失败：{{detail}}",
+      "conflictTitle": "项目部署冲突",
+      "conflictMessage": "有 {{files}} 个文件包含用户内容或已修改的内容。请选择处理方式。",
+      "overwrite": "覆盖冲突内容",
+      "keepCurrent": "保留当前内容",
+      "skip": "取消部署",
+      "skipped": "冲突项已保留，未作修改。",
+      "unsupportedScope": "目前仅支持将项目部署到 Claude Code 和 Codex。",
+      "codexTrustWarning": "Codex 仅会在项目受信任后加载 `.codex/` 项目配置。",
+      "sensitiveMcpSkipped": "已跳过含明文凭据的 MCP 服务器。请改用环境变量引用，避免直接写入明文。"
+    }
   },
   "workspace": {
     "title": "Workspace 文件管理",

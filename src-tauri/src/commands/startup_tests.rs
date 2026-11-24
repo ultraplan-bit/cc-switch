@@ -230,7 +230,7 @@ fn remaining_database_commands_yield_during_session_sync_contention() {
     );
     assert!(!batch.is_empty());
 
-    let profile = query!(create_profile, "Test profile".into(), "claude".into());
+    let profile = query!(create_profile, "Test profile".into(), "claude".into(), None);
     assert_eq!(
         query!(
             update_profile,
@@ -273,7 +273,8 @@ fn remaining_database_commands_yield_during_session_sync_contention() {
     assert!(tauri::async_runtime::block_on(super::create_profile(
         app.state(),
         "x".into(),
-        "nope".into()
+        "nope".into(),
+        None
     ))
     .is_err());
 }
@@ -392,7 +393,7 @@ fn profile_and_universal_mutations_wait_for_their_serial_locks() {
     let profile = while_serialized(
         &super::profile::PROFILE_LOCK,
         "create_profile",
-        super::create_profile(app.state(), "Serialized".into(), "claude".into()),
+        super::create_profile(app.state(), "Serialized".into(), "claude".into(), None),
     )
     .unwrap();
     while_serialized(

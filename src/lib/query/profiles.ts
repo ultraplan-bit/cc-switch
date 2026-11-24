@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
 import { profilesApi, providersApi } from "@/lib/api";
-import type { ProfileScope } from "@/lib/api/profiles";
+import type { ProfileScope, ProjectDeployResolution } from "@/lib/api/profiles";
 import { extractErrorMessage } from "@/utils/errorUtils";
 
 const updateTrayMenuSafely = async () => {
@@ -25,8 +25,15 @@ export const useCreateProfileMutation = () => {
   const { t } = useTranslation();
 
   return useMutation({
-    mutationFn: ({ name, scope }: { name: string; scope: ProfileScope }) =>
-      profilesApi.create(name, scope),
+    mutationFn: ({
+      name,
+      scope,
+      projectPath,
+    }: {
+      name: string;
+      scope: ProfileScope;
+      projectPath?: string | null;
+    }) => profilesApi.create(name, scope, projectPath),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["profiles"] });
       await updateTrayMenuSafely();
@@ -68,6 +75,47 @@ export const useUpdateProfileMutation = () => {
         closeButton: true,
       });
     },
+  });
+};
+
+export const useSetProfileProjectPathMutation = () => {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      projectPath,
+    }: {
+      id: string;
+      projectPath: string | null;
+    }) => profilesApi.setProjectPath(id, projectPath),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      await updateTrayMenuSafely();
+      toast.success(t("profiles.projectPath.saveSuccess"));
+    },
+    onError: (error: Error) => {
+      toast.error(
+        t("profiles.projectPath.saveFailed", {
+          detail: extractErrorMessage(error) || t("common.unknown"),
+        }),
+      );
+    },
+  });
+};
+
+export const useDeployProfileToProjectMutation = () => {
+  return useMutation({
+    mutationFn: ({
+      id,
+      scope,
+      resolution,
+    }: {
+      id: string;
+      scope: ProfileScope;
+      resolution?: ProjectDeployResolution | null;
+    }) => profilesApi.deployToProject(id, scope, resolution),
   });
 };
 

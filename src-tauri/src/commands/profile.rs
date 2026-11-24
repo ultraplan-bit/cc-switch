@@ -7,6 +7,9 @@ use tauri::{Emitter, State};
 use super::run_db_task;
 use crate::database::Profile;
 use crate::services::profile::{ProfilePayload, ProfileScope, ProfileService};
+use crate::services::project_profile::{
+    ConflictResolution, ProjectDeployResult, ProjectProfileService,
+};
 use crate::store::AppState;
 
 #[derive(Debug, Serialize)]
@@ -15,6 +18,8 @@ pub struct ProfileDto {
     pub id: String,
     pub name: String,
     pub payload: ProfilePayload,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -35,6 +40,7 @@ impl From<Profile> for ProfileDto {
             id: profile.id,
             name: profile.name,
             payload,
+            project_path: profile.project_path,
             created_at: profile.created_at,
             updated_at: profile.updated_at,
         }
@@ -145,10 +151,12 @@ pub async fn create_profile(
     state: State<'_, AppState>,
     name: String,
     scope: String,
+    project_path: Option<String>,
 ) -> Result<ProfileDto, String> {
     let scope = ProfileScope::parse(&scope)?;
     profile_mutation(&state, move |state| {
-        ProfileService::create(state, &name, scope).map(ProfileDto::from)
+        ProfileService::create_with_project_path(state, &name, scope, project_path)
+            .map(ProfileDto::from)
     })
     .await
 }
@@ -165,6 +173,18 @@ pub async fn update_profile(
     profile_mutation(&state, move |state| {
         ProfileService::update(state, &id, name, resnapshot.unwrap_or(false), scope)
             .map(ProfileDto::from)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn set_profile_project_path(
+    state: State<'_, AppState>,
+    id: String,
+    project_path: Option<String>,
+) -> Result<ProfileDto, String> {
+    profile_mutation(&state, move |state| {
+        ProfileService::set_project_path(state, &id, project_path).map(ProfileDto::from)
     })
     .await
 }
@@ -202,6 +222,22 @@ pub async fn apply_profile(
         let warnings = ProfileService::apply(state, &id, scope)?;
         emit_profile_apply_events(&app, state, &id, scope);
         Ok::<_, AppError>(warnings)
+    })
+    .await
+}
+
+/// 将 Profile 中的 Skills/MCP 物化到绑定目录的 Claude Code 或 Codex 项目。
+/// 与全局 apply 分开，避免更改用户级配置和 enabled 状态。
+#[tauri::command]
+pub async fn deploy_profile_to_project(
+    state: State<'_, AppState>,
+    id: String,
+    scope: String,
+    resolution: Option<ConflictResolution>,
+) -> Result<ProjectDeployResult, String> {
+    let scope = ProfileScope::parse(&scope)?;
+    profile_mutation(&state, move |state| {
+        ProjectProfileService::deploy(state, &id, scope, resolution).map_err(|err| err.to_string())
     })
     .await
 }

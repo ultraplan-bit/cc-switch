@@ -25,6 +25,7 @@ pub struct Profile {
     pub sort_order: Option<i64>,
     pub created_at: Option<i64>,
     pub updated_at: Option<i64>,
+    pub project_path: Option<String>,
 }
 
 impl Database {
@@ -33,7 +34,7 @@ impl Database {
         let conn = lock_conn!(self.conn);
         let mut stmt = conn
             .prepare(
-                "SELECT id, name, payload, sort_order, created_at, updated_at
+                "SELECT id, name, payload, sort_order, created_at, updated_at, project_path
                  FROM profiles
                  ORDER BY sort_order IS NULL, sort_order, created_at, id",
             )
@@ -48,6 +49,7 @@ impl Database {
                     sort_order: row.get(3)?,
                     created_at: row.get(4)?,
                     updated_at: row.get(5)?,
+                    project_path: row.get(6)?,
                 })
             })
             .map_err(|e| AppError::Database(e.to_string()))?;
@@ -64,7 +66,7 @@ impl Database {
         let conn = lock_conn!(self.conn);
         let mut stmt = conn
             .prepare(
-                "SELECT id, name, payload, sort_order, created_at, updated_at
+                "SELECT id, name, payload, sort_order, created_at, updated_at, project_path
                  FROM profiles WHERE id = ?1",
             )
             .map_err(|e| AppError::Database(e.to_string()))?;
@@ -77,6 +79,7 @@ impl Database {
                 sort_order: row.get(3)?,
                 created_at: row.get(4)?,
                 updated_at: row.get(5)?,
+                project_path: row.get(6)?,
             })
         }) {
             Ok(profile) => Ok(Some(profile)),
@@ -90,8 +93,8 @@ impl Database {
         let conn = lock_conn!(self.conn);
         conn.execute(
             "INSERT OR REPLACE INTO profiles
-             (id, name, payload, sort_order, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+             (id, name, payload, sort_order, created_at, updated_at, project_path)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 profile.id,
                 profile.name,
@@ -99,6 +102,7 @@ impl Database {
                 profile.sort_order,
                 profile.created_at,
                 profile.updated_at,
+                profile.project_path,
             ],
         )
         .map_err(|e| AppError::Database(e.to_string()))?;
@@ -146,6 +150,7 @@ mod tests {
             sort_order,
             created_at: Some(1_000),
             updated_at: Some(1_000),
+            project_path: None,
         }
     }
 
@@ -179,6 +184,31 @@ mod tests {
         assert!(db.delete_profile("a")?);
         assert!(!db.delete_profile("a")?);
         assert!(db.get_profile("a")?.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn test_profile_project_path_roundtrip() -> Result<(), AppError> {
+        let db = Database::memory()?;
+        let mut profile = sample("bound", "Bound", None);
+        profile.project_path = Some("/projects/demo".to_string());
+        db.save_profile(&profile)?;
+        db.save_profile(&sample("unbound", "Unbound", None))?;
+
+        assert_eq!(
+            db.get_profile("bound")?.unwrap().project_path.as_deref(),
+            Some("/projects/demo")
+        );
+        assert!(db.get_profile("unbound")?.unwrap().project_path.is_none());
+        let all = db.get_all_profiles()?;
+        assert_eq!(
+            all.iter()
+                .find(|p| p.id == "bound")
+                .unwrap()
+                .project_path
+                .as_deref(),
+            Some("/projects/demo")
+        );
         Ok(())
     }
 
