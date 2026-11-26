@@ -13,7 +13,7 @@ function readStored(): AppId[] | null {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return null;
     const apps = parsed.filter((app): app is AppId => appHas(app, "skills"));
-    return apps.length ? apps : null;
+    return apps;
   } catch {
     return null;
   }
@@ -28,7 +28,7 @@ function writeStored(apps: AppId[]) {
 }
 
 /**
- * 「安装到」：发现、ZIP、备份恢复都显式装进这里选的应用（默认记住上次的选择）。
+ * 「安装到」：发现、ZIP、备份恢复共用目标；空选择仅保存到资源库。
  * 后端 install_skill_unified 只收一个应用，所以先装到第一个、再逐个启用其余的，不是原子的。
  */
 export function useSkillInstallTargets(visibleAppIds: readonly AppId[]) {
@@ -37,12 +37,10 @@ export function useSkillInstallTargets(visibleAppIds: readonly AppId[]) {
   );
   const toggleMutation = useToggleSkillApp();
 
-  // 只算看得见的应用；一个都不剩时退回第一个可见应用
+  // 隐藏的应用不参与安装；空选择不会偷偷启用其他应用。
   const targets = APP_IDS_WITH.skills.filter(
     (app) => stored.includes(app) && visibleAppIds.includes(app),
   );
-  const effective =
-    targets.length > 0 ? targets : visibleAppIds.slice(0, 1).map((app) => app);
 
   const setTargets = useCallback((apps: AppId[]) => {
     setStored(apps);
@@ -54,11 +52,11 @@ export function useSkillInstallTargets(visibleAppIds: readonly AppId[]) {
    * 返回装好的 Skill 和没能启用的应用（不抛错；install 本身失败才抛）。
    */
   const installTo = async <T extends { id: string }>(
-    install: (firstApp: AppId) => Promise<T[]>,
-    apps: AppId[] = effective,
+    install: (firstApp: AppId | null) => Promise<T[]>,
+    apps: AppId[] = targets,
   ) => {
     const [first, ...rest] = apps;
-    const installed = await install(first ?? "claude");
+    const installed = await install(first ?? null);
     const failures: Array<{ id: string; app: AppId; error: unknown }> = [];
     for (const skill of installed) {
       for (const app of rest) {
@@ -76,5 +74,5 @@ export function useSkillInstallTargets(visibleAppIds: readonly AppId[]) {
     return { installed, failures };
   };
 
-  return { targets: effective, setTargets, installTo };
+  return { targets, setTargets, installTo };
 }

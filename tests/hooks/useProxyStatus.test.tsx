@@ -129,4 +129,17 @@ describe("useProxyStatus", () => {
     expect(invokeMock).toHaveBeenCalledWith("start_proxy_server");
     expect(invokeMock).toHaveBeenCalledWith("stop_proxy_server");
   });
+
+  it("refreshes applied Profile markers after changing the Agent mode", async () => {
+    const { wrapper, queryClient } = createWrapper();
+    const invalidated = vi.spyOn(queryClient, "invalidateQueries");
+    const { result } = renderHook(() => useProxyStatus(), { wrapper });
+    await act(async () => {
+      await result.current.setTakeoverForApp({
+        appType: "claude",
+        enabled: true,
+      });
+    });
+    expect(invalidated).toHaveBeenCalledWith({ queryKey: ["profiles"] });
+  });
 });

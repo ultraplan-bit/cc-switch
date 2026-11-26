@@ -94,6 +94,7 @@ export const useSettingsQuery = (): UseQueryResult<Settings> => {
   return useQuery({
     queryKey: ["settings"],
     queryFn: async () => settingsApi.get(),
+    networkMode: "always",
   });
 };
 

@@ -280,7 +280,12 @@
     "editCurrentNoticeFileEnd": "에 즉시 저장되며, 다음 요청부터 적용됩니다.",
     "editCurrentNotice": "사용 중인 공급자입니다. 저장하면 즉시 적용되며, 다음 요청부터 새 설정을 사용합니다.",
     "liveConfigReadFailed": "{{app}} 설정 파일을 읽을 수 없습니다",
-    "liveConfigReadFailedHint": "설정 파일의 문제를 해결하기 전까지는 공급자를 추가하거나 제거할 수 없습니다."
+    "liveConfigReadFailedHint": "설정 파일의 문제를 해결하기 전까지는 공급자를 추가하거나 제거할 수 없습니다.",
+    "connectionsSavedNotice": "연결을 공급자 라이브러리에 저장했습니다. 직접 연결 설정을 업데이트하려면 Profile을 다시 적용하세요.",
+    "connectionConfig": "고급 연결 설정",
+    "connectionConfigHint": "주소, 인증, 요청 헤더 및 클라우드 서비스 연결만 설정합니다. 모델과 Agent 동작은 Profile에서 편집하세요.",
+    "connectionConfigOnly": "여기에서는 연결 필드만 편집할 수 있습니다. 모델과 동작은 Profile에서 변경하세요.",
+    "connectionConfigInvalid": "저장하기 전에 연결 설정 형식을 수정하세요."
   },
   "claudeCode": {
     "needsRouting": "라우팅 필요"
@@ -450,7 +455,7 @@
       "quotaDisplayHelp": "공급자 카드, 인증 센터 및 트레이에서 각 할당량 구간의 남은 양과 사용한 양 중 무엇을 표시할지 선택합니다. 잔액과 Credits는 항상 남은 양을 표시합니다.",
       "sidebarAndHeader": "사이드바 및 헤더",
       "visibleApps": "사이드바에 표시되는 앱",
-      "goToApps": "‘앱’ 페이지 열기",
+      "goToApps": "Agent 관리 열기",
       "updates": "앱의 새 버전",
       "checkToolUpdates": "시작 시 앱의 새 버전 확인",
       "checkToolUpdatesHelp": "켜면 CC Switch가 시작할 때마다 설치된 명령줄 앱의 새 버전을 확인하며, 새 버전이 있으면 사이드바의 ‘앱’에 점을 표시합니다. 자동으로 업그레이드하지는 않습니다.",
@@ -3145,24 +3150,95 @@
     }
   },
   "profiles": {
+    "environment": {
+      "title": "프로젝트 환경",
+      "configureProject": "프로젝트 구성",
+      "manageAgent": "에이전트 관리",
+      "selectProject": "프로젝트 선택",
+      "description": "기존 설치 도구를 사용해 이 에이전트를 프로젝트에 연결합니다. 이미 설치된 에이전트는 현재 설치를 그대로 사용할 수 있습니다.",
+      "busy": "에이전트 작업 진행 중",
+      "checkFailed": "에이전트 상태 확인 필요",
+      "ready": "에이전트를 실행할 수 있음",
+      "recheck": "이 에이전트 다시 확인",
+      "installations": "설치 경로 및 출처",
+      "multipleInstalls": "여러 설치가 발견되었습니다. 에이전트를 실행하기 전에 기본 경로를 확인하세요.",
+      "wslHint": "{{distro}}에서 감지되었습니다. 설치 경로는 호스트에서 확인하므로 이 WSL 설치와 일치하지 않을 수 있습니다. 배포에는 CC Switch가 접근할 수 있는 선택된 폴더를 사용하며, WSL 배포판을 선택하지는 않습니다. 에이전트가 같은 프로젝트를 여는지 확인하세요.",
+      "scopeHint": "프로젝트 설정은 현재 Claude Code와 Codex를 지원합니다.",
+      "projectConfiguration": "프로젝트 및 Profile",
+      "projectHint": "프로젝트 Profile을 선택하거나 만들고 설정을 편집한 후 수동으로 배포하세요. 설치, 업데이트 및 진단은 Agent 관리에서 수행하세요.",
+      "prepareHint": "지금 Profile을 준비할 수 있습니다. 에이전트를 실행할 수 있고 확인에 성공하면 배포할 수 있습니다."
+    },
+    "projectContext": "Profile 범위",
+    "selectProfile": "Profile 선택",
+    "pendingSelection": "적용되지 않음",
+    "editor": {
+      "title": "Profile 편집",
+      "description": "이 Agent의 전체 설정을 편집합니다. 저장은 Profile만 업데이트하며 적용하거나 배포해야 반영됩니다.",
+      "name": "이름",
+      "provider": "공급자",
+      "inheritProvider": "현재 전역 공급자 사용",
+      "model": "모델",
+      "modelPlaceholder": "모델 입력 또는 선택",
+      "modelHint": "빈 값은 기본값을 상속합니다. 지정한 모델은 독립적으로 저장됩니다.",
+      "mainReasoningEffort": "주 모델 추론 수준",
+      "planReasoningEffort": "Plan 모드 추론 수준",
+      "mcp": "MCP 서버",
+      "skills": "Skills",
+      "prompt": "지침 템플릿",
+      "noPrompt": "지침 템플릿 없음",
+      "missing": "리소스 없음: {{id}}",
+      "unavailable": "사용 불가",
+      "missingResourcesHint": "사용할 수 없는 리소스의 참조는 저장할 때 유지되며 적용할 때 건너뜁니다. 참조를 제거하려면 선택을 해제하세요.",
+      "emptyResources": "라이브러리에 리소스가 없습니다",
+      "loadFailed": "리소스를 불러오지 못했습니다: {{detail}}",
+      "sections": "Profile 설정 섹션",
+      "modelsTab": "기본 및 모델",
+      "resourcesTab": "리소스",
+      "instructionsTab": "지침",
+      "scopeSummary": "{{agent}}의 독립 설정",
+      "providerReferenceHint": "모델 기능은 선택한 공급자를 사용합니다. API 주소, 키, 계정은 공급자를 계속 참조합니다. 프로젝트 배포는 전역 연결을 전환하지 않습니다.",
+      "resetModels": "공급자 모델 설정 복원",
+      "runtimeSettings": "추론 및 컨텍스트",
+      "saveHint": "저장 후 프로젝트에 수동으로 배포하여 적용하세요.",
+      "searchResources": "MCP 또는 Skills 검색",
+      "selectedCount": "{{count}}개 선택됨",
+      "noMatchingResources": "일치하는 리소스 없음",
+      "instructionHint": "라이브러리 프롬프트를 참조하여 배포 시 이 Agent의 프로젝트 지침 파일에 씁니다.",
+      "globalSaveHint": "저장 후 적용을 클릭하여 전역 Profile을 활성화하세요.",
+      "incompleteModels": "모델 목록에서 비어 있는 모델 ID를 입력하세요.",
+      "behaviorTab": "동작 및 고급 설정",
+      "nativeHint": "권한, 샌드박스, Hooks, 플러그인과 기타 Agent 설정은 이 Profile에 저장됩니다. 모델과 리소스는 별도 탭에서 편집하며 주소, 키와 계정은 공급자를 참조합니다. 저장한 다음 적용하거나 배포하세요.",
+      "nativeObjectRequired": "설정은 JSON 객체여야 합니다",
+      "nativeInvalid": "잘못된 설정: {{detail}}"
+    },
+    "scope": {
+      "label": "프로필 범위",
+      "global": "전역",
+      "project": "프로젝트"
+    },
+    "copyToProject": "다른 프로젝트에 복사",
+    "duplicateTitle": "프로필을 다른 프로젝트에 복사",
+    "duplicateDescription": "프로젝트 폴더에 사용할 독립 프로필을 만듭니다.",
+    "captureCurrent": "현재 설정으로 업데이트",
+    "captureCurrentDescription": "이 Agent의 현재 전역 모델, MCP, 스킬 및 지침으로 {{name}} 프로필의 참조를 업데이트합니다. 이후 프로필을 배포하면 프로젝트 설정이 업데이트됩니다.",
     "switcherAriaLabel": "프로젝트: {{name}}",
     "switcherTooltip": {
-      "claude": "프로젝트: 한 번의 클릭으로 Claude Code 공급자 / MCP / 스킬 / 메모리 파일 전환",
+      "claude": "Profile: Claude Code 전역 설정 전환 또는 프로젝트 설정 관리",
       "claude-desktop": "프로젝트: 한 번의 클릭으로 Claude Desktop 공급자 전환",
-      "codex": "프로젝트: 한 번의 클릭으로 Codex 공급자 / MCP / 스킬 / 메모리 파일 전환"
+      "codex": "Profile: Codex 전역 설정 전환 또는 프로젝트 설정 관리"
     },
     "none": "프로젝트 없음",
     "searchPlaceholder": "프로젝트 검색",
     "empty": "아직 프로젝트가 없습니다.",
     "createFromCurrent": "새 프로젝트",
     "createDescription": {
-      "claude": "현재 Claude Code 공급자, MCP, 스킬 및 메모리 파일을 나중에 전환할 수 있는 프로젝트로 저장합니다.",
+      "claude": "현재 Claude Code 모델, MCP, 스킬 및 지침을 전역 또는 프로젝트 프로필로 저장합니다.",
       "claude-desktop": "현재 Claude Desktop 공급자를 나중에 전환할 수 있는 프로젝트로 저장합니다.",
-      "codex": "현재 Codex 공급자, MCP, 스킬 및 메모리 파일 설정을 나중에 전환할 수 있는 프로젝트로 저장합니다."
+      "codex": "현재 Codex 모델, MCP, 스킬 및 지침을 전역 또는 프로젝트 프로필로 저장합니다."
     },
     "manage": "프로젝트 관리",
     "manageTitle": "프로젝트 관리",
-    "manageDescription": "프로젝트는 설정 스냅샷입니다. 프로젝트를 전환하면 현재 설정을 이전 프로젝트에 자동으로 다시 저장합니다.",
+    "manageDescription": "Profile 설정은 명시적으로 저장합니다. 전역 Profile은 적용하여 활성화하며 프로젝트 Profile은 연결된 폴더에 수동 배포합니다.",
     "namePlaceholder": "예를 들어 개발, 드로잉",
     "projectPath": {
       "label": "프로젝트 디렉터리",
@@ -3179,9 +3255,12 @@
       "pickFailed": "프로젝트 디렉터리를 선택하지 못했습니다: {{detail}}"
     },
     "projectDeploy": {
+      "current": "이 Agent에 마지막으로 적용",
       "button": "프로젝트에 배포",
       "pending": "프로젝트에 배포 중…",
       "success": "프로젝트에 프로필을 배포했습니다.",
+      "notes": "배포 참고 사항",
+      "completedWithNotes": "프로젝트 배포가 끝났습니다. 참고 사항을 확인하세요.",
       "failed": "프로젝트 배포 실패: {{detail}}",
       "conflictTitle": "프로젝트 배포 충돌",
       "conflictMessage": "{{files}}개 파일에 사용자 소유 또는 수정된 내용이 있습니다. 처리 방법을 선택하세요.",
@@ -3207,7 +3286,32 @@
     "applySuccess": "프로젝트를 적용했습니다.",
     "applyFailed": "프로젝트 적용 실패: {{detail}}",
     "applyWarnings": "프로젝트를 적용했으며 경고가 {{warningCount}}개 있습니다:\n{{details}}",
-    "clearSuccess": "프로젝트 없음으로 전환됨"
+    "clearSuccess": "프로젝트 없음으로 전환됨",
+    "createSource": {
+      "label": "설정 원본",
+      "current": "현재 설정",
+      "project": "기존 프로젝트 설정 가져오기",
+      "description": "선택한 Agent의 프로젝트 모델, MCP, Skills 및 지침을 독립된 Profile로 가져옵니다. 원본 프로젝트 파일과 전역 활성화 상태는 변경되지 않습니다."
+    },
+    "import": {
+      "completedWithNotes": "프로젝트 설정을 가져왔습니다. 안내를 확인하세요"
+    },
+    "context": {
+      "title": "프로젝트 및 Profile",
+      "searchProjects": "프로젝트 이름 또는 경로 검색…",
+      "more": "Profile 추가 작업",
+      "rowActions": "{{name}} 추가 작업",
+      "globalProvidersHint": "프로젝트 설정은 수동 배포해야 적용됩니다. 아래 공급자 목록은 전역 연결을 관리합니다."
+    },
+    "connections": {
+      "title": "공급자 연결",
+      "description": "API 주소, 키, 계정 및 연결 방식을 여기에서 관리합니다. Profile은 이 연결을 참조합니다."
+    },
+    "migration": {
+      "pending": "기존 Agent 설정을 준비하는 중…",
+      "failed": "기존 설정 마이그레이션이 완료되지 않았습니다"
+    },
+    "apply": "적용"
   },
   "workspace": {
     "title": "작업 공간 파일",
@@ -4333,9 +4437,9 @@
     "skills": "스킬",
     "prompts": "프롬프트",
     "sessions": "세션",
-    "apps": "앱",
-    "appsTitle": "앱: 설치, 업그레이드, 사이드바에서 표시할 항목 선택",
-    "appsHasUpdate": "앱 · 업데이트 사용 가능",
+    "apps": "Agent 관리",
+    "appsTitle": "설치, 업데이트, 진단 및 사이드바 표시",
+    "appsHasUpdate": "Agent 관리 · 업데이트 있음",
     "settings": "설정",
     "settingsHasUpdate": "설정 · 새로운 CC Switch 버전을 사용할 수 있습니다",
     "mode": {
@@ -4350,8 +4454,8 @@
     "showInSidebar": "사이드바에 {{name}} 표시",
     "lastChecked": "마지막 확인 {{time}}",
     "neverChecked": "아직 업데이트를 확인하지 않았습니다.",
-    "helpTitle": "앱",
-    "helpBody": "여기에서 명령줄 앱을 설치 및 업그레이드하고 사이드바에 표시할 앱을 선택하세요.",
+    "helpTitle": "Agent 관리",
+    "helpBody": "설치, 업데이트, 진단 및 사이드바 표시",
     "checking": "확인 중…",
     "checkUpdates": "업데이트 확인",
     "moreActions": "추가 작업",
@@ -4362,7 +4466,7 @@
     "dragHandle": "드래그하여 {{name}} 순서 변경",
     "columnVersion": "버전",
     "columnVisible": "표시",
-    "visibleHelp": "끄면 앱이 사이드바, 트레이 메뉴, MCP / 스킬의 앱 열, 프롬프트 및 세션의 앱 선택기에 표시되지 않습니다. 화면에서만 숨겨지며, 공급자와 MCP 서버 등의 설정 및 앱 자체 설정 파일은 변경되지 않습니다.",
+    "visibleHelp": "사이드바에는 설치되어 있고 이 스위치가 켜진 앱만 표시됩니다. 설치되지 않은 앱은 여기서 설치한 뒤 표시 여부를 선택할 수 있습니다. 끄면 앱이 사이드바, 트레이 메뉴, MCP / 스킬의 앱 열, 프롬프트 및 세션의 앱 선택기에 표시되지 않습니다. 화면에서만 숨겨지며, 공급자와 MCP 서버 등의 설정 및 앱 자체 설정 파일은 변경되지 않습니다.",
     "desktopHelp": "Claude Desktop은 데스크톱 앱이므로 여기에서 설치하거나 업그레이드할 수 없습니다. CC Switch는 설정 파일을 통해 연결됩니다.",
     "workbuddyHelp": "WorkBuddy는 데스크톱 앱이므로 여기에서 설치하거나 업그레이드할 수 없으며, 자체 업데이트 기능을 사용합니다. CC Switch는 설정 파일(~/.workbuddy/models.json)을 통해 WorkBuddy와 연동됩니다.",
     "desktopUnsupported": "이 시스템에서는 지원되지 않습니다",
@@ -4389,7 +4493,9 @@
       "agy": "공식 스크립트로 설치",
       "copilot": "npm으로 설치",
       "omp": "공식 스크립트로 설치"
-    }
+    },
+    "officialDownload": "공식 사이트에서 다운로드",
+    "manualInstallHint": "다운로드하여 설치한 후 “업데이트 확인”을 눌러 설치 상태를 다시 확인하세요."
   },
   "appPage": {
     "moreActions": "{{name}}에 대한 추가 작업",
@@ -4961,7 +5067,9 @@
       "noUpdatesInSelection": "선택한 스킬에 업데이트가 없습니다",
       "selectionAlreadyOn": "선택한 스킬 {{count}}개가 이미 {{app}}에서 활성화되어 있습니다",
       "selectionAlreadyOff": "선택한 스킬 {{count}}개 중 {{app}}에서 활성화된 항목이 없습니다",
-      "disabledSelection": "{{app}}에서 {{noun}} {{count}}개를 비활성화했습니다."
+      "disabledSelection": "{{app}}에서 {{noun}} {{count}}개를 비활성화했습니다.",
+      "savedToLibrary": "{{name}}을(를) 라이브러리에 저장했습니다",
+      "savedManyToLibrary": "Skills {{count}}개를 라이브러리에 저장했습니다"
     },
     "installTo": {
       "prefix": "설치 대상: ",
@@ -4969,7 +5077,9 @@
       "many": "{{first}} 등 {{count}}개",
       "title": "설치 후 다음 앱에서 활성화",
       "helpTitle": "이 선택이 저장되나요?",
-      "help": "예. 마지막 선택이 기본값으로 저장됩니다. 설치됨 화면에서 언제든지 바꿀 수 있습니다. ZIP에서 설치하거나 백업에서 복원할 때도 이 선택을 사용합니다."
+      "help": "예. 마지막 선택이 기본값으로 저장됩니다. 설치됨 화면에서 언제든지 바꿀 수 있습니다. ZIP에서 설치하거나 백업에서 복원할 때도 이 선택을 사용합니다.",
+      "libraryOnly": "라이브러리에만 저장",
+      "libraryOnlyHint": "Agent를 활성화하거나 동기화하지 않습니다. ~/.agents/skills에 저장하면 Agent의 기본 자동 검색 규칙이 계속 적용됩니다."
     },
     "discover": {
       "searchPlaceholder": "이름, 설명 또는 저장소 검색",
@@ -5027,7 +5137,8 @@
       "submit": "{{count}}개 가져오기"
     },
     "restore": {
-      "lead": "복원할 백업을 선택하면 파일을 복원하고 목록에 다시 추가하며 {{apps}}에서 활성화합니다 (탐색의 “설치 대상” 설정 사용)."
+      "lead": "복원할 백업을 선택하면 파일을 복원하고 목록에 다시 추가하며 {{apps}}에서 활성화합니다 (탐색의 “설치 대상” 설정 사용).",
+      "libraryOnlyLead": "Agent를 활성화하거나 동기화하지 않고 라이브러리로 복원합니다."
     },
     "repoFail": {
       "title": "저장소 {{count}}개를 읽지 못했습니다: {{repos}}",

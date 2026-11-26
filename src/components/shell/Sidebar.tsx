@@ -68,7 +68,7 @@ interface SidebarProps {
 type DirectoryProps = SidebarProps & { collapsed: boolean };
 
 /**
- * 主导航（v7）：顶条 44 → 应用列表（唯一滚动的区域）→ 全局 6 项（贴底）→ 底栏「应用 · 设置」。
+ * 主导航（v7）：顶条 44 → 应用列表（唯一滚动的区域）→ 全局 6 项（贴底）→ 独立的「Agent 管理 / 设置」。
  * 进入设置后整条侧栏换成设置目录。收起时是 72px 的图标轨；
  * 展开 / 收起时宽度一步到位，边缘的滑动由盖板的 transform 动画画出（见 useSidebarCollapsed），文字不换行、被裁掉而不是挤成两行。
  * 收起时各行只剩图标，名字由 HoverTip 从右侧报；展开时文字可见，不再挂提示。
@@ -355,16 +355,9 @@ function MainDirectory({
         )}
       />
 
-      <div
-        className={cn(
-          "flex shrink-0 pb-2",
-          // 收起时竖排，和上面全局项一样无间隙
-          collapsed ? "flex-col" : "gap-1 px-2",
-        )}
-      >
+      <div className="flex shrink-0 flex-col pb-2" data-agent-management-nav>
         <NavItem
           collapsed={collapsed}
-          compact={!collapsed}
           selected={view === "apps"}
           icon={LayoutGrid}
           label={t("nav.apps")}
@@ -376,7 +369,6 @@ function MainDirectory({
         />
         <NavItem
           collapsed={collapsed}
-          compact={!collapsed}
           selected={false}
           icon={Settings}
           label={t("nav.settings")}

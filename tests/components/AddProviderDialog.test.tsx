@@ -14,6 +14,13 @@ import { providersApi } from "@/lib/api";
 import type { ProviderEditorView } from "@/lib/api/providers";
 import { usePresetStep } from "@/components/providers/forms/presetStep";
 import { createPortal } from "react-dom";
+const connectionMode = vi.hoisted(() => ({
+  connectionsOnly: false,
+  pending: false,
+}));
+vi.mock("@/components/providers/useProviderConnectionMode", () => ({
+  useProviderConnectionMode: () => connectionMode,
+}));
 
 vi.mock("@/components/ui/dialog", () => ({
   Dialog: ({ children }: { children: React.ReactNode }) => (
@@ -118,6 +125,8 @@ vi.mock("@/components/providers/AuthSettingsPanel", () => ({
 
 describe("AddProviderDialog", () => {
   beforeEach(() => {
+    connectionMode.connectionsOnly = false;
+    connectionMode.pending = false;
     vi.restoreAllMocks();
     mockFormReady = true;
     mockHasPresetSelector = false;
@@ -220,6 +229,29 @@ describe("AddProviderDialog", () => {
     expect(
       screen.getByRole("button", { name: "manage-auth" }),
     ).toBeInTheDocument();
+  });
+
+  it("creates migrated connections without projecting global configuration", async () => {
+    connectionMode.connectionsOnly = true;
+    const onSubmit = vi.fn();
+    const editorView = vi.spyOn(providersApi, "getEditorView");
+    render(
+      <AddProviderDialog
+        open
+        appId="claude"
+        onOpenChange={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "common.add" }));
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          editorSave: { base: {}, connectionOnly: true },
+        }),
+      ),
+    );
+    expect(editorView).not.toHaveBeenCalled();
   });
 
   it("使用 ProviderForm 返回的自定义端点", async () => {

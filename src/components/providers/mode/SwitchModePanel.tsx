@@ -224,6 +224,7 @@ export function SwitchModePanel({
     try {
       const result = await proxyApi.setProxyRoute(app, provider.id);
       await queryClient.invalidateQueries({ queryKey: ["providers", app] });
+      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
       toast.success(routeSwitchNotification(result, app, provider.name, t), {
         closeButton: true,
       });

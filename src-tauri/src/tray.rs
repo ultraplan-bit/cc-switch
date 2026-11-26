@@ -1611,19 +1611,23 @@ fn collect_app_snapshot(
         usage_view(&app_state.usage_cache, texts, app, provider, id)
     });
 
+    let global_profiles: Vec<_> = profiles
+        .iter()
+        .filter(|profile| profile.project_path.is_none())
+        .collect();
     let profiles = crate::services::profile::ProfileScope::for_app(app)
-        .filter(|_| settings.show_profile_switcher && !profiles.is_empty())
+        .filter(|_| settings.show_profile_switcher && !global_profiles.is_empty())
         .map(|scope| -> Result<ProfileSection, AppError> {
             Ok(ProfileSection {
                 scope: scope.as_str(),
-                items: profiles
+                items: global_profiles
                     .iter()
                     .map(|profile| (profile.id.clone(), profile.name.clone()))
                     .collect(),
                 current: app_state
                     .db
                     .get_current_profile_id(scope.as_str())?
-                    .filter(|id| !id.is_empty()),
+                    .filter(|id| global_profiles.iter().any(|profile| profile.id == *id)),
             })
         })
         .transpose()?;

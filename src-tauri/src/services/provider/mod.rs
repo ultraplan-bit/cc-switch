@@ -12,6 +12,7 @@ mod codex_editor;
 mod codex_login;
 pub(crate) mod codex_official_models;
 pub(crate) mod codex_terminal;
+mod connection_editor;
 pub(crate) mod copilot_direct;
 mod editor_toml;
 mod endpoints;
@@ -297,6 +298,13 @@ mod tests {
         let env = EnvVars::new()
             .set("CC_SWITCH_TEST_HOME", temp.path())
             .set("HOME", temp.path());
+        #[cfg(windows)]
+        let env = env
+            .set("USERPROFILE", temp.path())
+            .set("LOCALAPPDATA", temp.path().join("AppData").join("Local"))
+            .remove("HERMES_HOME");
+        #[cfg(not(windows))]
+        let env = env.remove("HERMES_HOME");
 
         let db = Arc::new(Database::memory().expect("in-memory database"));
         let state = AppState::new(db);
@@ -6472,6 +6480,9 @@ impl ProviderService {
         add_to_live: bool,
         editor: Option<EditorSave>,
     ) -> Result<bool, AppError> {
+        if editor.as_ref().is_some_and(|editor| editor.connection_only) {
+            return connection_editor::save(state, app_type, provider, true);
+        }
         match (app_type, editor) {
             (AppType::Claude, Some(editor)) => {
                 Self::add_claude_from_editor(state, provider, editor)
@@ -6501,6 +6512,12 @@ impl ProviderService {
         provider: Provider,
         editor: Option<EditorSave>,
     ) -> Result<bool, AppError> {
+        if editor.as_ref().is_some_and(|editor| editor.connection_only) {
+            if original_id.is_some_and(|original| original != provider.id) {
+                return Err(AppError::InvalidInput("供应商连接标识不可变更".into()));
+            }
+            return connection_editor::save(state, app_type, provider, false);
+        }
         match (app_type, editor) {
             (AppType::Claude, Some(editor))
                 if original_id.is_none_or(|original| original == provider.id) =>
@@ -7426,7 +7443,16 @@ impl ProviderService {
     ///   操作里提交；累加式应用按各自的规则写入。
     pub fn switch(state: &AppState, app_type: AppType, id: &str) -> Result<SwitchResult, AppError> {
         let app = app_type.as_str().to_string();
-        let result = Self::switch_inner(state, app_type, id);
+        let mut result = Self::switch_inner(state, app_type, id);
+        if let Ok(result) = &mut result {
+            if matches!(app.as_str(), "claude" | "codex" | "claude-desktop") {
+                if let Err(error) = state.db.set_current_profile_id(&app, None) {
+                    result
+                        .warnings
+                        .push(format!("无法清除旧 Profile 应用标记: {error}"));
+                }
+            }
+        }
         match &result {
             Ok(result) if result.warnings.is_empty() => {
                 log::info!("[SWITCH] {app} 切到 {id} 完成");

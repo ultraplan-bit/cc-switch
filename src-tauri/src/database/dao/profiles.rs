@@ -29,6 +29,55 @@ pub struct Profile {
 }
 
 impl Database {
+    pub(crate) fn save_migrated_profile(
+        &self,
+        profile: &Profile,
+        marker: &str,
+    ) -> Result<(), AppError> {
+        let conn = lock_conn!(self.conn);
+        let transaction = conn
+            .unchecked_transaction()
+            .map_err(|error| AppError::Database(error.to_string()))?;
+        let marked: bool = transaction
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM settings WHERE key = ?1)",
+                [marker],
+                |row| row.get(0),
+            )
+            .map_err(|error| AppError::Database(error.to_string()))?;
+        if !marked {
+            transaction.execute("INSERT INTO profiles (id,name,payload,sort_order,created_at,updated_at,project_path) VALUES (?1,?2,?3,?4,?5,?6,?7)", params![profile.id,profile.name,profile.payload,profile.sort_order,profile.created_at,profile.updated_at,profile.project_path]).map_err(|error| AppError::Database(error.to_string()))?;
+            transaction
+                .execute(
+                    "INSERT INTO settings (key,value) VALUES (?1,?2)",
+                    params![marker, profile.id],
+                )
+                .map_err(|error| AppError::Database(error.to_string()))?;
+        }
+        transaction
+            .commit()
+            .map_err(|error| AppError::Database(error.to_string()))
+    }
+
+    pub(crate) fn backfill_profile_native_config(
+        &self,
+        profile: &Profile,
+        previous: &str,
+    ) -> Result<(), AppError> {
+        let conn = lock_conn!(self.conn);
+        let count = conn
+            .execute(
+                "UPDATE profiles SET payload = ?2 WHERE id = ?1 AND payload = ?3",
+                params![profile.id, profile.payload, previous],
+            )
+            .map_err(|error| AppError::Database(error.to_string()))?;
+        if count != 1 {
+            return Err(AppError::Config(
+                "Profile 在迁移期间发生变化，请重试".into(),
+            ));
+        }
+        Ok(())
+    }
     /// 获取所有项目（按 sort_order 优先、created_at 兜底排序）
     pub fn get_all_profiles(&self) -> Result<Vec<Profile>, AppError> {
         let conn = lock_conn!(self.conn);
@@ -107,6 +156,38 @@ impl Database {
         )
         .map_err(|e| AppError::Database(e.to_string()))?;
         Ok(())
+    }
+
+    /// 保存手动编辑并解除同一分组的自动保存关联。
+    pub(crate) fn update_profile_config_record(
+        &self,
+        profile: &Profile,
+        scope: &str,
+    ) -> Result<(), AppError> {
+        let conn = lock_conn!(self.conn);
+        let transaction = conn
+            .unchecked_transaction()
+            .map_err(|error| AppError::Database(error.to_string()))?;
+        transaction
+            .execute(
+                "UPDATE profiles SET name = ?2, payload = ?3, updated_at = ?4 WHERE id = ?1",
+                params![
+                    profile.id,
+                    profile.name,
+                    profile.payload,
+                    profile.updated_at
+                ],
+            )
+            .map_err(|error| AppError::Database(error.to_string()))?;
+        transaction
+            .execute(
+                "DELETE FROM settings WHERE key = ?1 AND value = ?2",
+                params![current_profile_key(scope), profile.id],
+            )
+            .map_err(|error| AppError::Database(error.to_string()))?;
+        transaction
+            .commit()
+            .map_err(|error| AppError::Database(error.to_string()))
     }
 
     /// 删除项目，返回是否实际删除了记录

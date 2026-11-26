@@ -343,6 +343,7 @@ fn tool_env_type_and_wsl_distro(_tool: &str) -> (String, Option<String>) {
 pub async fn get_tool_versions(
     tools: Option<Vec<String>>,
     wsl_shell_by_tool: Option<HashMap<String, WslShellPreferenceInput>>,
+    local_only: Option<bool>,
 ) -> Result<Vec<ToolVersion>, String> {
     let requested: Vec<&str> = match tools.as_deref() {
         Some(tools) => normalize_requested_tools(tools),
@@ -355,7 +356,15 @@ pub async fn get_tool_versions(
         let tool_wsl_shell = pref.and_then(|p| p.wsl_shell.as_deref());
         let tool_wsl_shell_flag = pref.and_then(|p| p.wsl_shell_flag.as_deref());
 
-        results.push(get_single_tool_version_impl(tool, tool_wsl_shell, tool_wsl_shell_flag).await);
+        results.push(
+            get_single_tool_version_impl(
+                tool,
+                tool_wsl_shell,
+                tool_wsl_shell_flag,
+                local_only.unwrap_or(false),
+            )
+            .await,
+        );
     }
 
     Ok(results)

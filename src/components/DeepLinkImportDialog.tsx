@@ -252,6 +252,10 @@ export function DeepLinkImportDialog() {
         await queryClient.invalidateQueries({
           queryKey: ["providers", request.app],
         });
+        await queryClient.invalidateQueries({
+          queryKey: ["profile-configuration", request.app],
+        });
+        await queryClient.invalidateQueries({ queryKey: ["profiles"] });
         if (request.app === "opencode") {
           await queryClient.invalidateQueries({
             queryKey: ["opencodeLiveProviderIds"],

@@ -3148,7 +3148,10 @@ pub(crate) fn resolve_cc_switch_catalog_path(
 /// Pure reverse-parsing core: convert Codex catalog JSON text back into the
 /// frontend's simplified model-mapping shape. Returns `None` when the catalog
 /// is unparseable, has no `models` array, or yields zero valid entries.
-fn build_simplified_catalog_from_texts(config_text: &str, catalog_text: &str) -> Option<Value> {
+pub(crate) fn build_simplified_catalog_from_texts(
+    config_text: &str,
+    catalog_text: &str,
+) -> Option<Value> {
     let catalog: Value = serde_json::from_str(catalog_text).ok()?;
     let models = catalog.get("models").and_then(|m| m.as_array())?;
 

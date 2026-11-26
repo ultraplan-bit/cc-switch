@@ -225,7 +225,7 @@ export const skillsApi = {
   /** 安装 Skill（统一安装） */
   async installUnified(
     skill: DiscoverableSkill,
-    currentApp: AppId,
+    currentApp: AppId | null,
   ): Promise<InstalledSkill> {
     return await invoke("install_skill_unified", { skill, currentApp });
   },
@@ -238,7 +238,7 @@ export const skillsApi = {
   /** 从备份恢复 Skill */
   async restoreBackup(
     backupId: string,
-    currentApp: AppId,
+    currentApp: AppId | null,
   ): Promise<InstalledSkill> {
     return await invoke("restore_skill_backup", { backupId, currentApp });
   },
@@ -366,7 +366,7 @@ export const skillsApi = {
   /** 从 ZIP 文件安装 Skills */
   async installFromZip(
     filePath: string,
-    currentApp: AppId,
+    currentApp: AppId | null,
   ): Promise<ZipInstallResult> {
     return await invoke("install_skills_from_zip", { filePath, currentApp });
   },

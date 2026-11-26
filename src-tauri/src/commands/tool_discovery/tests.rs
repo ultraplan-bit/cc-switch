@@ -1802,14 +1802,12 @@ fn build_tool_search_paths_includes_standalone_installer_dirs() {
     let claude_paths = build_tool_search_paths("claude");
     assert!(claude_paths.contains(&local_data.join("Programs").join("claude")));
 
-    // The standalone Codex dir is codex-specific; it must not pollute other tools.
-    assert!(!build_tool_search_paths("gemini").contains(
-        &local_data
-            .join("Programs")
-            .join("OpenAI")
-            .join("Codex")
-            .join("bin")
-    ));
+    assert!(windows_standalone_installer_paths("agy", &local_data)
+        .contains(&local_data.join("agy").join("bin")));
+
+    // Check only the tool-specific additions here: the ambient PATH can
+    // legitimately contain the Codex directory for every tool.
+    assert!(windows_standalone_installer_paths("gemini", &local_data).is_empty());
 }
 
 #[test]

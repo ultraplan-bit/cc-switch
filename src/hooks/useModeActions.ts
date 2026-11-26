@@ -32,6 +32,7 @@ export function useModeActions(app: AppId) {
       queryClient.invalidateQueries({ queryKey: proxyKeys.status }),
       queryClient.invalidateQueries({ queryKey: proxyKeys.takeoverStatus }),
       queryClient.invalidateQueries({ queryKey: ["providers", app] }),
+      queryClient.invalidateQueries({ queryKey: ["profiles"] }),
     ]);
     providersApi.updateTrayMenu().catch(() => undefined);
   }, [app, queryClient]);

@@ -73,8 +73,12 @@ impl SkillService {
     pub(super) fn persist_and_sync_new_skill(
         db: &Arc<Database>,
         skill: &InstalledSkill,
-        app: &AppType,
+        app: Option<&AppType>,
     ) -> Result<()> {
+        let Some(app) = app else {
+            db.save_skill(skill)?;
+            return Ok(());
+        };
         let source = Self::get_ssot_dir()?.join(&skill.directory);
         Self::preflight_install_destination(&source, &skill.directory, app)?;
         db.save_skill(skill)?;

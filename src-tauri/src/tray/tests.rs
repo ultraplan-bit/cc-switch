@@ -19,6 +19,70 @@ fn now() -> chrono::DateTime<chrono::Local> {
 }
 
 #[test]
+#[serial_test::serial]
+fn project_profiles_are_excluded_from_the_global_tray_switcher() {
+    let home = crate::test_support::TestHome::new();
+    let state = AppState::new(std::sync::Arc::new(
+        crate::database::Database::memory().unwrap(),
+    ));
+    let global = crate::database::Profile {
+        id: "global".to_string(),
+        name: "Global".to_string(),
+        payload: "{}".to_string(),
+        sort_order: None,
+        project_path: None,
+        created_at: None,
+        updated_at: None,
+    };
+    let project = crate::database::Profile {
+        id: "project".to_string(),
+        name: "Project".to_string(),
+        project_path: Some(home.path().to_string_lossy().into_owned()),
+        ..global.clone()
+    };
+    let settings = crate::settings::AppSettings {
+        show_profile_switcher: true,
+        ..Default::default()
+    };
+    for scope in crate::services::profile::ProfileScope::ALL {
+        let snapshot = |profiles: &[crate::database::Profile]| {
+            collect_app_snapshot(
+                &state,
+                &en(),
+                &settings,
+                &scope.apps()[0],
+                None,
+                profiles,
+                &TrayAccountLabels::default(),
+            )
+            .unwrap()
+        };
+        state
+            .db
+            .set_current_profile_id(scope.as_str(), Some(&project.id))
+            .unwrap();
+        let section = snapshot(&[global.clone(), project.clone()])
+            .profiles
+            .unwrap();
+        assert_eq!(section.items, [(global.id.clone(), global.name.clone())]);
+        assert_eq!(section.current, None);
+        assert!(snapshot(std::slice::from_ref(&project)).profiles.is_none());
+
+        state
+            .db
+            .set_current_profile_id(scope.as_str(), Some(&global.id))
+            .unwrap();
+        assert_eq!(
+            snapshot(&[global.clone(), project.clone()])
+                .profiles
+                .unwrap()
+                .current,
+            Some(global.id.clone())
+        );
+    }
+}
+
+#[test]
 fn an_unreadable_provider_is_left_out_of_the_tray_instead_of_breaking_it() {
     use std::sync::Arc;
     let state = AppState::new(Arc::new(crate::database::Database::memory().unwrap()));

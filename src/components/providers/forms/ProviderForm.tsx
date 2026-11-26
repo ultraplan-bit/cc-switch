@@ -91,6 +91,7 @@ import {
 import { getCodexCustomTemplate } from "@/config/codexTemplates";
 import CodexConfigEditor from "./CodexConfigEditor";
 import { CommonConfigEditor } from "./CommonConfigEditor";
+import { ConnectionConfigEditor } from "./ConnectionConfigEditor";
 import GeminiConfigEditor from "./GeminiConfigEditor";
 import JsonEditor from "@/components/JsonEditor";
 import { Label } from "@/components/ui/label";
@@ -330,6 +331,8 @@ export interface ProviderFormProps {
   };
   showButtons?: boolean;
   isProxyTakeover?: boolean;
+  /** Profile owns Agent models and behavior; this form edits the reusable connection. */
+  connectionsOnly?: boolean;
   /** 编辑器里行保存着、但不随切换生效的字段（Claude Code、Codex、Gemini CLI、Grok Build）。 */
   inactiveFields?: ProviderEditorInactiveField[];
   /**
@@ -397,6 +400,7 @@ function ProviderFormFull({
   initialData,
   showButtons = true,
   isProxyTakeover = false,
+  connectionsOnly = false,
   inactiveFields,
   claudeLiveBase,
   onEditorBaseChange,
@@ -422,6 +426,7 @@ function ProviderFormFull({
     initialCodexOfficialIdentity !== null &&
     initialCodexOfficialIdentity !== "api_key";
   const isDarkMode = useDarkMode();
+  const [connectionConfigValid, setConnectionConfigValid] = useState(true);
 
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(
     initialData ? null : "custom",
@@ -1388,6 +1393,14 @@ function ProviderFormFull({
     (appId === "claude" || appId === "codex") && category !== "official";
 
   const handleSubmit = async (values: ProviderFormData) => {
+    if (connectionsOnly && !connectionConfigValid) {
+      toast.error(
+        t("provider.connectionConfigInvalid", {
+          defaultValue: "请先修正高级连接配置。",
+        }),
+      );
+      return;
+    }
     if (
       supportsBillingMultiplier &&
       !isValidBillingMultiplier(billingMultiplier)
@@ -2860,7 +2873,13 @@ function ProviderFormFull({
               onLocalProxyHeadersOverrideChange={setLocalProxyHeadersOverride}
               localProxyBodyOverride={localProxyBodyOverride}
               onLocalProxyBodyOverrideChange={setLocalProxyBodyOverride}
-              variant={useStackLayout ? "stack" : "classic"}
+              variant={
+                useStackLayout
+                  ? "stack"
+                  : connectionsOnly
+                    ? "connections"
+                    : "classic"
+              }
               directModeFormatNotice={directModeFormatNotice}
               stackModelRows={shownClaudeStackRows}
               onStackModelRowsChange={handleClaudeStackRowsChange}
@@ -2974,7 +2993,13 @@ function ProviderFormFull({
               onLocalProxyHeadersOverrideChange={setLocalProxyHeadersOverride}
               localProxyBodyOverride={localProxyBodyOverride}
               onLocalProxyBodyOverrideChange={setLocalProxyBodyOverride}
-              variant={useStackLayout ? "stack" : "classic"}
+              variant={
+                useStackLayout
+                  ? "stack"
+                  : connectionsOnly
+                    ? "connections"
+                    : "classic"
+              }
               directModeFormatNotice={directModeFormatNotice}
             />
           )}
@@ -3118,7 +3143,36 @@ function ProviderFormFull({
           )}
 
           {/* 配置编辑器：Codex、Claude、Gemini 分别使用不同的编辑器 */}
-          {useStackLayout ? (
+          {connectionsOnly &&
+          !useStackLayout &&
+          (appId === "claude" || appId === "codex") ? (
+            <>
+              <ConnectionConfigEditor
+                app={appId}
+                value={
+                  appId === "codex"
+                    ? {
+                        auth: JSON.parse(codexAuth || "{}"),
+                        config: codexConfig,
+                      }
+                    : JSON.parse(form.getValues("settingsConfig") || "{}")
+                }
+                onChange={(settings) => {
+                  if (appId === "codex") {
+                    setCodexAuth(JSON.stringify(settings.auth ?? {}, null, 2));
+                    handleCodexConfigChange(String(settings.config ?? ""));
+                  } else {
+                    handleSettingsConfigChange(
+                      JSON.stringify(settings, null, 2),
+                    );
+                  }
+                }}
+                onValidityChange={setConnectionConfigValid}
+                darkMode={isDarkMode}
+              />
+              {settingsConfigErrorField}
+            </>
+          ) : useStackLayout ? (
             settingsConfigErrorField
           ) : appId === "codex" ? (
             <>

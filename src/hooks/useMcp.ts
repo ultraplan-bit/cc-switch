@@ -11,6 +11,7 @@ export function useAllMcpServers() {
   return useQuery({
     queryKey: ["mcp", "all"],
     queryFn: () => mcpApi.getAllServers(),
+    networkMode: "always",
   });
 }
 

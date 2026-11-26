@@ -25,9 +25,40 @@ export interface PerApp<T> {
  */
 export interface ProfilePayload {
   providers: PerApp<string | null>;
+  models?: PerApp<string | null>;
+  /** Agent-native model settings independent of the selected provider. */
+  modelSettings?: PerApp<Record<string, string> | null>;
+  /** Codex model catalog and Auto Review configuration snapshot. */
+  modelCatalog?: PerApp<Record<string, unknown> | null>;
+  /** Agent behavior only: JSON for Claude, TOML for Codex. Connections stay in providers. */
+  nativeConfig?: PerApp<string | null>;
   mcp: PerApp<string[] | null>;
   skills: PerApp<string[] | null>;
   prompts: PerApp<string | null>;
+  /** Last known display names only; resource definitions remain in the library. */
+  resourceNames?: PerApp<ProfileResourceNames>;
+  /** Imported library IDs retain their original project MCP keys and Skill directories. */
+  projectAliases?: PerApp<{
+    mcp: Record<string, string>;
+    skills: Record<string, string>;
+  }>;
+}
+
+export interface ProfileResourceNames {
+  mcp: Record<string, string>;
+  skills: Record<string, string>;
+  prompts: Record<string, string>;
+}
+
+export interface ProfileConfig {
+  providerId: string | null;
+  model: string;
+  modelSettings: Record<string, string>;
+  modelCatalog: Record<string, unknown> | null;
+  nativeConfig?: string | null;
+  mcpIds: string[];
+  skillIds: string[];
+  promptId: string | null;
 }
 
 export interface Profile {
@@ -35,6 +66,7 @@ export interface Profile {
   name: string;
   payload: ProfilePayload;
   projectPath?: string | null;
+  deployedScopes?: ProfileScope[];
   createdAt?: number;
   updatedAt?: number;
 }
@@ -71,7 +103,17 @@ export interface ProfilesResponse {
   currentIds: CurrentProfileIds;
 }
 
+export interface ProfileMigrationResult {
+  profiles: Profile[];
+  warnings: string[];
+  ready?: boolean;
+}
+
 export const profilesApi = {
+  /** Idempotently preserve legacy configuration before using Profile-only editing. */
+  async migrateLegacy(scope: ProfileScope): Promise<ProfileMigrationResult> {
+    return await invoke("migrate_legacy_agent_profiles", { scope });
+  },
   /**
    * 获取所有项目及各分组当前激活项目 id
    */
@@ -88,6 +130,22 @@ export const profilesApi = {
     projectPath: string | null = null,
   ): Promise<Profile> {
     return await invoke("create_profile", { name, scope, projectPath });
+  },
+
+  async duplicate(
+    sourceId: string,
+    name: string,
+    projectPath: string | null = null,
+  ): Promise<Profile> {
+    return await invoke("duplicate_profile", { sourceId, name, projectPath });
+  },
+
+  async importFromProject(
+    name: string,
+    scope: ProfileScope,
+    projectPath: string,
+  ): Promise<{ profile: Profile; warnings: string[] }> {
+    return await invoke("import_project_profile", { name, scope, projectPath });
   },
 
   /**
@@ -114,6 +172,15 @@ export const profilesApi = {
     projectPath: string | null,
   ): Promise<Profile> {
     return await invoke("set_profile_project_path", { id, projectPath });
+  },
+
+  async saveConfig(
+    id: string,
+    scope: ProfileScope,
+    config: ProfileConfig,
+    name?: string,
+  ): Promise<Profile> {
+    return await invoke("update_profile_config", { id, scope, config, name });
   },
 
   async deployToProject(

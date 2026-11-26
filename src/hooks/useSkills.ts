@@ -35,6 +35,7 @@ export function useInstalledSkills() {
   return useQuery({
     queryKey: ["skills", "installed"],
     queryFn: () => skillsApi.getInstalled(),
+    networkMode: "always",
     staleTime: Infinity,
     placeholderData: keepPreviousData,
   });
@@ -51,6 +52,7 @@ export function useRefreshLocalSkillMetadata() {
   const queryClient = useQueryClient();
   return useQuery({
     queryKey: ["skills", "localMetadataRefresh"],
+    networkMode: "always",
     queryFn: async () => {
       const refreshed = await skillsApi.refreshLocalMetadata();
       if (refreshed > 0) {
@@ -69,6 +71,7 @@ export function useSkillBackups() {
   return useQuery({
     queryKey: ["skills", "backups"],
     queryFn: () => skillsApi.getBackups(),
+    networkMode: "always",
     enabled: false,
   });
 }
@@ -76,6 +79,7 @@ export function useSkillBackups() {
 export function useDeleteSkillBackup() {
   const queryClient = useQueryClient();
   return useMutation({
+    networkMode: "always",
     mutationFn: (backupId: string) => skillsApi.deleteBackup(backupId),
     onSuccess: (_result, backupId) => {
       queryClient.setQueryData<SkillBackupEntry[]>(
@@ -209,7 +213,7 @@ export function useInstallSkill() {
       currentApp,
     }: {
       skill: DiscoverableSkill;
-      currentApp: AppId;
+      currentApp: AppId | null;
     }) => skillsApi.installUnified(skill, currentApp),
     onSuccess: (installedSkill) => {
       queryClient.setQueryData<InstalledSkill[]>(
@@ -234,6 +238,7 @@ export function useInstallSkill() {
 export function useUninstallSkill() {
   const queryClient = useQueryClient();
   return useMutation({
+    networkMode: "always",
     mutationFn: (id: string) => skillsApi.uninstallUnified(id),
     onSuccess: (_result, id) => {
       // 直接更新 installed 缓存，移除该 skill
@@ -270,12 +275,13 @@ export function useUninstallSkill() {
 export function useRestoreSkillBackup() {
   const queryClient = useQueryClient();
   return useMutation({
+    networkMode: "always",
     mutationFn: ({
       backupId,
       currentApp,
     }: {
       backupId: string;
-      currentApp: AppId;
+      currentApp: AppId | null;
     }) => skillsApi.restoreBackup(backupId, currentApp),
     onSettled: () =>
       Promise.all([
@@ -291,6 +297,7 @@ export function useRestoreSkillBackup() {
 export function useToggleSkillApp() {
   const queryClient = useQueryClient();
   return useMutation({
+    networkMode: "always",
     mutationFn: ({
       id,
       app,
@@ -518,12 +525,13 @@ export function useRemoveSkillRepo() {
 export function useInstallSkillsFromZip() {
   const queryClient = useQueryClient();
   return useMutation({
+    networkMode: "always",
     mutationFn: ({
       filePath,
       currentApp,
     }: {
       filePath: string;
-      currentApp: AppId;
+      currentApp: AppId | null;
     }) => skillsApi.installFromZip(filePath, currentApp),
     onSuccess: (result) => {
       queryClient.setQueryData<InstalledSkill[]>(

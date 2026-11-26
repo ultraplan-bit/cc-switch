@@ -280,7 +280,12 @@
     "formSubtitleStack": "{{app}}（聚合模式）",
     "editCurrentNoticeFile": "这是正在使用的供应商。保存后会立即写进",
     "editCurrentNoticeFileEnd": "，下一次请求生效。",
-    "editCurrentNotice": "这是正在使用的供应商。保存后立即生效，下一次请求就用新的设置。"
+    "editCurrentNotice": "这是正在使用的供应商。保存后立即生效，下一次请求就用新的设置。",
+    "connectionsSavedNotice": "连接保存到供应商库。直连配置需重新应用 Profile。",
+    "connectionConfig": "高级连接配置",
+    "connectionConfigHint": "仅配置地址、鉴权、请求头和云服务连接。模型及 Agent 行为在 Profile 中编辑。",
+    "connectionConfigOnly": "这里只能编辑连接字段，模型和行为请在 Profile 中修改。",
+    "connectionConfigInvalid": "请先修正连接配置格式。"
   },
   "claudeCode": {
     "needsRouting": "需要路由"
@@ -450,7 +455,7 @@
       "quotaDisplayHelp": "供应商卡片、授权中心和托盘里，各档额度写还剩多少还是已经用了多少。余额和 Credits 始终写剩下的。",
       "sidebarAndHeader": "侧栏与页头",
       "visibleApps": "在侧栏显示哪些应用",
-      "goToApps": "前往「应用」",
+      "goToApps": "前往 Agent 管理",
       "updates": "各应用的新版本",
       "checkToolUpdates": "启动时检查各应用的新版本",
       "checkToolUpdatesHelp": "打开后，每次启动 CC Switch 会查一次已安装的命令行应用有没有新版本，查到了就在侧栏「应用」上显示一个圆点。不会自动升级。",
@@ -3145,24 +3150,95 @@
     }
   },
   "profiles": {
+    "environment": {
+      "title": "项目环境",
+      "configureProject": "配置项目",
+      "manageAgent": "管理 Agent",
+      "selectProject": "选择项目",
+      "description": "使用现有安装工具将此 Agent 接入项目。已安装的 Agent 可直接复用现有安装。",
+      "busy": "正在处理 Agent 操作",
+      "checkFailed": "Agent 状态待验证",
+      "ready": "Agent 可运行",
+      "recheck": "重新检查此 Agent",
+      "installations": "安装路径与来源",
+      "multipleInstalls": "检测到多处安装。运行 Agent 前请核对默认路径。",
+      "wslHint": "在 {{distro}} 中检测到此 Agent。安装路径在宿主系统中探测，可能不对应这份 WSL 安装。部署使用 CC Switch 可访问的所选目录，不会选择 WSL 发行版。请确认 Agent 打开的是同一项目。",
+      "scopeHint": "项目接入目前支持 Claude Code 和 Codex。",
+      "projectConfiguration": "项目与 Profile",
+      "projectHint": "选择或创建项目 Profile，编辑配置并手动部署。安装、升级和诊断请返回 Agent 管理。",
+      "prepareHint": "现在可以先配置 Profile。Agent 可运行且检查通过后，即可部署。"
+    },
+    "projectContext": "Profile 作用范围",
+    "selectProfile": "选择 Profile",
+    "pendingSelection": "尚未应用",
+    "editor": {
+      "title": "编辑 Profile",
+      "description": "编辑此 Agent 的完整配置。保存仅更新 Profile，应用或部署后生效。",
+      "name": "名称",
+      "provider": "供应商",
+      "inheritProvider": "使用当前全局供应商",
+      "model": "模型",
+      "modelPlaceholder": "输入或选择模型",
+      "modelHint": "空值继承默认；指定的模型会独立保存。",
+      "mainReasoningEffort": "主模型推理强度",
+      "planReasoningEffort": "Plan 模式推理强度",
+      "mcp": "MCP 服务器",
+      "skills": "Skills",
+      "prompt": "指令模板",
+      "noPrompt": "不使用指令模板",
+      "missing": "缺失资源：{{id}}",
+      "unavailable": "不可用",
+      "missingResourcesHint": "保存时会保留不可用的资源引用，应用时会跳过这些资源。取消勾选可移除引用。",
+      "emptyResources": "资源库暂无可选项",
+      "loadFailed": "读取资源失败：{{detail}}",
+      "sections": "Profile 配置分区",
+      "modelsTab": "基本与模型",
+      "resourcesTab": "资源",
+      "instructionsTab": "指令",
+      "scopeSummary": "{{agent}} 的独立配置",
+      "providerReferenceHint": "模型能力复用所选供应商；API 地址、密钥和账号继续引用供应商。项目部署不会切换全局连接。",
+      "resetModels": "恢复供应商模型设置",
+      "runtimeSettings": "推理与上下文",
+      "saveHint": "保存配置后，手动部署到项目生效。",
+      "searchResources": "搜索 MCP 或 Skills",
+      "selectedCount": "已选 {{count}} 项",
+      "noMatchingResources": "没有匹配的资源",
+      "instructionHint": "引用提示词库内容，部署时写入当前 Agent 的项目指令文件。",
+      "globalSaveHint": "保存后点击“应用”，使全局 Profile 生效。",
+      "incompleteModels": "请填写模型列表中空白的模型 ID。",
+      "behaviorTab": "行为与高级配置",
+      "nativeHint": "权限、沙箱、Hooks、插件和其他 Agent 设置保存在当前 Profile。模型与资源使用各自页签；地址、密钥和账号引用供应商。保存后需应用或部署才生效。",
+      "nativeObjectRequired": "配置必须是 JSON 对象",
+      "nativeInvalid": "配置格式有误：{{detail}}"
+    },
+    "scope": {
+      "label": "Profile 作用范围",
+      "global": "全局",
+      "project": "项目"
+    },
+    "copyToProject": "复制到其他项目",
+    "duplicateTitle": "复制 Profile 到其他项目",
+    "duplicateDescription": "为项目目录创建一份独立的 Profile 副本。",
+    "captureCurrent": "更新为当前配置",
+    "captureCurrentDescription": "用此 Agent 当前全局选择的模型、MCP、Skills 和指令更新「{{name}}」的配置引用。之后部署该 Profile，项目配置才会更新。",
     "switcherAriaLabel": "项目：{{name}}",
     "switcherTooltip": {
-      "claude": "项目：一键切换 Claude Code 的供应商 / MCP / Skills / 记忆文件",
+      "claude": "Profile：切换 Claude Code 全局配置或管理项目配置",
       "claude-desktop": "项目：一键切换 Claude Desktop 的供应商",
-      "codex": "项目：一键切换 Codex 的供应商 / MCP / Skills / 记忆文件"
+      "codex": "Profile：切换 Codex 全局配置或管理项目配置"
     },
     "none": "不使用项目",
     "searchPlaceholder": "搜索项目",
     "empty": "暂无项目",
     "createFromCurrent": "新建项目",
     "createDescription": {
-      "claude": "把 Claude Code 当前的供应商、MCP、Skills、记忆文件保存为一个项目，之后可一键切换。",
+      "claude": "将 Claude Code 当前的模型、MCP、Skills 和指令保存为全局或项目 Profile。",
       "claude-desktop": "把 Claude Desktop 当前的供应商保存为一个项目，之后可一键切换。",
-      "codex": "把 Codex 当前的供应商、MCP、Skills 和记忆文件配置保存为一个项目，之后可一键切换。"
+      "codex": "将 Codex 当前的模型、MCP、Skills 和指令保存为全局或项目 Profile。"
     },
     "manage": "管理项目",
     "manageTitle": "管理项目",
-    "manageDescription": "项目是配置快照。切换项目时，当前配置会自动保存回原项目。",
+    "manageDescription": "Profile 显式保存配置；全局 Profile 通过应用生效，项目 Profile 仅向绑定目录手动部署。",
     "namePlaceholder": "例如：开发、绘图",
     "rename": "重命名",
     "noSnapshotForScope": "本侧未保存",
@@ -3194,9 +3270,12 @@
       "pickFailed": "选择项目目录失败：{{detail}}"
     },
     "projectDeploy": {
+      "current": "此 Agent 上次应用",
       "button": "部署到项目",
       "pending": "正在部署到项目…",
       "success": "已将 Profile 部署到项目。",
+      "notes": "部署提示",
+      "completedWithNotes": "项目部署已结束，请查看提示。",
       "failed": "部署到项目失败：{{detail}}",
       "conflictTitle": "项目部署冲突",
       "conflictMessage": "有 {{files}} 个文件包含用户内容或已修改的内容。请选择处理方式。",
@@ -3207,7 +3286,32 @@
       "unsupportedScope": "目前仅支持将项目部署到 Claude Code 和 Codex。",
       "codexTrustWarning": "Codex 仅会在项目受信任后加载 `.codex/` 项目配置。",
       "sensitiveMcpSkipped": "已跳过含明文凭据的 MCP 服务器。请改用环境变量引用，避免直接写入明文。"
-    }
+    },
+    "createSource": {
+      "label": "配置来源",
+      "current": "当前配置",
+      "project": "从项目现有配置导入",
+      "description": "读取所选 Agent 的项目模型、MCP、Skills 和指令，保存为独立 Profile；不会修改原项目或全局启用状态。"
+    },
+    "import": {
+      "completedWithNotes": "项目配置已导入，请查看提示"
+    },
+    "context": {
+      "title": "项目与 Profile",
+      "searchProjects": "搜索项目名称或路径…",
+      "more": "Profile 更多操作",
+      "rowActions": "{{name}} 的更多操作",
+      "globalProvidersHint": "项目配置需手动部署才会生效；下方供应商列表管理的是全局连接。"
+    },
+    "connections": {
+      "title": "供应商连接库",
+      "description": "在这里维护 API 地址、密钥、账号和连接方式，Profile 引用这些连接。"
+    },
+    "migration": {
+      "pending": "正在整理已有 Agent 配置…",
+      "failed": "已有配置迁移未完成"
+    },
+    "apply": "应用"
   },
   "workspace": {
     "title": "Workspace 文件管理",
@@ -4333,9 +4437,9 @@
     "skills": "Skills",
     "prompts": "提示词",
     "sessions": "会话",
-    "apps": "应用",
-    "appsTitle": "应用：安装、升级、在侧栏显示哪些",
-    "appsHasUpdate": "应用 · 有可用更新",
+    "apps": "Agent 管理",
+    "appsTitle": "安装、升级、诊断和侧栏显示",
+    "appsHasUpdate": "Agent 管理 · 有可用更新",
     "settings": "设置",
     "settingsHasUpdate": "设置 · CC Switch 有新版本",
     "mode": {
@@ -4350,8 +4454,8 @@
     "showInSidebar": "在侧栏显示 {{name}}",
     "lastChecked": "上次检查 {{time}}",
     "neverChecked": "还没检查过更新",
-    "helpTitle": "应用",
-    "helpBody": "在这里安装、升级命令行应用，并选择在侧栏显示哪些。",
+    "helpTitle": "Agent 管理",
+    "helpBody": "安装、升级、诊断和侧栏显示",
     "checking": "检查中…",
     "checkUpdates": "检查更新",
     "moreActions": "更多操作",
@@ -4362,7 +4466,7 @@
     "dragHandle": "拖动调整 {{name}} 的顺序",
     "columnVersion": "版本",
     "columnVisible": "显示",
-    "visibleHelp": "关掉后，这个应用不再出现在侧栏、托盘菜单、MCP / Skills 的应用列，以及提示词和会话的应用下拉里。只是不显示：它的供应商、MCP 等配置都还在，它自己的配置文件也不会被改动。",
+    "visibleHelp": "侧栏只显示已安装且开启此开关的应用。未安装的应用可在这里安装，安装后再选择是否显示。关掉后，这个应用不再出现在侧栏、托盘菜单、MCP / Skills 的应用列，以及提示词和会话的应用下拉里。只是不显示：它的供应商、MCP 等配置都还在，它自己的配置文件也不会被改动。",
     "desktopHelp": "Claude Desktop 是桌面应用，不能在这里安装或升级；CC Switch 通过它的配置文件接入。",
     "workbuddyHelp": "WorkBuddy 是桌面应用，不能在这里安装或升级，它会自己更新；CC Switch 通过它的配置文件（~/.workbuddy/models.json）接入。",
     "desktopUnsupported": "当前系统不支持",
@@ -4389,7 +4493,9 @@
       "agy": "安装时运行官方安装脚本",
       "copilot": "通过 npm 安装",
       "omp": "安装时运行官方安装脚本"
-    }
+    },
+    "officialDownload": "前往官网下载",
+    "manualInstallHint": "下载并安装后，点击“检查更新”重新检测安装状态。"
   },
   "appPage": {
     "moreActions": "{{name}} 的更多操作",
@@ -4961,7 +5067,9 @@
       "noUpdatesInSelection": "选中的 Skill 没有可用的更新",
       "selectionAlreadyOn": "选中的 {{count}} 个 Skill 已经在 {{app}} 启用",
       "selectionAlreadyOff": "选中的 {{count}} 个 Skill 都没有在 {{app}} 启用",
-      "disabledSelection": "已在 {{app}} 停用 {{count}} 个 {{noun}}"
+      "disabledSelection": "已在 {{app}} 停用 {{count}} 个 {{noun}}",
+      "savedToLibrary": "已将 {{name}} 保存到资源库",
+      "savedManyToLibrary": "已将 {{count}} 个 Skills 保存到资源库"
     },
     "installTo": {
       "prefix": "安装到：",
@@ -4969,7 +5077,9 @@
       "many": "{{first}} 等 {{count}} 个",
       "title": "安装后在这些应用里启用",
       "helpTitle": "选好的应用会记住吗",
-      "help": "会，默认用你上次的选择。装好后也能在「已安装」里随时调整。从 ZIP 安装和从备份恢复也用这里的选择。"
+      "help": "会，默认用你上次的选择。装好后也能在「已安装」里随时调整。从 ZIP 安装和从备份恢复也用这里的选择。",
+      "libraryOnly": "仅保存到资源库",
+      "libraryOnlyHint": "不主动启用或同步到 Agent；如存储位置为 ~/.agents/skills，仍遵循 Agent 的原生自动发现规则。"
     },
     "discover": {
       "searchPlaceholder": "搜索名称、描述或仓库",
@@ -5027,7 +5137,8 @@
       "submit": "导入 {{count}} 个"
     },
     "restore": {
-      "lead": "选一个备份，把文件恢复到本地并重新加入列表，并在 {{apps}} 启用（「发现」里的「安装到」决定）。"
+      "lead": "选一个备份，把文件恢复到本地并重新加入列表，并在 {{apps}} 启用（「发现」里的「安装到」决定）。",
+      "libraryOnlyLead": "恢复到资源库，不启用或同步到 Agent。"
     },
     "repoFail": {
       "title": "{{count}} 个仓库没有读到：{{repos}}",

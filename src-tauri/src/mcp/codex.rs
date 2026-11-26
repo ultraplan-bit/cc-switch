@@ -51,7 +51,14 @@ pub fn import_from_codex(config: &mut MultiAppConfig) -> Result<usize, AppError>
 
     let root: toml::Table = toml::from_str(&text)
         .map_err(|e| AppError::McpValidation(format!("解析 ~/.codex/config.toml 失败: {e}")))?;
+    import_from_document(config, &root)
+}
 
+/// Share transport/header conversion with project imports.
+pub(crate) fn import_from_document(
+    config: &mut MultiAppConfig,
+    root: &toml::Table,
+) -> Result<usize, AppError> {
     // 确保新结构存在
     let servers = config.mcp.servers.get_or_insert_with(HashMap::new);
 

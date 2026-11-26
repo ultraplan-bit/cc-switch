@@ -347,7 +347,7 @@ fn shared_profile_sides_are_isolated_and_mergeable() {
         "claude scope marker untouched by codex-side apply"
     );
 
-    // 同一共享项目在 Claude 页应用：该侧未拍过快照 → 不动配置、标记 current、返回提示
+    // 同一共享项目在 Claude 页应用：该侧未拍过快照 → 不动配置、不标完整应用、返回提示
     let warnings = ProfileService::apply(&state, &project.id, ProfileScope::Claude)
         .expect("apply project on claude side");
     assert_eq!(warnings.len(), 1, "uncaptured side yields one hint");
@@ -363,8 +363,8 @@ fn shared_profile_sides_are_isolated_and_mergeable() {
             .get_current_profile_id("claude")
             .expect("get claude current profile id")
             .as_deref(),
-        Some(project.id.as_str()),
-        "claude side now bound to the shared project"
+        None,
+        "uncaptured side must not be marked fully applied"
     );
 
     // 在 Claude 页"以当前状态更新"：补拍 claude 侧，codex 侧快照原样保留
@@ -428,14 +428,14 @@ fn profile_apply_reports_dangling_references_and_continues() {
         "m1 enabled despite warnings"
     );
 
-    // best-effort 完成后仍标记为所属分组的当前项目
+    // best-effort 可应用可用资源，但有警告时不声称 Profile 完整应用
     assert_eq!(
         state
             .db
             .get_current_profile_id("claude")
             .expect("get current profile id")
             .as_deref(),
-        Some("dangling-test")
+        None
     );
 }
 
@@ -479,7 +479,7 @@ fn clear_current_profile_only_clears_scoped_marker() {
 }
 
 #[test]
-fn switching_profile_autosaves_previous_profile_state() {
+fn switching_profile_preserves_saved_drafts_until_explicit_resnapshot() {
     let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
     reset_test_fs();
     let home = ensure_test_home();
@@ -543,7 +543,7 @@ fn switching_profile_autosaves_previous_profile_state() {
     let project_b = ProfileService::create(&state, "Project B", ProfileScope::Claude)
         .expect("create project B");
 
-    // ---- 从 A 切换到 B：自动把当前状态 Y 保存到 A，再加载 B 的 Y ----
+    // ---- 从 A 切换到 B：保留 A 已保存的 X，显式加载 B 的 Y ----
     let warnings = ProfileService::apply(&state, &project_b.id, ProfileScope::Claude)
         .expect("switch to project B");
     assert!(warnings.is_empty(), "unexpected warnings: {warnings:?}");
@@ -564,7 +564,7 @@ fn switching_profile_autosaves_previous_profile_state() {
     assert!(!prompts.get("pr1").expect("pr1").enabled, "pr1 disabled");
     assert!(prompts.get("pr2").expect("pr2").enabled, "pr2 enabled");
 
-    // Project A 被自动保存为离开时的状态 Y
+    // Project A 仍是已保存的 X，不能由当前运行状态 Y 自动覆盖
     let saved_a = state
         .db
         .get_profile(&project_a.id)
@@ -572,9 +572,13 @@ fn switching_profile_autosaves_previous_profile_state() {
         .expect("project A exists");
     let payload_a: ProfilePayload =
         serde_json::from_str(&saved_a.payload).expect("parse project A payload");
-    assert_eq!(payload_a.providers.claude.as_deref(), Some("p2"));
-    assert_eq!(payload_a.mcp.claude, Some(vec!["m2".to_string()]));
-    assert_eq!(payload_a.prompts.claude.as_deref(), Some("pr2"));
+    assert_eq!(
+        saved_a.payload, project_a.payload,
+        "saved Profile A stays byte-identical"
+    );
+    assert_eq!(payload_a.providers.claude.as_deref(), Some("p1"));
+    assert_eq!(payload_a.mcp.claude, Some(vec!["m1".to_string()]));
+    assert_eq!(payload_a.prompts.claude.as_deref(), Some("pr1"));
 
     // ---- 在 B 下改回状态 X，再切换回 A ----
     ProviderService::switch(&state, AppType::Claude, "p1").expect("switch to p1");
@@ -586,36 +590,24 @@ fn switching_profile_autosaves_previous_profile_state() {
         .expect("switch back to project A");
     assert!(warnings.is_empty(), "unexpected warnings: {warnings:?}");
 
-    // 切回 A 时：先自动保存 B 为状态 X，再加载 A 的上次离开状态 Y
+    // 切回 A 时：仍加载 A 保存的 X；B 已保存的 Y 不受运行时变更影响
     assert_eq!(
         state
             .db
             .get_current_provider(&AppType::Claude)
             .expect("get current provider")
             .as_deref(),
-        Some("p2"),
-        "project A restored to the state when we left it (p2)"
+        Some("p1"),
+        "project A restores its explicitly saved state"
     );
     let servers = state.db.get_all_mcp_servers().expect("get mcp servers");
-    assert!(
-        !servers.get("m1").expect("m1").apps.claude,
-        "m1 stays disabled"
-    );
-    assert!(
-        servers.get("m2").expect("m2").apps.claude,
-        "m2 stays enabled"
-    );
+    assert!(servers.get("m1").expect("m1").apps.claude, "m1 restored");
+    assert!(!servers.get("m2").expect("m2").apps.claude, "m2 disabled");
     let prompts = state.db.get_prompts(&AppType::Claude).expect("get prompts");
-    assert!(
-        !prompts.get("pr1").expect("pr1").enabled,
-        "pr1 stays disabled"
-    );
-    assert!(
-        prompts.get("pr2").expect("pr2").enabled,
-        "pr2 stays enabled"
-    );
+    assert!(prompts.get("pr1").expect("pr1").enabled, "pr1 restored");
+    assert!(!prompts.get("pr2").expect("pr2").enabled, "pr2 disabled");
 
-    // Project B 被自动保存为离开时的状态 X
+    // Project B 保留已保存的 Y；只有显式重拍才会保存当前 X
     let saved_b = state
         .db
         .get_profile(&project_b.id)
@@ -623,9 +615,26 @@ fn switching_profile_autosaves_previous_profile_state() {
         .expect("project B exists");
     let payload_b: ProfilePayload =
         serde_json::from_str(&saved_b.payload).expect("parse project B payload");
-    assert_eq!(payload_b.providers.claude.as_deref(), Some("p1"));
-    assert_eq!(payload_b.mcp.claude, Some(vec!["m1".to_string()]));
-    assert_eq!(payload_b.prompts.claude.as_deref(), Some("pr1"));
+    assert_eq!(
+        saved_b.payload, project_b.payload,
+        "saved Profile B stays byte-identical"
+    );
+    assert_eq!(payload_b.providers.claude.as_deref(), Some("p2"));
+    assert_eq!(payload_b.mcp.claude, Some(vec!["m2".to_string()]));
+    assert_eq!(payload_b.prompts.claude.as_deref(), Some("pr2"));
+    let recaptured = ProfileService::update(
+        &state,
+        &project_b.id,
+        None,
+        true,
+        Some(ProfileScope::Claude),
+    )
+    .expect("explicit resnapshot");
+    let recaptured: ProfilePayload =
+        serde_json::from_str(&recaptured.payload).expect("parse explicit snapshot");
+    assert_eq!(recaptured.providers.claude.as_deref(), Some("p1"));
+    assert_eq!(recaptured.mcp.claude, Some(vec!["m1".to_string()]));
+    assert_eq!(recaptured.prompts.claude.as_deref(), Some("pr1"));
 }
 
 #[test]

@@ -14,6 +14,7 @@ import {
 } from "@/utils/codexConfigUtils";
 import { normalizeTomlText } from "@/utils/textNormalization";
 import type { CodexCatalogModel } from "@/types";
+import { CODEX_AGENT_MODEL_FIELDS } from "../modelSettings";
 
 interface UseCodexConfigStateProps {
   initialData?: {
@@ -308,14 +309,18 @@ export function useCodexConfigState({ initialData }: UseCodexConfigStateProps) {
 
   // 子代理的默认模型和推理强度（`[agents]` 表）：直接从 TOML 读，改动实时写回，清空则删键
   const codexSubagentModel = useMemo(
-    () => extractCodexAgentsString(codexConfig, "default_subagent_model") || "",
+    () =>
+      extractCodexAgentsString(
+        codexConfig,
+        CODEX_AGENT_MODEL_FIELDS.subagentModel,
+      ) || "",
     [codexConfig],
   );
   const codexSubagentReasoningEffort = useMemo(
     () =>
       extractCodexAgentsString(
         codexConfig,
-        "default_subagent_reasoning_effort",
+        CODEX_AGENT_MODEL_FIELDS.subagentReasoningEffort,
       ) || "",
     [codexConfig],
   );
@@ -324,7 +329,11 @@ export function useCodexConfigState({ initialData }: UseCodexConfigStateProps) {
     (model: string) => {
       const sanitized = model.replace(/[\u0000-\u001f\u007f]/g, "").trim();
       setCodexConfig((prev) =>
-        setCodexAgentsString(prev, "default_subagent_model", sanitized),
+        setCodexAgentsString(
+          prev,
+          CODEX_AGENT_MODEL_FIELDS.subagentModel,
+          sanitized,
+        ),
       );
     },
     [setCodexConfig],
@@ -333,7 +342,11 @@ export function useCodexConfigState({ initialData }: UseCodexConfigStateProps) {
   const handleCodexSubagentReasoningEffortChange = useCallback(
     (effort: string) => {
       setCodexConfig((prev) =>
-        setCodexAgentsString(prev, "default_subagent_reasoning_effort", effort),
+        setCodexAgentsString(
+          prev,
+          CODEX_AGENT_MODEL_FIELDS.subagentReasoningEffort,
+          effort,
+        ),
       );
     },
     [setCodexConfig],

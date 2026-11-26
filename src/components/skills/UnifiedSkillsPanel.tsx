@@ -769,18 +769,28 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
         }
       } else if (installed.length === 1) {
         toast.success(
-          t("skillsPage.toast.installed", {
-            name: installed[0].name,
-            apps: names(targets),
-          }),
+          t(
+            targets.length
+              ? "skillsPage.toast.installed"
+              : "skillsPage.toast.savedToLibrary",
+            {
+              name: installed[0].name,
+              apps: names(targets),
+            },
+          ),
           { closeButton: true },
         );
       } else {
         toast.success(
-          t("skillsPage.toast.installedMany", {
-            count: installed.length,
-            apps: names(targets),
-          }),
+          t(
+            targets.length
+              ? "skillsPage.toast.installedMany"
+              : "skillsPage.toast.savedManyToLibrary",
+            {
+              count: installed.length,
+              apps: names(targets),
+            },
+          ),
           { closeButton: true },
         );
       }
@@ -1746,6 +1756,7 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
         isRestoring={restoreBackupMutation.isPending}
         isDeleting={deleteBackupMutation.isPending}
         targetsLabel={names(targets)}
+        libraryOnly={targets.length === 0}
         onRestore={(backupId) => void handleRestoreFromBackup(backupId)}
         onDelete={(backup) => {
           if (checkUpdatesLockRef.current || writeLockRef.current) return;

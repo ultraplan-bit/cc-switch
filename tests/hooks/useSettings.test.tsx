@@ -17,6 +17,7 @@ const getQueryDataMock = vi.fn();
 const invalidatePiDirectoryCachesMock = vi.fn();
 const toastErrorMock = vi.fn();
 const toastSuccessMock = vi.fn();
+const refreshToolsForDirectoryChangesMock = vi.fn();
 
 let settingsFormMock: any;
 let directorySettingsMock: any;
@@ -40,6 +41,11 @@ vi.mock("@/hooks/useDirectorySettings", () => ({
 
 vi.mock("@/hooks/useSettingsMetadata", () => ({
   useSettingsMetadata: () => metadataMock,
+}));
+
+vi.mock("@/components/apps/useToolManagement", () => ({
+  refreshToolsForDirectoryChanges: (...args: unknown[]) =>
+    refreshToolsForDirectoryChangesMock(...args),
 }));
 
 vi.mock("@/lib/query", () => ({
@@ -159,6 +165,9 @@ describe("useSettings hook", () => {
     getQueryDataMock.mockReset();
     toastErrorMock.mockReset();
     toastSuccessMock.mockReset();
+    refreshToolsForDirectoryChangesMock
+      .mockReset()
+      .mockResolvedValue(undefined);
     window.localStorage.clear();
 
     serverSettings = {
@@ -603,5 +612,58 @@ describe("useSettings hook", () => {
 
     expect(setAppConfigDirOverrideMock).not.toHaveBeenCalled();
     expect(metadataMock.setRequiresRestart).not.toHaveBeenCalledWith(true);
+    expect(refreshToolsForDirectoryChangesMock).not.toHaveBeenCalled();
+  });
+
+  it("rechecks changed environments only after the directory save succeeds", async () => {
+    settingsFormMock.settings.claudeConfigDir =
+      "  \\\\wsl$\\Ubuntu\\home\\me\\.claude  ";
+    let finishSave!: () => void;
+    mutateAsyncMock.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSave = resolve;
+        }),
+    );
+    const { result } = renderHook(() => useSettings());
+    let saving!: Promise<unknown>;
+    act(() => {
+      saving = result.current.saveSettings();
+    });
+    expect(refreshToolsForDirectoryChangesMock).not.toHaveBeenCalled();
+    await act(async () => {
+      finishSave();
+      await saving;
+    });
+    expect(refreshToolsForDirectoryChangesMock).toHaveBeenCalledWith(
+      serverSettings,
+      expect.objectContaining({
+        claudeConfigDir: "\\\\wsl$\\Ubuntu\\home\\me\\.claude",
+      }),
+    );
+  });
+
+  it("uses the persisted cache when an explicit auto-save changes a directory", async () => {
+    const persisted = { ...serverSettings, codexConfigDir: "/already/saved" };
+    getQueryDataMock.mockReturnValue(persisted);
+    const { result } = renderHook(() => useSettings());
+    await act(async () => {
+      await result.current.autoSaveSettings({ codexConfigDir: "/new/codex" });
+    });
+    expect(refreshToolsForDirectoryChangesMock).toHaveBeenCalledWith(
+      persisted,
+      expect.objectContaining({ codexConfigDir: "/new/codex" }),
+    );
+  });
+
+  it("keeps installation caches when an explicit directory auto-save fails", async () => {
+    mutateAsyncMock.mockRejectedValueOnce(new Error("save failed"));
+    const { result } = renderHook(() => useSettings());
+    await expect(
+      act(async () => {
+        await result.current.autoSaveSettings({ codexConfigDir: "/new/codex" });
+      }),
+    ).rejects.toThrow("save failed");
+    expect(refreshToolsForDirectoryChangesMock).not.toHaveBeenCalled();
   });
 });

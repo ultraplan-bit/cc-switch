@@ -280,7 +280,12 @@
     "formSubtitleStack": "{{app}} (Aggregation mode)",
     "editCurrentNoticeFile": "This is the provider in use. Saving writes it to",
     "editCurrentNoticeFileEnd": " right away; the next request uses it.",
-    "editCurrentNotice": "This is the provider in use. Saving takes effect right away; the next request uses the new settings."
+    "editCurrentNotice": "This is the provider in use. Saving takes effect right away; the next request uses the new settings.",
+    "connectionsSavedNotice": "Connection saved to the provider library. Reapply the Profile to update direct connection settings.",
+    "connectionConfig": "Advanced connection settings",
+    "connectionConfigHint": "Configure only URLs, authentication, request headers and cloud service connections. Edit models and Agent behavior in the Profile.",
+    "connectionConfigOnly": "Only connection fields can be edited here. Change models and behavior in the Profile.",
+    "connectionConfigInvalid": "Fix the connection configuration before saving."
   },
   "claudeCode": {
     "needsRouting": "Needs Routing"
@@ -450,7 +455,7 @@
       "quotaDisplayHelp": "Whether each quota window on provider cards, in Accounts and in the tray shows how much is left or how much is used. Balances and Credits always show what is left.",
       "sidebarAndHeader": "Sidebar and header",
       "visibleApps": "Apps shown in the sidebar",
-      "goToApps": "Open Apps",
+      "goToApps": "Open Agent management",
       "updates": "New versions of your apps",
       "checkToolUpdates": "Check for new versions of your apps at launch",
       "checkToolUpdatesHelp": "When on, CC Switch checks your installed command-line apps for new versions each time it starts, and shows a dot on Apps in the sidebar if it finds one. Nothing is upgraded automatically.",
@@ -3145,24 +3150,95 @@
     }
   },
   "profiles": {
+    "environment": {
+      "title": "Project environment",
+      "configureProject": "Configure project",
+      "manageAgent": "Manage agent",
+      "selectProject": "Choose a project",
+      "description": "Use the existing installation tools to connect this agent to a project. Installed agents can reuse their current installation.",
+      "busy": "Agent operation in progress",
+      "checkFailed": "Agent status needs verification",
+      "ready": "Agent is runnable",
+      "recheck": "Recheck this agent",
+      "installations": "Installation paths and sources",
+      "multipleInstalls": "Multiple installations were found. Check the default path before running the agent.",
+      "wslHint": "Detected in {{distro}}. Installation paths are probed on the host and may not describe this WSL installation. Deployment uses the selected folder accessible to CC Switch; it does not select a WSL distribution. Verify that the agent opens the same project.",
+      "scopeHint": "Project setup currently supports Claude Code and Codex.",
+      "projectConfiguration": "Project and Profile",
+      "projectHint": "Select or create a project Profile, edit its configuration and deploy manually. Return to Agent management for installation, updates and diagnostics.",
+      "prepareHint": "You can prepare the Profile now. Deployment becomes available after the agent is runnable and checks succeed."
+    },
+    "projectContext": "Profile context",
+    "selectProfile": "Select profile",
+    "pendingSelection": "Not applied",
+    "editor": {
+      "title": "Edit profile",
+      "description": "Edit this Agent’s complete configuration. Saving updates only the Profile; apply or deploy to use it.",
+      "name": "Name",
+      "provider": "Provider",
+      "inheritProvider": "Use the current global provider",
+      "model": "Model",
+      "modelPlaceholder": "Enter or select a model",
+      "modelHint": "An empty value inherits the default. A selected model is saved independently.",
+      "mainReasoningEffort": "Main model reasoning effort",
+      "planReasoningEffort": "Plan mode reasoning effort",
+      "mcp": "MCP servers",
+      "skills": "Skills",
+      "prompt": "Instruction template",
+      "noPrompt": "No instruction template",
+      "missing": "Missing resource: {{id}}",
+      "unavailable": "Unavailable",
+      "missingResourcesHint": "Unavailable references are kept when you save and skipped when you apply. Uncheck a resource to remove its reference.",
+      "emptyResources": "No resources in the library",
+      "loadFailed": "Failed to load resources: {{detail}}",
+      "sections": "Profile configuration sections",
+      "modelsTab": "General & models",
+      "resourcesTab": "Resources",
+      "instructionsTab": "Instructions",
+      "scopeSummary": "Independent configuration for {{agent}}",
+      "providerReferenceHint": "Model features use the selected provider. API addresses, keys and accounts stay with the provider. Project deployment does not switch the global connection.",
+      "resetModels": "Restore provider model settings",
+      "runtimeSettings": "Reasoning & context",
+      "saveHint": "Save, then deploy manually to apply this project configuration.",
+      "searchResources": "Search MCP or Skills",
+      "selectedCount": "{{count}} selected",
+      "noMatchingResources": "No matching resources",
+      "instructionHint": "Reference a prompt from the library. Deployment writes it to this Agent’s project instruction file.",
+      "globalSaveHint": "Save, then click Apply to activate the global Profile.",
+      "incompleteModels": "Fill in the empty model IDs in the model list.",
+      "behaviorTab": "Behavior and advanced settings",
+      "nativeHint": "Permissions, sandbox, hooks, plugins and other Agent settings belong to this Profile. Models and resources have their own tabs; URLs, keys and accounts reference the provider. Save, then apply or deploy to use the changes.",
+      "nativeObjectRequired": "Configuration must be a JSON object",
+      "nativeInvalid": "Invalid configuration: {{detail}}"
+    },
+    "scope": {
+      "label": "Profile scope",
+      "global": "Global",
+      "project": "Project"
+    },
+    "copyToProject": "Copy to another project",
+    "duplicateTitle": "Copy profile to another project",
+    "duplicateDescription": "Create an independent copy of this profile for a project folder.",
+    "captureCurrent": "Update from current configuration",
+    "captureCurrentDescription": "Replace the {{name}} profile references with the current global model, MCP, Skills and instructions for this agent. Deploy the profile afterward to update the project.",
     "switcherAriaLabel": "Project: {{name}}",
     "switcherTooltip": {
-      "claude": "Projects: switch the Claude Code provider / MCP / Skills / memory files in one click",
+      "claude": "Profiles: switch global Claude Code configuration or manage project profiles",
       "claude-desktop": "Projects: switch the Claude Desktop provider in one click",
-      "codex": "Projects: switch the Codex provider / MCP / Skills / memory files in one click"
+      "codex": "Profiles: switch global Codex configuration or manage project profiles"
     },
     "none": "No project",
     "searchPlaceholder": "Search projects",
     "empty": "No projects yet",
     "createFromCurrent": "New project",
     "createDescription": {
-      "claude": "Save the current Claude Code provider, MCP, Skills and memory file as a project you can switch to later.",
+      "claude": "Save the current Claude Code model, MCP, Skills and instructions as a global or project profile.",
       "claude-desktop": "Save the current Claude Desktop provider as a project you can switch to later.",
-      "codex": "Save the current Codex provider, MCP, Skills and memory file configuration as a project you can switch to later."
+      "codex": "Save the current Codex model, MCP, Skills and instructions as a global or project profile."
     },
     "manage": "Manage projects",
     "manageTitle": "Manage Projects",
-    "manageDescription": "Projects are configuration snapshots. When you switch projects, the current configuration is automatically saved back to the project you are leaving.",
+    "manageDescription": "Profiles save configuration explicitly. Apply a global Profile to activate it; deploy a project Profile manually to its bound directory.",
     "namePlaceholder": "e.g. Development, Drawing",
     "rename": "Rename",
     "noSnapshotForScope": "Not saved for this app yet",
@@ -3193,9 +3269,12 @@
       "pickFailed": "Failed to choose project folder: {{detail}}"
     },
     "projectDeploy": {
+      "current": "Last applied for this agent",
       "button": "Deploy to project",
       "pending": "Deploying to project…",
       "success": "Profile deployed to project.",
+      "notes": "Deployment notes",
+      "completedWithNotes": "Project deployment finished with notes.",
       "failed": "Project deployment failed: {{detail}}",
       "conflictTitle": "Project deployment conflicts",
       "conflictMessage": "{{files}} file(s) already contain user-owned or edited content. How should they be handled?",
@@ -3207,7 +3286,32 @@
       "codexTrustWarning": "Codex loads `.codex/` project configuration only after the project is trusted.",
       "sensitiveMcpSkipped": "MCP servers with inline credentials were skipped. Use environment-variable references instead."
     },
-    "clearSuccess": "Switched to no project"
+    "clearSuccess": "Switched to no project",
+    "createSource": {
+      "label": "Configuration source",
+      "current": "Current configuration",
+      "project": "Import existing project configuration",
+      "description": "Read the selected Agent’s project model, MCP, Skills and instructions into an independent Profile. The project files and global enablement stay unchanged."
+    },
+    "import": {
+      "completedWithNotes": "Project configuration imported; review the notes"
+    },
+    "context": {
+      "title": "Project & Profile",
+      "searchProjects": "Search project names or paths…",
+      "more": "More Profile actions",
+      "rowActions": "More actions for {{name}}",
+      "globalProvidersHint": "Deploy project configuration manually to apply it. The provider list below manages global connections."
+    },
+    "connections": {
+      "title": "Provider connections",
+      "description": "Maintain API URLs, keys, accounts and connection settings here. Profiles reference these connections."
+    },
+    "migration": {
+      "pending": "Preparing existing Agent configuration…",
+      "failed": "Existing configuration migration is incomplete"
+    },
+    "apply": "Apply"
   },
   "workspace": {
     "title": "Workspace Files",
@@ -4333,9 +4437,9 @@
     "skills": "Skills",
     "prompts": "Prompts",
     "sessions": "Sessions",
-    "apps": "Apps",
-    "appsTitle": "Apps: install, upgrade, choose which show in the sidebar",
-    "appsHasUpdate": "Apps · updates available",
+    "apps": "Agent management",
+    "appsTitle": "Install, update, diagnose and choose sidebar visibility",
+    "appsHasUpdate": "Agent management · Updates available",
     "settings": "Settings",
     "settingsHasUpdate": "Settings · a new CC Switch version is available",
     "mode": {
@@ -4350,8 +4454,8 @@
     "showInSidebar": "Show {{name}} in the sidebar",
     "lastChecked": "Last checked {{time}}",
     "neverChecked": "Not checked for updates yet",
-    "helpTitle": "Apps",
-    "helpBody": "Install and upgrade command-line apps here, and choose which ones show in the sidebar.",
+    "helpTitle": "Agent management",
+    "helpBody": "Install, update, diagnose and choose sidebar visibility",
     "checking": "Checking…",
     "checkUpdates": "Check for updates",
     "moreActions": "More actions",
@@ -4362,7 +4466,7 @@
     "dragHandle": "Drag to reorder {{name}}",
     "columnVersion": "Version",
     "columnVisible": "Show",
-    "visibleHelp": "When off, the app no longer appears in the sidebar, the tray menu, the MCP / Skills app columns, or the app pickers on Prompts and Sessions. It is only hidden: its providers, MCP servers and other settings stay, and its own config files are left untouched.",
+    "visibleHelp": "The sidebar only shows installed apps with this switch on. You can install missing apps here and then choose whether to show them. When off, the app no longer appears in the sidebar, the tray menu, the MCP / Skills app columns, or the app pickers on Prompts and Sessions. It is only hidden: its providers, MCP servers and other settings stay, and its own config files are left untouched.",
     "desktopHelp": "Claude Desktop is a desktop app and can't be installed or upgraded here; CC Switch connects to it through its config file.",
     "workbuddyHelp": "WorkBuddy is a desktop app and can't be installed or upgraded here; it updates itself. CC Switch connects to it through its config file (~/.workbuddy/models.json).",
     "desktopUnsupported": "Not supported on this system",
@@ -4389,7 +4493,9 @@
       "agy": "Installs with the official script",
       "copilot": "Installs with npm",
       "omp": "Installs with the official script"
-    }
+    },
+    "officialDownload": "Official download",
+    "manualInstallHint": "After downloading and installing, click “Check for updates” to detect the installation."
   },
   "appPage": {
     "moreActions": "More actions for {{name}}",
@@ -4961,7 +5067,9 @@
       "noUpdatesInSelection": "None of the selected Skills have updates",
       "selectionAlreadyOn": "The {{count}} selected Skills are already enabled in {{app}}",
       "selectionAlreadyOff": "None of the {{count}} selected Skills are enabled in {{app}}",
-      "disabledSelection": "Turned off {{count}} {{noun}} in {{app}}"
+      "disabledSelection": "Turned off {{count}} {{noun}} in {{app}}",
+      "savedToLibrary": "Saved {{name}} to the library",
+      "savedManyToLibrary": "Saved {{count}} Skills to the library"
     },
     "installTo": {
       "prefix": "Install to: ",
@@ -4969,7 +5077,9 @@
       "many": "{{first}} and {{count}} more",
       "title": "Enable in these apps after installing",
       "helpTitle": "Is this remembered?",
-      "help": "Yes, your last choice is the default. You can change it any time under Installed. Installing from ZIP and restoring from backup use this choice too."
+      "help": "Yes, your last choice is the default. You can change it any time under Installed. Installing from ZIP and restoring from backup use this choice too.",
+      "libraryOnly": "Library only",
+      "libraryOnlyHint": "Does not enable or sync to an Agent. If stored in ~/.agents/skills, native Agent discovery still applies."
     },
     "discover": {
       "searchPlaceholder": "Search name, description or repo",
@@ -5027,7 +5137,8 @@
       "submit": "Import {{count}}"
     },
     "restore": {
-      "lead": "Pick a backup to restore its files and add it back to the list, enabled in {{apps}} (set by “Install to” in Discover)."
+      "lead": "Pick a backup to restore its files and add it back to the list, enabled in {{apps}} (set by “Install to” in Discover).",
+      "libraryOnlyLead": "Restore to the library without enabling or syncing to an Agent."
     },
     "repoFail": {
       "title": "Couldn't read {{count}} repositories: {{repos}}",

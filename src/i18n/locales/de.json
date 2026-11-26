@@ -280,7 +280,12 @@
     "formSubtitleStack": "{{app}} (Aggregationsmodus)",
     "editCurrentNoticeFile": "Dies ist der verwendete Anbieter. Beim Speichern wird er sofort geschrieben nach",
     "editCurrentNoticeFileEnd": "; die nächste Anfrage verwendet ihn.",
-    "editCurrentNotice": "Dies ist der verwendete Anbieter. Das Speichern wirkt sofort; die nächste Anfrage verwendet die neuen Einstellungen."
+    "editCurrentNotice": "Dies ist der verwendete Anbieter. Das Speichern wirkt sofort; die nächste Anfrage verwendet die neuen Einstellungen.",
+    "connectionsSavedNotice": "Verbindung in der Anbieterbibliothek gespeichert. Das Profil erneut anwenden, um die Direktverbindung zu aktualisieren.",
+    "connectionConfig": "Erweiterte Verbindungseinstellungen",
+    "connectionConfigHint": "Hier nur Adressen, Authentifizierung, Anfrage-Header und Cloud-Verbindungen einstellen. Modelle und Agent-Verhalten im Profil bearbeiten.",
+    "connectionConfigOnly": "Hier können nur Verbindungsfelder bearbeitet werden. Modelle und Verhalten im Profil ändern.",
+    "connectionConfigInvalid": "Bitte zuerst die Verbindungskonfiguration korrigieren."
   },
   "claudeCode": {
     "needsRouting": "Routing erforderlich"
@@ -450,7 +455,7 @@
       "quotaDisplayHelp": "Legt fest, ob jedes Kontingentfenster auf Anbieterkarten, in den Konten und im Tray anzeigt, wie viel noch übrig ist oder wie viel verbraucht wurde. Guthaben und Credits zeigen immer den verbleibenden Betrag.",
       "sidebarAndHeader": "Seitenleiste und Kopfzeile",
       "visibleApps": "In der Seitenleiste angezeigte Apps",
-      "goToApps": "Apps öffnen",
+      "goToApps": "Agent-Verwaltung öffnen",
       "updates": "Neue Versionen Ihrer Apps",
       "checkToolUpdates": "Beim Start nach neuen Versionen Ihrer Apps suchen",
       "checkToolUpdatesHelp": "Wenn aktiviert, prüft CC Switch bei jedem Start Ihre installierten Kommandozeilen-Apps auf neue Versionen und zeigt bei einem Fund einen Punkt bei „Apps“ in der Seitenleiste an. Es wird nichts automatisch aktualisiert.",
@@ -3145,24 +3150,95 @@
     }
   },
   "profiles": {
+    "environment": {
+      "title": "Projektumgebung",
+      "configureProject": "Projekt konfigurieren",
+      "manageAgent": "Agent verwalten",
+      "selectProject": "Projekt auswählen",
+      "description": "Verbinden Sie diesen Agent über die vorhandenen Installationswerkzeuge mit einem Projekt. Bereits installierte Agents können ihre aktuelle Installation weiterverwenden.",
+      "busy": "Agent-Aktion wird ausgeführt",
+      "checkFailed": "Agent-Status muss geprüft werden",
+      "ready": "Agent ist ausführbar",
+      "recheck": "Diesen Agent erneut prüfen",
+      "installations": "Installationspfade und Quellen",
+      "multipleInstalls": "Mehrere Installationen gefunden. Prüfen Sie den Standardpfad, bevor Sie den Agent starten.",
+      "wslHint": "In {{distro}} erkannt. Installationspfade werden auf dem Host ermittelt und beschreiben möglicherweise nicht diese WSL-Installation. Die Bereitstellung verwendet den ausgewählten, für CC Switch zugänglichen Ordner und wählt keine WSL-Distribution aus. Prüfen Sie, ob der Agent dasselbe Projekt öffnet.",
+      "scopeHint": "Die Projekteinrichtung unterstützt derzeit Claude Code und Codex.",
+      "projectConfiguration": "Projekt und Profil",
+      "projectHint": "Projektprofil auswählen oder erstellen, bearbeiten und manuell bereitstellen. Installation, Updates und Diagnose erfolgen in der Agent-Verwaltung.",
+      "prepareHint": "Sie können das Profil jetzt vorbereiten. Die Bereitstellung wird verfügbar, sobald der Agent ausführbar ist und die Prüfungen erfolgreich sind."
+    },
+    "projectContext": "Profilbereich",
+    "selectProfile": "Profil auswählen",
+    "pendingSelection": "Nicht angewendet",
+    "editor": {
+      "title": "Profil bearbeiten",
+      "description": "Die vollständige Agent-Konfiguration bearbeiten. Speichern aktualisiert nur das Profil; anschließend anwenden oder bereitstellen.",
+      "name": "Name",
+      "provider": "Anbieter",
+      "inheritProvider": "Aktuellen globalen Anbieter verwenden",
+      "model": "Modell",
+      "modelPlaceholder": "Modell eingeben oder auswählen",
+      "modelHint": "Ein leerer Wert übernimmt den Standard. Ein ausgewähltes Modell wird unabhängig gespeichert.",
+      "mainReasoningEffort": "Reasoning-Aufwand des Hauptmodells",
+      "planReasoningEffort": "Reasoning-Aufwand im Plan-Modus",
+      "mcp": "MCP-Server",
+      "skills": "Skills",
+      "prompt": "Anweisungsvorlage",
+      "noPrompt": "Keine Anweisungsvorlage",
+      "missing": "Fehlende Ressource: {{id}}",
+      "unavailable": "Nicht verfügbar",
+      "missingResourcesHint": "Verweise auf nicht verfügbare Ressourcen bleiben beim Speichern erhalten und werden beim Anwenden übersprungen. Entfernen Sie das Häkchen, um den Verweis zu entfernen.",
+      "emptyResources": "Keine Ressourcen in der Bibliothek",
+      "loadFailed": "Ressourcen konnten nicht geladen werden: {{detail}}",
+      "sections": "Profilbereiche",
+      "modelsTab": "Allgemein & Modelle",
+      "resourcesTab": "Ressourcen",
+      "instructionsTab": "Anweisungen",
+      "scopeSummary": "Eigene Konfiguration für {{agent}}",
+      "providerReferenceHint": "Modellfunktionen verwenden den gewählten Anbieter. API-Adressen, Schlüssel und Konten bleiben beim Anbieter. Die Projektbereitstellung ändert die globale Verbindung nicht.",
+      "resetModels": "Modelleinstellungen des Anbieters wiederherstellen",
+      "runtimeSettings": "Denktiefe & Kontext",
+      "saveHint": "Speichern und anschließend manuell im Projekt anwenden.",
+      "searchResources": "MCP oder Skills suchen",
+      "selectedCount": "{{count}} ausgewählt",
+      "noMatchingResources": "Keine passenden Ressourcen",
+      "instructionHint": "Eine Vorlage aus der Bibliothek wird beim Anwenden in die Projektanweisungsdatei des Agents geschrieben.",
+      "globalSaveHint": "Nach dem Speichern auf Anwenden klicken, um das globale Profil zu aktivieren.",
+      "incompleteModels": "Leere Modell-IDs in der Modellliste ausfüllen.",
+      "behaviorTab": "Verhalten und erweiterte Einstellungen",
+      "nativeHint": "Berechtigungen, Sandbox, Hooks, Plugins und weitere Agent-Einstellungen gehören zu diesem Profil. Modelle und Ressourcen haben eigene Tabs; Adressen, Schlüssel und Konten verweisen auf den Anbieter. Nach dem Speichern anwenden oder bereitstellen.",
+      "nativeObjectRequired": "Die Konfiguration muss ein JSON-Objekt sein",
+      "nativeInvalid": "Ungültige Konfiguration: {{detail}}"
+    },
+    "scope": {
+      "label": "Profilbereich",
+      "global": "Global",
+      "project": "Projekt"
+    },
+    "copyToProject": "In ein anderes Projekt kopieren",
+    "duplicateTitle": "Profil in ein anderes Projekt kopieren",
+    "duplicateDescription": "Eine unabhängige Profilkopie für einen Projektordner erstellen.",
+    "captureCurrent": "Aus aktueller Konfiguration aktualisieren",
+    "captureCurrentDescription": "Die Referenzen von {{name}} durch das aktuelle globale Modell, MCP, Skills und Anweisungen dieses Agents ersetzen. Anschließend das Profil bereitstellen, um das Projekt zu aktualisieren.",
     "switcherAriaLabel": "Projekt: {{name}}",
     "switcherTooltip": {
-      "claude": "Projekte: Anbieter / MCP / Skills / Memory-Dateien von Claude Code mit einem Klick wechseln",
+      "claude": "Profile: globale Claude Code-Konfiguration wechseln oder Projektprofile verwalten",
       "claude-desktop": "Projekte: Anbieter von Claude Desktop mit einem Klick wechseln",
-      "codex": "Projekte: Anbieter / MCP / Skills / Memory-Dateien von Codex mit einem Klick wechseln"
+      "codex": "Profile: globale Codex-Konfiguration wechseln oder Projektprofile verwalten"
     },
     "none": "Kein Projekt",
     "searchPlaceholder": "Projekte suchen",
     "empty": "Noch keine Projekte",
     "createFromCurrent": "Neues Projekt",
     "createDescription": {
-      "claude": "Speichern Sie den aktuellen Anbieter, MCP, Skills und die Memory-Datei von Claude Code als Projekt, zu dem Sie später wechseln können.",
+      "claude": "Aktuelles Claude Code-Modell, MCP, Skills und Anweisungen als globales oder Projektprofil speichern.",
       "claude-desktop": "Speichern Sie den aktuellen Anbieter von Claude Desktop als Projekt, zu dem Sie später wechseln können.",
-      "codex": "Speichern Sie die aktuelle Konfiguration von Anbieter, MCP, Skills und Memory-Datei von Codex als Projekt, zu dem Sie später wechseln können."
+      "codex": "Aktuelles Codex-Modell, MCP, Skills und Anweisungen als globales oder Projektprofil speichern."
     },
     "manage": "Projekte verwalten",
     "manageTitle": "Projekte verwalten",
-    "manageDescription": "Projekte sind Konfigurations-Snapshots. Wenn Sie das Projekt wechseln, wird die aktuelle Konfiguration automatisch in das Projekt zurückgespeichert, das Sie verlassen.",
+    "manageDescription": "Profile speichern Einstellungen ausdrücklich. Globale Profile werden angewendet, Projektprofile manuell im gebundenen Verzeichnis bereitgestellt.",
     "namePlaceholder": "z. B. Entwicklung, Zeichnen",
     "rename": "Umbenennen",
     "noSnapshotForScope": "Für diese App noch nicht gespeichert",
@@ -3193,9 +3269,12 @@
       "pickFailed": "Projektordner konnte nicht ausgewählt werden: {{detail}}"
     },
     "projectDeploy": {
+      "current": "Zuletzt für diesen Agent angewendet",
       "button": "Im Projekt bereitstellen",
       "pending": "Wird im Projekt bereitgestellt …",
       "success": "Profil im Projekt bereitgestellt.",
+      "notes": "Hinweise zur Bereitstellung",
+      "completedWithNotes": "Projektbereitstellung mit Hinweisen abgeschlossen.",
       "failed": "Bereitstellung im Projekt fehlgeschlagen: {{detail}}",
       "conflictTitle": "Konflikte bei der Projektbereitstellung",
       "conflictMessage": "{{files}} Datei(en) enthalten bereits eigene oder geänderte Inhalte. Wie sollen diese behandelt werden?",
@@ -3207,7 +3286,32 @@
       "codexTrustWarning": "Codex lädt die Projektkonfiguration in `.codex/` erst, wenn das Projekt als vertrauenswürdig eingestuft wurde.",
       "sensitiveMcpSkipped": "MCP-Server mit eingebetteten Zugangsdaten wurden übersprungen. Verwenden Sie Umgebungsvariablen statt Klartextwerten."
     },
-    "clearSuccess": "Zu „Kein Projekt“ gewechselt"
+    "clearSuccess": "Zu „Kein Projekt“ gewechselt",
+    "createSource": {
+      "label": "Konfigurationsquelle",
+      "current": "Aktuelle Konfiguration",
+      "project": "Vorhandene Projektkonfiguration importieren",
+      "description": "Modell, MCP, Skills und Anweisungen des gewählten Agents als eigenständiges Profil einlesen. Projektdateien und globale Aktivierung bleiben unverändert."
+    },
+    "import": {
+      "completedWithNotes": "Projektkonfiguration importiert; bitte Hinweise prüfen"
+    },
+    "context": {
+      "title": "Projekt & Profil",
+      "searchProjects": "Projektnamen oder Pfade suchen…",
+      "more": "Weitere Profilaktionen",
+      "rowActions": "Weitere Aktionen für {{name}}",
+      "globalProvidersHint": "Projektkonfigurationen werden manuell angewendet. Die Anbieterliste unten verwaltet globale Verbindungen."
+    },
+    "connections": {
+      "title": "Anbieterverbindungen",
+      "description": "API-Adressen, Schlüssel, Konten und Verbindungen hier verwalten. Profile verweisen auf diese Verbindungen."
+    },
+    "migration": {
+      "pending": "Vorhandene Agent-Konfiguration wird vorbereitet…",
+      "failed": "Migration vorhandener Konfiguration unvollständig"
+    },
+    "apply": "Anwenden"
   },
   "workspace": {
     "title": "Workspace-Dateien",
@@ -4333,9 +4437,9 @@
     "authNeedsReauth": "Ein Konto muss sich erneut anmelden",
     "prompts": "Prompts",
     "sessions": "Sitzungen",
-    "apps": "Apps",
-    "appsTitle": "Apps: installieren, aktualisieren, festlegen, welche in der Seitenleiste erscheinen",
-    "appsHasUpdate": "Apps · Updates verfügbar",
+    "apps": "Agent-Verwaltung",
+    "appsTitle": "Installieren, aktualisieren, diagnostizieren und Seitenleiste festlegen",
+    "appsHasUpdate": "Agent-Verwaltung · Updates verfügbar",
     "settings": "Optionen",
     "settingsHasUpdate": "Einstellungen · Eine neue Version von CC Switch ist verfügbar",
     "mode": {
@@ -4350,8 +4454,8 @@
     "showInSidebar": "{{name}} in der Seitenleiste anzeigen",
     "lastChecked": "Zuletzt geprüft {{time}}",
     "neverChecked": "Noch nicht auf Updates geprüft",
-    "helpTitle": "Apps",
-    "helpBody": "Installieren und aktualisieren Sie hier Kommandozeilen-Apps und wählen Sie, welche in der Seitenleiste erscheinen.",
+    "helpTitle": "Agent-Verwaltung",
+    "helpBody": "Installieren, aktualisieren, diagnostizieren und Seitenleiste festlegen",
     "checking": "Wird geprüft …",
     "checkUpdates": "Nach Updates suchen",
     "moreActions": "Weitere Aktionen",
@@ -4362,7 +4466,7 @@
     "dragHandle": "Ziehen, um {{name}} neu anzuordnen",
     "columnVersion": "Version",
     "columnVisible": "Anzeigen",
-    "visibleHelp": "Wenn ausgeschaltet, erscheint die App nicht mehr in der Seitenleiste, im Tray-Menü, in den App-Spalten von MCP / Skills oder in den App-Auswahlen bei Prompts und Sitzungen. Sie wird nur ausgeblendet: Ihre Anbieter, MCP-Server und anderen Einstellungen bleiben erhalten, und ihre eigenen Konfigurationsdateien bleiben unberührt.",
+    "visibleHelp": "Die Seitenleiste zeigt nur installierte Apps, bei denen dieser Schalter eingeschaltet ist. Fehlende Apps können Sie hier installieren und danach festlegen, ob sie angezeigt werden. Wenn ausgeschaltet, erscheint die App nicht mehr in der Seitenleiste, im Tray-Menü, in den App-Spalten von MCP / Skills oder in den App-Auswahlen bei Prompts und Sitzungen. Sie wird nur ausgeblendet: Ihre Anbieter, MCP-Server und anderen Einstellungen bleiben erhalten, und ihre eigenen Konfigurationsdateien bleiben unberührt.",
     "desktopHelp": "Claude Desktop ist eine Desktop-App und kann hier weder installiert noch aktualisiert werden; CC Switch verbindet sich über deren Konfigurationsdatei damit.",
     "workbuddyHelp": "WorkBuddy ist eine Desktop-App und kann hier weder installiert noch aktualisiert werden; sie aktualisiert sich selbst. CC Switch verbindet sich über deren Konfigurationsdatei (~/.workbuddy/models.json) damit.",
     "desktopUnsupported": "Auf diesem System nicht unterstützt",
@@ -4389,7 +4493,9 @@
       "agy": "Installiert mit dem offiziellen Skript",
       "copilot": "Installiert mit npm",
       "omp": "Installiert mit dem offiziellen Skript"
-    }
+    },
+    "officialDownload": "Offizieller Download",
+    "manualInstallHint": "Nach dem Herunterladen und Installieren auf „Nach Updates suchen“ klicken, um die Installation zu erkennen."
   },
   "appPage": {
     "moreActions": "Weitere Aktionen für {{name}}",
@@ -4961,7 +5067,9 @@
       "noUpdatesInSelection": "Für keinen der ausgewählten Skills gibt es Updates",
       "selectionAlreadyOn": "Die {{count}} ausgewählten Skills sind in {{app}} bereits aktiviert",
       "selectionAlreadyOff": "Keiner der {{count}} ausgewählten Skills ist in {{app}} aktiviert",
-      "disabledSelection": "{{count}} {{noun}} in {{app}} ausgeschaltet"
+      "disabledSelection": "{{count}} {{noun}} in {{app}} ausgeschaltet",
+      "savedToLibrary": "{{name}} in der Bibliothek gespeichert",
+      "savedManyToLibrary": "{{count}} Skills in der Bibliothek gespeichert"
     },
     "installTo": {
       "prefix": "Installieren für: ",
@@ -4969,7 +5077,9 @@
       "many": "{{first}} und {{count}} weitere",
       "title": "Nach der Installation in diesen Apps aktivieren",
       "helpTitle": "Wird das gespeichert?",
-      "help": "Ja, Ihre letzte Auswahl ist der Standard. Sie können sie jederzeit unter „Installiert“ ändern. Auch die Installation aus ZIP und die Wiederherstellung aus einer Sicherung verwenden diese Auswahl."
+      "help": "Ja, Ihre letzte Auswahl ist der Standard. Sie können sie jederzeit unter „Installiert“ ändern. Auch die Installation aus ZIP und die Wiederherstellung aus einer Sicherung verwenden diese Auswahl.",
+      "libraryOnly": "Nur in der Bibliothek",
+      "libraryOnlyHint": "Aktiviert oder synchronisiert keinen Agent. Bei Speicherung in ~/.agents/skills gilt weiterhin die native Agent-Erkennung."
     },
     "discover": {
       "searchPlaceholder": "Name, Beschreibung oder Repo suchen",
@@ -5027,7 +5137,8 @@
       "submit": "{{count}} importieren"
     },
     "restore": {
-      "lead": "Wählen Sie eine Sicherung aus, um ihre Dateien wiederherzustellen und sie wieder zur Liste hinzuzufügen, aktiviert in {{apps}} (festgelegt durch „Installieren für“ unter „Entdecken“)."
+      "lead": "Wählen Sie eine Sicherung aus, um ihre Dateien wiederherzustellen und sie wieder zur Liste hinzuzufügen, aktiviert in {{apps}} (festgelegt durch „Installieren für“ unter „Entdecken“).",
+      "libraryOnlyLead": "In der Bibliothek wiederherstellen, ohne einen Agent zu aktivieren oder zu synchronisieren."
     },
     "repoFail": {
       "title": "{{count}} Repositories konnten nicht gelesen werden: {{repos}}",

@@ -55,6 +55,7 @@ pub(super) async fn get_single_tool_version_impl(
     tool: &str,
     wsl_shell: Option<&str>,
     wsl_shell_flag: Option<&str>,
+    local_only: bool,
 ) -> ToolVersion {
     debug_assert!(
         known_tool(tool).is_some(),
@@ -64,11 +65,18 @@ pub(super) async fn get_single_tool_version_impl(
     // 判断该工具的运行环境 & WSL distro（如有）
     let (env_type, wsl_distro) = tool_env_type_and_wsl_distro(tool);
 
-    // 使用全局 HTTP 客户端（已包含代理配置）
-    let client = crate::proxy::http_client::get();
-
     // 1. 获取本地版本
     let probe = probe_local_version(tool, wsl_distro.as_deref(), wsl_shell, wsl_shell_flag);
+    complete_tool_version(tool, env_type, wsl_distro, probe, local_only).await
+}
+
+async fn complete_tool_version(
+    tool: &str,
+    env_type: String,
+    wsl_distro: Option<String>,
+    probe: ShellProbe,
+    local_only: bool,
+) -> ToolVersion {
     let (local_version, local_error, installed_but_broken) = match probe {
         ShellProbe::Found(v) => (Some(v), None, false),
         ShellProbe::FoundButFailed(e) => (None, Some(e), true),
@@ -77,10 +85,27 @@ pub(super) async fn get_single_tool_version_impl(
         ShellProbe::NotFound(e) if e.ends_with(NOT_INSTALLED) => (None, None, false),
         ShellProbe::NotFound(e) => (None, Some(e), false),
     };
+    let mut result = ToolVersion {
+        name: tool.to_string(),
+        version: local_version,
+        latest_version: None,
+        error: local_error,
+        installed_but_broken,
+        env_type,
+        wsl_distro,
+        update_blocked_by_node: None,
+    };
+    // 侧栏只需要安装状态；不要因此开启更新检查或初始化网络客户端。
+    if local_only {
+        return result;
+    }
+
+    // 使用全局 HTTP 客户端（已包含代理配置）
+    let client = crate::proxy::http_client::get();
 
     // 2. 获取远程最新版本（npm 工具在本地领先 latest 时会按预发布通道补查，见
     //    fetch_npm_latest_for_tool / npm_prerelease_tags）
-    let local = local_version.as_deref();
+    let local = result.version.as_deref();
     let latest_version = match (tool, tool_spec(tool).npm_package) {
         ("hermes", _) => fetch_hermes_latest_version(&client, local).await,
         ("agy", _) => fetch_agy_latest_version(&client).await,
@@ -104,16 +129,9 @@ pub(super) async fn get_single_tool_version_impl(
         _ => None,
     };
 
-    ToolVersion {
-        name: tool.to_string(),
-        version: local_version,
-        latest_version,
-        error: local_error,
-        installed_but_broken,
-        env_type,
-        wsl_distro,
-        update_blocked_by_node,
-    }
+    result.latest_version = latest_version;
+    result.update_blocked_by_node = update_blocked_by_node;
+    result
 }
 
 /// 解析 "2.1.156" / "2.1.156-beta.1" → (主版本三段, 预发布段)。无法解析返回 None。
@@ -651,6 +669,48 @@ fn try_get_version_wsl(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn local_only_versions_preserve_presence_and_errors_without_remote_metadata() {
+        for (probe, expected_version, expected_error, expected_broken) in [
+            (
+                ShellProbe::Found("1.2.3".into()),
+                Some("1.2.3"),
+                None,
+                false,
+            ),
+            (
+                ShellProbe::FoundButFailed("missing runtime".into()),
+                None,
+                Some("missing runtime"),
+                true,
+            ),
+            (
+                ShellProbe::NotFound(format!("[WSL:Ubuntu] {NOT_INSTALLED}")),
+                None,
+                None,
+                false,
+            ),
+            (
+                ShellProbe::NotFound("[WSL:Ubuntu] exec failed".into()),
+                None,
+                Some("[WSL:Ubuntu] exec failed"),
+                false,
+            ),
+        ] {
+            let result =
+                complete_tool_version("codex", "wsl".into(), Some("Ubuntu".into()), probe, true)
+                    .await;
+            assert_eq!(result.name, "codex");
+            assert_eq!(result.version.as_deref(), expected_version);
+            assert_eq!(result.error.as_deref(), expected_error);
+            assert_eq!(result.installed_but_broken, expected_broken);
+            assert_eq!(result.env_type, "wsl");
+            assert_eq!(result.wsl_distro.as_deref(), Some("Ubuntu"));
+            assert!(result.latest_version.is_none());
+            assert!(result.update_blocked_by_node.is_none());
+        }
+    }
 
     #[test]
     fn shell_command_missing_matches_shell_formats_only() {

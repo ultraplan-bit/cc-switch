@@ -1664,7 +1664,11 @@ pub fn run() {
             // Profile management (项目配置方案)
             commands::list_profiles,
             commands::create_profile,
+            commands::migrate_legacy_agent_profiles,
+            commands::import_project_profile,
+            commands::duplicate_profile,
             commands::update_profile,
+            commands::update_profile_config,
             commands::set_profile_project_path,
             commands::delete_profile,
             commands::clear_current_profile,

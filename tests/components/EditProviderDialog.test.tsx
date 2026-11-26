@@ -5,7 +5,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Provider } from "@/types";
 
@@ -14,6 +14,13 @@ const apiMocks = vi.hoisted(() => ({
   getEditorView: vi.fn(),
   getLiveProviderSettings: vi.fn(),
   getOpenClawLiveProvider: vi.fn(),
+}));
+const connectionMode = vi.hoisted(() => ({
+  connectionsOnly: false,
+  pending: false,
+}));
+vi.mock("@/components/providers/useProviderConnectionMode", () => ({
+  useProviderConnectionMode: () => connectionMode,
 }));
 let mockFormReady = true;
 let mockCodexManagedAccountSelected = false;
@@ -81,6 +88,13 @@ vi.mock("@/components/providers/forms/ProviderForm", () => ({
     isProxyTakeover?: boolean;
     appId?: string;
   }) => {
+    const [draftConfig, setDraftConfig] = useState(
+      JSON.stringify(initialData.settingsConfig ?? {}),
+    );
+    useEffect(
+      () => setDraftConfig(JSON.stringify(initialData.settingsConfig ?? {})),
+      [initialData],
+    );
     useEffect(() => {
       if (onSubmitReadyChange) {
         submitReadyCallbacks.push(onSubmitReadyChange);
@@ -113,6 +127,11 @@ vi.mock("@/components/providers/forms/ProviderForm", () => ({
           });
         }}
       >
+        <input
+          aria-label="configuration draft"
+          value={draftConfig}
+          onChange={(event) => setDraftConfig(event.target.value)}
+        />
         <output data-testid="settings-config">
           {JSON.stringify(initialData.settingsConfig ?? {})}
         </output>
@@ -142,6 +161,8 @@ const liveConflict = (key: string) =>
 
 describe("EditProviderDialog", () => {
   beforeEach(() => {
+    connectionMode.connectionsOnly = false;
+    connectionMode.pending = false;
     mockFormReady = true;
     mockCodexManagedAccountSelected = false;
     submitReadyCallbacks = [];
@@ -155,6 +176,127 @@ describe("EditProviderDialog", () => {
     );
     apiMocks.getLiveProviderSettings.mockReset();
     apiMocks.getOpenClawLiveProvider.mockReset();
+  });
+
+  it("preserves the connection draft when provider metadata/configuration refreshes and reloads it next session", async () => {
+    connectionMode.connectionsOnly = true;
+    const provider: Provider = {
+      id: "connection",
+      name: "Connection",
+      settingsConfig: {
+        auth: { OPENAI_API_KEY: "old" },
+        config: 'model_provider = "custom"',
+      },
+      meta: { customUserAgent: "before" },
+    };
+    const props = {
+      appId: "codex" as const,
+      onSubmit: vi.fn(),
+      onOpenChange: vi.fn(),
+    };
+    const { rerender } = render(
+      <EditProviderDialog open provider={provider} {...props} />,
+    );
+    const draft = await screen.findByLabelText("configuration draft");
+    fireEvent.change(draft, { target: { value: "unsaved connection edit" } });
+    const refreshed = {
+      ...provider,
+      settingsConfig: {
+        ...provider.settingsConfig,
+        auth: { OPENAI_API_KEY: "external" },
+      },
+      meta: { customUserAgent: "external-refresh" },
+    };
+    rerender(<EditProviderDialog open provider={refreshed} {...props} />);
+    expect(screen.getByLabelText("configuration draft")).toHaveValue(
+      "unsaved connection edit",
+    );
+    rerender(
+      <EditProviderDialog open={false} provider={refreshed} {...props} />,
+    );
+    rerender(<EditProviderDialog open provider={refreshed} {...props} />);
+    await waitFor(() =>
+      expect(screen.getByLabelText("configuration draft")).toHaveValue(
+        JSON.stringify(refreshed.settingsConfig),
+      ),
+    );
+  });
+
+  it("freezes a completed live projection rather than the pre-load provider row", async () => {
+    let finish!: (view: {
+      settings: Record<string, unknown>;
+      inactive: [];
+    }) => void;
+    apiMocks.getEditorView.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const provider = {
+      id: "legacy",
+      name: "Legacy",
+      settingsConfig: { env: { ANTHROPIC_BASE_URL: "row" } },
+    };
+    const props = {
+      appId: "claude" as const,
+      onSubmit: vi.fn(),
+      onOpenChange: vi.fn(),
+    };
+    const { rerender } = render(
+      <EditProviderDialog open provider={provider} {...props} />,
+    );
+    expect(
+      screen.queryByLabelText("configuration draft"),
+    ).not.toBeInTheDocument();
+    const projected = { ...provider.settingsConfig, hooks: { Stop: [] } };
+    await act(async () => finish({ settings: projected, inactive: [] }));
+    const draft = await screen.findByLabelText("configuration draft");
+    expect(draft).toHaveValue(JSON.stringify(projected));
+    fireEvent.change(draft, { target: { value: "unsaved live edit" } });
+    rerender(
+      <EditProviderDialog
+        open
+        provider={{ ...provider, meta: { customUserAgent: "refreshed" } }}
+        {...props}
+      />,
+    );
+    expect(screen.getByLabelText("configuration draft")).toHaveValue(
+      "unsaved live edit",
+    );
+  });
+
+  it("saves migrated provider connections without reading live configuration", async () => {
+    connectionMode.connectionsOnly = true;
+    const provider = {
+      id: "connection",
+      name: "Connection",
+      settingsConfig: {
+        env: {
+          ANTHROPIC_BASE_URL: "https://example.com",
+          ANTHROPIC_MODEL: "saved-model",
+        },
+      },
+    };
+    const onSubmit = vi.fn();
+    render(
+      <EditProviderDialog
+        open
+        appId="claude"
+        provider={provider}
+        onSubmit={onSubmit}
+        onOpenChange={vi.fn()}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "common.save" }));
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          editorSave: { base: provider.settingsConfig, connectionOnly: true },
+        }),
+      ),
+    );
+    expect(apiMocks.getEditorView).not.toHaveBeenCalled();
+    expect(apiMocks.getLiveProviderSettings).not.toHaveBeenCalled();
   });
 
   it.each(["claude", "codex", "gemini", "grokbuild"] as const)(

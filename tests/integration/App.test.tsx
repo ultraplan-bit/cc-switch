@@ -11,12 +11,17 @@ import {
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { http, HttpResponse } from "msw";
 import { providersApi } from "@/lib/api/providers";
+import type { AppId } from "@/lib/api/types";
+import type { VisibleApps } from "@/types";
+import { APP_IDS } from "@/config/appSpecs";
 import {
   resetProviderState,
   setCurrentProviderId,
   setLiveProviderIds,
   setProviders,
   setSettings,
+  getSettings,
+  getProviders,
 } from "../msw/state";
 import { emitTauriEvent } from "../msw/tauriMocks";
 import { server } from "../msw/server";
@@ -25,6 +30,16 @@ const toastSuccessMock = vi.fn();
 const toastErrorMock = vi.fn();
 const skillsPanelMocks = vi.hoisted(() => ({
   initialViews: [] as string[],
+}));
+const availabilityMocks = vi.hoisted(() => ({
+  state: {
+    installedApps: {} as Partial<Record<AppId, boolean>>,
+    isPending: false,
+  },
+}));
+
+vi.mock("@/hooks/useAgentAvailability", () => ({
+  useAgentAvailability: () => availabilityMocks.state,
 }));
 const windowMocks = vi.hoisted(() => ({
   isLinux: vi.fn(() => false),
@@ -176,6 +191,15 @@ vi.mock("@/components/settings/SettingsPage", () => ({
   SettingsPage: () => <div data-testid="settings-page" />,
 }));
 
+vi.mock("@/components/profiles/ProfileSwitcher", () => ({
+  ProfileSwitcher: () => (
+    <section data-testid="profile-context">Profile context</section>
+  ),
+}));
+vi.mock("@/components/apps/AppsPage", () => ({
+  AppsPage: () => <div data-testid="agent-management-page" />,
+}));
+
 vi.mock("@/components/skills/UnifiedSkillsPanel", () => ({
   // v7：Skills 的页头（添加 / 检查更新 / 存储与同步）在面板自己里面
   default: ({ initialView }: { initialView?: string }) => {
@@ -218,13 +242,15 @@ const sidebarApp = (name: string) =>
 
 const renderApp = (AppComponent: ComponentType) => {
   const client = new QueryClient();
-  return render(
+  const element = () => (
     <QueryClientProvider client={client}>
       <Suspense fallback={<div data-testid="loading">loading</div>}>
         <AppComponent />
       </Suspense>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const rendered = render(element());
+  return { ...rendered, rerenderApp: () => rendered.rerender(element()) };
 };
 
 describe("App integration with MSW", () => {
@@ -233,6 +259,10 @@ describe("App integration with MSW", () => {
     toastSuccessMock.mockReset();
     toastErrorMock.mockReset();
     skillsPanelMocks.initialViews = [];
+    availabilityMocks.state = {
+      installedApps: Object.fromEntries(APP_IDS.map((app) => [app, true])),
+      isPending: false,
+    };
     windowMocks.isLinux.mockReturnValue(false);
     windowMocks.isMaximized.mockResolvedValue(false);
     windowMocks.isFullscreen.mockResolvedValue(false);
@@ -247,6 +277,181 @@ describe("App integration with MSW", () => {
     windowMocks.onScaleChanged.mockImplementation(listen);
     localStorage.removeItem("cc-switch-last-view");
     localStorage.removeItem("cc-switch-last-app");
+  });
+
+  it("waits for installation checks and shows only installed enabled Agents", async () => {
+    availabilityMocks.state = { installedApps: {}, isPending: true };
+    setSettings({
+      visibleApps: {
+        ...Object.fromEntries(APP_IDS.map((app) => [app, true])),
+        codex: false,
+      } as VisibleApps,
+    });
+    localStorage.setItem("cc-switch-last-app", "codex");
+    const { default: App } = await import("@/App");
+    const { rerenderApp } = renderApp(App);
+    const nav = within(document.querySelector("nav") as HTMLElement);
+    expect(screen.queryByTestId("provider-list")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("agent-management-page"),
+    ).not.toBeInTheDocument();
+    expect(
+      nav.queryByRole("button", { name: "Claude Code", hidden: true }),
+    ).not.toBeInTheDocument();
+
+    availabilityMocks.state = {
+      installedApps: { claude: true, codex: true, gemini: false },
+      isPending: false,
+    };
+    rerenderApp();
+    await waitFor(() =>
+      expect(screen.getByTestId("provider-list")).toHaveTextContent("claude-1"),
+    );
+    expect(sidebarApp("Claude Code")).toBeInTheDocument();
+    expect(
+      nav.queryByRole("button", { name: "Codex", hidden: true }),
+    ).not.toBeInTheDocument();
+    expect(
+      nav.queryByRole("button", { name: "Gemini CLI", hidden: true }),
+    ).not.toBeInTheDocument();
+    expect(getSettings().visibleApps?.codex).toBe(false);
+  });
+
+  it.each(["not installed", "disabled"])(
+    "opens Apps when all Agents are %s and keeps management reachable",
+    async (condition) => {
+      if (condition === "not installed") {
+        availabilityMocks.state = {
+          installedApps: Object.fromEntries(APP_IDS.map((app) => [app, false])),
+          isPending: false,
+        };
+      } else {
+        setSettings({
+          visibleApps: Object.fromEntries(
+            APP_IDS.map((app) => [app, false]),
+          ) as VisibleApps,
+        });
+      }
+      const { default: App } = await import("@/App");
+      renderApp(App);
+      expect(
+        await screen.findByTestId("agent-management-page"),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("provider-list")).not.toBeInTheDocument();
+      expect(sidebarApp("nav.apps")).toBeInTheDocument();
+      expect(sidebarApp("nav.settings")).toBeInTheDocument();
+      expect(
+        within(document.querySelector("nav") as HTMLElement).queryByRole(
+          "button",
+          { name: "Claude Code", hidden: true },
+        ),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("updates Agent entries after install and uninstall without changing preferences", async () => {
+    availabilityMocks.state = {
+      installedApps: { claude: true, codex: false },
+      isPending: false,
+    };
+    const originalVisibility = getSettings().visibleApps;
+    const { default: App } = await import("@/App");
+    const { rerenderApp } = renderApp(App);
+    await waitFor(() =>
+      expect(screen.getByTestId("provider-list")).toHaveTextContent("claude-1"),
+    );
+    availabilityMocks.state = {
+      installedApps: { claude: true, codex: true },
+      isPending: false,
+    };
+    rerenderApp();
+    expect(sidebarApp("Codex")).toBeInTheDocument();
+
+    availabilityMocks.state = {
+      installedApps: { claude: false, codex: true },
+      isPending: false,
+    };
+    rerenderApp();
+    await waitFor(() =>
+      expect(screen.getByTestId("provider-list")).toHaveTextContent("codex-1"),
+    );
+    expect(
+      within(document.querySelector("nav") as HTMLElement).queryByRole(
+        "button",
+        { name: "Claude Code", hidden: true },
+      ),
+    ).not.toBeInTheDocument();
+    expect(getSettings().visibleApps).toEqual(originalVisibility);
+  });
+
+  it("routes tray add for an unavailable Agent to Apps without opening a provider form", async () => {
+    availabilityMocks.state = {
+      installedApps: { claude: true, codex: false },
+      isPending: false,
+    };
+    const { default: App } = await import("@/App");
+    renderApp(App);
+    await waitFor(() =>
+      expect(screen.getByTestId("provider-list")).toHaveTextContent("claude-1"),
+    );
+    server.use(
+      http.post("http://tauri.local/take_tray_navigation", () =>
+        HttpResponse.json({ app: "codex", intent: "add" }),
+      ),
+    );
+    emitTauriEvent("tray-navigate", {});
+    expect(
+      await screen.findByTestId("agent-management-page"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("add-provider-dialog")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("provider-list")).not.toBeInTheDocument();
+  });
+
+  it("keeps an unavailable Agent draft after cancelling navigation and saves it to the original Agent", async () => {
+    availabilityMocks.state = {
+      installedApps: { claude: true, codex: true },
+      isPending: false,
+    };
+    const originalCodex = getProviders("codex");
+    const { default: App } = await import("@/App");
+    const { rerenderApp } = renderApp(App);
+    await waitFor(() =>
+      expect(screen.getByTestId("provider-list")).toHaveTextContent("claude-1"),
+    );
+    fireEvent.click(screen.getByText("edit"));
+    fireEvent.input(await screen.findByLabelText("edit-field"), {
+      target: { value: "draft" },
+    });
+
+    availabilityMocks.state = {
+      installedApps: { claude: false, codex: true },
+      isPending: false,
+    };
+    rerenderApp();
+    expect(await screen.findByTestId("confirm-message")).toHaveTextContent(
+      "common.unsavedLeaveMessage",
+    );
+    fireEvent.click(screen.getByText("cancel-delete"));
+    availabilityMocks.state = {
+      installedApps: {
+        claude: false,
+        "claude-desktop": true,
+        codex: true,
+        gemini: true,
+      },
+      isPending: false,
+    };
+    rerenderApp();
+    expect(screen.queryByTestId("confirm-dialog")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("edit-field")).toHaveValue("draft");
+    expect(screen.getByTestId("provider-list")).toHaveTextContent("claude-1");
+
+    fireEvent.click(screen.getByText("confirm-edit"));
+    await waitFor(() =>
+      expect(getProviders("claude")["claude-1"].name).toMatch(/-edited$/),
+    );
+    expect(getProviders("codex")).toEqual(originalCodex);
+    expect(screen.queryByTestId("confirm-dialog")).not.toBeInTheDocument();
   });
 
   it("covers basic provider flows via real hooks", async () => {
@@ -342,6 +547,53 @@ describe("App integration with MSW", () => {
     });
 
     await waitFor(() => expect(modeRequests).toBeGreaterThan(before));
+  });
+
+  it("opens Agent management directly from the sidebar and keeps Profile visible despite the legacy hidden preference", async () => {
+    setSettings({ showProfileSwitcher: false });
+    const originalVisibility = getSettings().visibleApps;
+    const { default: App } = await import("@/App");
+    renderApp(App);
+    const profileContext = await screen.findByTestId("profile-context");
+    expect(profileContext.closest("header")).toBeNull();
+    expect(
+      screen.getByRole("heading", {
+        name: "profiles.connections.title",
+        hidden: true,
+      }),
+    ).toBeInTheDocument();
+    const manage = sidebarApp("nav.apps");
+    expect(manage.closest("[data-agent-management-nav]")).not.toBeNull();
+    fireEvent.click(manage);
+    expect(
+      await screen.findByTestId("agent-management-page"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("profile-context")).toBeNull();
+    fireEvent.click(sidebarApp("Claude Code"));
+    expect(await screen.findByTestId("profile-context")).toBeInTheDocument();
+    expect(getSettings().visibleApps).toEqual(originalVisibility);
+  });
+
+  it("confirms unsaved edits before opening Agent management", async () => {
+    const { default: App } = await import("@/App");
+    renderApp(App);
+    await screen.findByTestId("provider-list");
+    fireEvent.click(screen.getByText("edit"));
+    fireEvent.input(screen.getByLabelText("edit-field"), {
+      target: { value: "draft" },
+    });
+    fireEvent.click(sidebarApp("nav.apps"));
+    expect(await screen.findByTestId("confirm-message")).toHaveTextContent(
+      "common.unsavedLeaveMessage",
+    );
+    fireEvent.click(screen.getByText("cancel-delete"));
+    expect(screen.getByLabelText("edit-field")).toHaveValue("draft");
+    expect(screen.queryByTestId("agent-management-page")).toBeNull();
+    fireEvent.click(sidebarApp("nav.apps"));
+    fireEvent.click(await screen.findByText("confirm-delete"));
+    expect(
+      await screen.findByTestId("agent-management-page"),
+    ).toBeInTheDocument();
   });
 
   it("resets provider view scroll when switching apps", async () => {
@@ -570,7 +822,7 @@ describe("App integration with MSW", () => {
     const { default: App } = await import("@/App");
     renderApp(App);
 
-    fireEvent.click(sidebarApp("OpenClaw"));
+    fireEvent.click(await waitFor(() => sidebarApp("OpenClaw")));
 
     await waitFor(() =>
       expect(screen.getByTestId("provider-list").textContent).toContain(
@@ -973,7 +1225,7 @@ describe("App integration with MSW", () => {
     const { default: App } = await import("@/App");
     renderApp(App);
 
-    fireEvent.click(sidebarApp("OpenClaw"));
+    fireEvent.click(await waitFor(() => sidebarApp("OpenClaw")));
 
     await waitFor(() =>
       expect(screen.getByTestId("provider-list").textContent).toContain(
@@ -1010,7 +1262,7 @@ describe("App integration with MSW", () => {
     const { default: App } = await import("@/App");
     renderApp(App);
 
-    fireEvent.click(sidebarApp("OpenClaw"));
+    fireEvent.click(await waitFor(() => sidebarApp("OpenClaw")));
     // 首次启动提示是模态对话框，页面其余部分是 aria-hidden，所以带上 hidden
     const openclawTabs = await screen.findByRole("tablist", {
       name: "OpenClaw",
@@ -1099,6 +1351,7 @@ describe("App integration with MSW", () => {
     setSettings({ useAppWindowControls: true });
     const { default: App } = await import("@/App");
     const { unmount } = renderApp(App);
+    await screen.findByTestId("provider-list");
     const header = document.querySelector("header")!;
     header.style.setProperty("cursor", "help", "important");
     const x = window.innerWidth;
@@ -1155,6 +1408,7 @@ describe("App integration with MSW", () => {
     setSettings({ useAppWindowControls: true });
     const { default: App } = await import("@/App");
     renderApp(App);
+    await screen.findByTestId("provider-list");
     const header = document.querySelector("header")!;
     await waitFor(() => {
       fireEvent.mouseMove(header, { clientX: 500, clientY: 1 });
@@ -1216,6 +1470,7 @@ describe("App integration with MSW", () => {
     setSettings({ useAppWindowControls: true });
     const { default: App } = await import("@/App");
     renderApp(App);
+    await screen.findByTestId("provider-list");
     const header = document.querySelector("header")!;
     const moveToEdge = () =>
       fireEvent.mouseMove(header, { clientX: 500, clientY: 1 });

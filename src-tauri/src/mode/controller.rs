@@ -59,6 +59,39 @@ fn err(error: impl std::fmt::Display) -> String {
     error.to_string()
 }
 
+/// A mode write changed the effective configuration outside explicit Profile application.
+fn clear_applied_profile(state: &AppState, app: &AppType) -> Result<(), String> {
+    if !matches!(
+        app,
+        AppType::Claude | AppType::Codex | AppType::ClaudeDesktop
+    ) || state
+        .db
+        .get_current_profile_id(app.as_str())
+        .map_err(err)?
+        .is_none()
+    {
+        return Ok(());
+    }
+    state
+        .db
+        .set_current_profile_id(app.as_str(), None)
+        .map_err(err)?;
+    // Controller calls can originate from the tray or background recovery rather than a UI mutation.
+    if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+        let service = state.proxy_service.clone();
+        let app_type = app.as_str().to_string();
+        runtime.spawn(async move {
+            service
+                .emit(
+                    "profile-application-cleared",
+                    json!({ "appType": app_type }),
+                )
+                .await;
+        });
+    }
+    Ok(())
+}
+
 fn provider(state: &AppState, app: &AppType, id: &str) -> Result<Option<Provider>, String> {
     state.db.get_provider_by_id(id, app).map_err(err)
 }
@@ -385,6 +418,42 @@ async fn write_proxy(
     mut target: ModeState,
     next_stack: Option<StackState>,
 ) -> Result<bool, String> {
+    let applied_payload = if op_name == op::ATTACH {
+        state
+            .db
+            .get_current_profile_id(app.as_str())
+            .map_err(err)?
+            .map(|id| state.db.get_profile(&id))
+            .transpose()
+            .map_err(err)?
+            .flatten()
+            .filter(|profile| profile.project_path.is_none())
+            .map(|profile| {
+                serde_json::from_str::<crate::services::profile::ProfilePayload>(&profile.payload)
+            })
+            .transpose()
+            .map_err(err)?
+            .filter(|payload| {
+                payload
+                    .providers
+                    .get(app)
+                    .and_then(Option::as_deref)
+                    .is_none_or(|id| id == route.id)
+            })
+    } else {
+        None
+    };
+    let restored_route = if op_name == op::ATTACH {
+        Some(
+            crate::services::profile::ProfileService::effective_provider_for_applied_profile(
+                state, app, route,
+            )
+            .map_err(err)?,
+        )
+    } else {
+        None
+    };
+    let route = restored_route.as_ref().unwrap_or(route);
     let (proxy_url, codex_base_url) = state.proxy_service.build_proxy_urls().await?;
     // 改用 CC Switch 的目录时契约可能没变（指针只在 live 里），也要重写。
     let force = op_name == op::ATTACH || op_name == op::CATALOG;
@@ -408,13 +477,45 @@ async fn write_proxy(
                 .filter(|member| !member.route)
                 .map(|member| &member.provider)
                 .collect();
-            let (projection, contract) = claude_contract(
+            let (mut projection, mut contract) = claude_contract(
                 route,
                 &proxy_url,
                 &published,
                 stack_default.as_ref(),
                 &others,
             );
+            if let Some(payload) = &applied_payload {
+                // Profile apply writes explicit model overrides. Stable route aliases
+                // would instead resolve through the provider's older model defaults.
+                if payload.models.claude.is_some() {
+                    match route
+                        .settings_config
+                        .get("env")
+                        .and_then(|env| env.get("ANTHROPIC_MODEL"))
+                    {
+                        Some(model) => {
+                            projection
+                                .env
+                                .insert("ANTHROPIC_MODEL".into(), model.clone());
+                        }
+                        None => {
+                            projection.env.shift_remove("ANTHROPIC_MODEL");
+                        }
+                    }
+                }
+                if let Some(settings) = &payload.model_settings.claude {
+                    for (key, value) in settings {
+                        if value.is_empty() {
+                            projection.env.shift_remove(key);
+                        } else {
+                            projection
+                                .env
+                                .insert(key.clone(), Value::String(value.clone()));
+                        }
+                    }
+                }
+                contract = contract::claude(&projection);
+            }
             let unchanged = !force && live_now.has_contract(&contract.key);
             let mut patch = direct_patch(live_now.claude_exclusive_owner().as_ref(), &projection);
             crate::services::provider::claude_official::strip_from_patch(&mut patch);
@@ -514,6 +615,9 @@ async fn write_proxy(
         }
         _ => return Err(format!("{} 不支持本地路由", app.as_str())),
     };
+    if !unchanged && op_name != op::ATTACH {
+        clear_applied_profile(state, app)?;
+    }
     Ok(!unchanged)
 }
 
@@ -624,6 +728,9 @@ fn write_direct(
             claude_desktop_config::run(&state.db, op_name, write, pending_target).map_err(err)?;
         }
         _ => return Err(format!("{} 不支持本地路由", app.as_str())),
+    }
+    if op_name == op::EXIT {
+        clear_applied_profile(state, app)?;
     }
     Ok(())
 }
@@ -952,6 +1059,9 @@ fn exit_locked(state: &AppState, app: &AppType, keep_mode: bool) -> Result<(), S
     let op_name = if keep_mode { op::DETACH } else { op::EXIT };
     let was_stack = settled_stack(app).is_ok_and(|stack| stack.enabled);
     let result = write_direct_for_exit(state, app, op_name, keep_mode, &mode);
+    if result.is_ok() && !keep_mode {
+        clear_applied_profile(state, app)?;
+    }
     match &result {
         Ok(()) => log::info!(
             "[MODE] {} {op_name}：{} → {}，客户端配置写回直连供应商 {}",
@@ -1139,6 +1249,9 @@ pub async fn switch_route_locked(
         );
     }
     state.proxy_service.set_active_target(app, target).await;
+    if !mode.routes_to(&target.id) {
+        clear_applied_profile(state, app)?;
+    }
     Ok(RouteSwitchResult {
         kind: if !mode.attached {
             RouteSwitchKind::Remembered
@@ -1732,6 +1845,7 @@ pub async fn record_failover_route(
         },
     )?;
     state.proxy_service.set_active_target(app, &target).await;
+    clear_applied_profile(state, app)?;
     Ok(true)
 }
 

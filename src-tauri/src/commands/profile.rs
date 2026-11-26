@@ -6,7 +6,7 @@ use tauri::{Emitter, State};
 
 use super::run_db_task;
 use crate::database::Profile;
-use crate::services::profile::{ProfilePayload, ProfileScope, ProfileService};
+use crate::services::profile::{ProfileConfig, ProfilePayload, ProfileScope, ProfileService};
 use crate::services::project_profile::{
     ConflictResolution, ProjectDeployResult, ProjectProfileService,
 };
@@ -20,6 +20,8 @@ pub struct ProfileDto {
     pub payload: ProfilePayload,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_path: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub deployed_scopes: Vec<ProfileScope>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -41,6 +43,7 @@ impl From<Profile> for ProfileDto {
             name: profile.name,
             payload,
             project_path: profile.project_path,
+            deployed_scopes: Vec::new(),
             created_at: profile.created_at,
             updated_at: profile.updated_at,
         }
@@ -61,6 +64,32 @@ pub struct CurrentProfileIds {
 pub struct ProfilesResponse {
     pub profiles: Vec<ProfileDto>,
     pub current_ids: CurrentProfileIds,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileMigrationResult {
+    profiles: Vec<ProfileDto>,
+    warnings: Vec<String>,
+    ready: bool,
+}
+
+#[tauri::command]
+pub async fn migrate_legacy_agent_profiles(
+    state: State<'_, AppState>,
+    scope: String,
+) -> Result<ProfileMigrationResult, String> {
+    let scope = ProfileScope::parse(&scope)?;
+    profile_mutation(&state, move |state| {
+        ProfileService::migrate_legacy_agent_profiles(state, scope).map(|(profiles, warnings)| {
+            ProfileMigrationResult {
+                profiles: profiles.into_iter().map(ProfileDto::from).collect(),
+                ready: warnings.is_empty(),
+                warnings,
+            }
+        })
+    })
+    .await
 }
 
 /// Profile 应用完成后的统一收尾：发事件 + 重建托盘菜单
@@ -126,7 +155,15 @@ fn list_profiles_blocking(state: &AppState) -> Result<ProfilesResponse, String> 
             .get_current_profile_id(ProfileScope::Codex.as_str())?,
     };
     Ok(ProfilesResponse {
-        profiles: profiles.into_iter().map(ProfileDto::from).collect(),
+        profiles: profiles
+            .into_iter()
+            .map(|profile| {
+                let deployed_scopes = ProjectProfileService::deployed_scopes(&profile);
+                let mut dto = ProfileDto::from(profile);
+                dto.deployed_scopes = deployed_scopes;
+                dto
+            })
+            .collect(),
         current_ids,
     })
 }
@@ -161,6 +198,45 @@ pub async fn create_profile(
     .await
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectImportResult {
+    profile: ProfileDto,
+    warnings: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn import_project_profile(
+    state: State<'_, AppState>,
+    name: String,
+    scope: String,
+    project_path: String,
+) -> Result<ProjectImportResult, String> {
+    let scope = ProfileScope::parse(&scope)?;
+    profile_mutation(&state, move |state| {
+        ProjectProfileService::import_from_project(state, &name, scope, &project_path).map(
+            |(profile, warnings)| ProjectImportResult {
+                profile: profile.into(),
+                warnings,
+            },
+        )
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn duplicate_profile(
+    state: State<'_, AppState>,
+    source_id: String,
+    name: String,
+    project_path: Option<String>,
+) -> Result<ProfileDto, String> {
+    profile_mutation(&state, move |state| {
+        ProfileService::duplicate(state, &source_id, &name, project_path).map(ProfileDto::from)
+    })
+    .await
+}
+
 #[tauri::command]
 pub async fn update_profile(
     state: State<'_, AppState>,
@@ -185,6 +261,21 @@ pub async fn set_profile_project_path(
 ) -> Result<ProfileDto, String> {
     profile_mutation(&state, move |state| {
         ProfileService::set_project_path(state, &id, project_path).map(ProfileDto::from)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn update_profile_config(
+    state: State<'_, AppState>,
+    id: String,
+    scope: String,
+    config: ProfileConfig,
+    name: Option<String>,
+) -> Result<ProfileDto, String> {
+    let scope = ProfileScope::parse(&scope)?;
+    profile_mutation(&state, move |state| {
+        ProfileService::update_config(state, &id, scope, config, name).map(ProfileDto::from)
     })
     .await
 }

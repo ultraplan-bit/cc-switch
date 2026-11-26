@@ -1652,7 +1652,7 @@ fn pi_install_conflict_is_rejected_before_persisting() {
         .join("test-skill");
     write_skill(&pi_skill, "external");
 
-    let result = SkillService::persist_and_sync_new_skill(&db, &skill, &AppType::Pi);
+    let result = SkillService::persist_and_sync_new_skill(&db, &skill, Some(&AppType::Pi));
 
     assert!(result.is_err());
     assert!(db
@@ -1824,7 +1824,7 @@ fn kimi_and_workbuddy_skill_enable_rejects_external_directory_without_changing_f
         write_skill(&native, "external");
         let original = fs::read(native.join("SKILL.md")).unwrap();
         skill.apps.set_enabled_for(&app, true);
-        assert!(SkillService::persist_and_sync_new_skill(&db, &skill, &app).is_err());
+        assert!(SkillService::persist_and_sync_new_skill(&db, &skill, Some(&app)).is_err());
         assert!(db.get_installed_skill(&skill.id).unwrap().is_none());
         skill.apps.set_enabled_for(&app, false);
         db.save_skill(&skill).unwrap();
@@ -3061,7 +3061,7 @@ fn restore_from_backup_rejects_traversal_directory_in_metadata() {
     .expect("write meta.json");
 
     let db = std::sync::Arc::new(Database::memory().expect("memory db"));
-    let result = SkillService::restore_from_backup(&db, backup_id, &AppType::Claude);
+    let result = SkillService::restore_from_backup(&db, backup_id, Some(&AppType::Claude));
 
     assert!(
         result.is_err(),
@@ -4106,6 +4106,172 @@ fn build_skills_zip(dirs: &[&str]) -> Vec<u8> {
     buf
 }
 
+#[tokio::test]
+#[serial_test::serial]
+async fn library_only_repo_install_preserves_existing_agent_preferences() {
+    let home = tempdir().unwrap();
+    let home_guard = TestHomeGuard::set(home.path());
+    let _storage = StorageLocationGuard::set(&home_guard, SkillStorageLocation::CcSwitch);
+    let db = Arc::new(Database::memory().unwrap());
+    let repository = tempdir().unwrap();
+    write_skill(&repository.path().join("demo"), "demo");
+    let service = SkillService {
+        repo_fixture: Some(repository.path().to_path_buf()),
+        ..SkillService::new()
+    };
+    let discovered = DiscoverableSkill {
+        key: "owner/repo:demo".to_string(),
+        name: "demo".to_string(),
+        description: String::new(),
+        directory: "demo".to_string(),
+        readme_url: None,
+        repo_host: GITHUB_HOST.to_string(),
+        repo_owner: "owner".to_string(),
+        repo_name: "repo".to_string(),
+        repo_branch: "main".to_string(),
+    };
+    let mut installed = service.install(&db, &discovered, None).await.unwrap();
+    assert!(installed.apps.is_empty());
+    assert!(SkillService::get_ssot_dir()
+        .unwrap()
+        .join("demo/SKILL.md")
+        .is_file());
+    assert!(!home.path().join(".claude/skills/demo").exists());
+    assert!(!home.path().join(".codex/skills/demo").exists());
+
+    installed.apps.codex = true;
+    db.save_skill(&installed).unwrap();
+    let reused = service.install(&db, &discovered, None).await.unwrap();
+    assert!(reused.apps.codex);
+    assert!(!reused.apps.claude);
+    assert!(!home.path().join(".codex/skills/demo").exists());
+}
+
+#[test]
+#[serial_test::serial]
+fn library_only_zip_and_backup_restore_do_not_project_to_agents() {
+    let home = tempdir().unwrap();
+    let home_guard = TestHomeGuard::set(home.path());
+    let _storage = StorageLocationGuard::set(&home_guard, SkillStorageLocation::CcSwitch);
+    let db = Arc::new(Database::memory().unwrap());
+    let zip_path = home.path().join("library.zip");
+    fs::write(&zip_path, build_skills_zip(&["library-demo"])).unwrap();
+    let result = SkillService::install_from_zip(&db, &zip_path, None).unwrap();
+    assert_eq!(result.installed.len(), 1);
+    assert!(result.installed[0].apps.is_empty());
+    let backup_id = "20261126_120000_library";
+    let backup_dir = SkillService::get_backup_dir().unwrap().join(backup_id);
+    write_skill(&backup_dir.join("skill"), "backup-demo");
+    let mut original = poisoned_skill("local:backup-demo", "backup-demo");
+    original.apps.claude = true;
+    let metadata = SkillBackupMetadata {
+        skill: original,
+        backup_created_at: 0,
+        source_path: "unused".to_string(),
+    };
+    fs::write(
+        backup_dir.join("meta.json"),
+        serde_json::to_vec(&metadata).unwrap(),
+    )
+    .unwrap();
+    let restored = SkillService::restore_from_backup(&db, backup_id, None).unwrap();
+    assert!(restored.apps.is_empty());
+    for directory in ["library-demo", "backup-demo"] {
+        assert!(SkillService::get_ssot_dir()
+            .unwrap()
+            .join(directory)
+            .join("SKILL.md")
+            .is_file());
+        assert!(!home.path().join(".claude/skills").join(directory).exists());
+        assert!(!home.path().join(".codex/skills").join(directory).exists());
+    }
+}
+
+#[test]
+#[serial_test::serial]
+fn project_skill_import_reuses_contents_and_preserves_name_conflicts() {
+    let home = tempdir().unwrap();
+    let home_guard = TestHomeGuard::set(home.path());
+    let _storage = StorageLocationGuard::set(&home_guard, SkillStorageLocation::CcSwitch);
+    let db = Arc::new(Database::memory().unwrap());
+    let source = home.path().join("project/.agents/skills/demo");
+    write_skill(&source, "first");
+    let (first, created) = SkillService::import_from_project(&db, &source).unwrap();
+    assert!(created);
+    assert!(first.apps.is_empty());
+    let (same, created) = SkillService::import_from_project(&db, &source).unwrap();
+    assert!(!created);
+    assert_eq!(same.id, first.id);
+
+    fs::write(source.join("SKILL.md"), "second").unwrap();
+    let (second, created) = SkillService::import_from_project(&db, &source).unwrap();
+    assert!(created);
+    assert_ne!(first.directory, second.directory);
+    assert!(fs::read_to_string(
+        SkillService::get_ssot_dir()
+            .unwrap()
+            .join(&first.directory)
+            .join("SKILL.md")
+    )
+    .unwrap()
+    .contains("first"));
+    assert_eq!(
+        fs::read_to_string(source.join("SKILL.md")).unwrap(),
+        "second"
+    );
+    let (same_second, created) = SkillService::import_from_project(&db, &source).unwrap();
+    assert!(!created);
+    assert_eq!(same_second.id, second.id);
+    assert!(!home.path().join(".claude/skills/demo").exists());
+}
+
+#[test]
+#[serial_test::serial]
+fn project_skill_import_rollback_preserves_hidden_file_edits_and_enabling() {
+    let home = tempdir().unwrap();
+    let home_guard = TestHomeGuard::set(home.path());
+    let _storage = StorageLocationGuard::set(&home_guard, SkillStorageLocation::CcSwitch);
+    let db = Arc::new(Database::memory().unwrap());
+    let source = home.path().join("project/demo");
+    write_skill(&source, "demo");
+    let original_hash = crate::services::project_profile::hash_tree(&source, true).unwrap();
+    let (imported, created) = SkillService::import_from_project(&db, &source).unwrap();
+    assert!(created);
+    let destination = SkillService::get_ssot_dir()
+        .unwrap()
+        .join(&imported.directory);
+    fs::write(destination.join(".keep"), "edited").unwrap();
+    assert!(SkillService::rollback_project_import(&db, &imported, &original_hash).is_err());
+    assert!(destination.join(".keep").is_file());
+    fs::remove_file(destination.join(".keep")).unwrap();
+    let mut enabled = imported.clone();
+    enabled.apps.claude = true;
+    db.save_skill(&enabled).unwrap();
+    assert!(SkillService::rollback_project_import(&db, &imported, &original_hash).is_err());
+    db.save_skill(&imported).unwrap();
+    SkillService::rollback_project_import(&db, &imported, &original_hash).unwrap();
+    assert!(!destination.exists());
+    assert!(source.join("SKILL.md").is_file());
+    assert!(db.get_installed_skill(&imported.id).unwrap().is_none());
+}
+
+#[cfg(unix)]
+#[test]
+#[serial_test::serial]
+fn project_skill_import_rejects_symlinks_outside_the_project() {
+    let home = tempdir().unwrap();
+    let home_guard = TestHomeGuard::set(home.path());
+    let _storage = StorageLocationGuard::set(&home_guard, SkillStorageLocation::CcSwitch);
+    let db = Arc::new(Database::memory().unwrap());
+    let source = home.path().join("project/demo");
+    write_skill(&source, "demo");
+    let outside = home.path().join("outside");
+    fs::write(&outside, "private").unwrap();
+    std::os::unix::fs::symlink(&outside, source.join("linked")).unwrap();
+    assert!(SkillService::import_from_project(&db, &source).is_err());
+    assert!(db.get_all_installed_skills().unwrap().is_empty());
+}
+
 /// #3749：ZIP 里和已安装 Skill 同名的被跳过时要如实返回，而不是让界面说「ZIP 中没有技能」。
 #[test]
 #[serial_test::serial]
@@ -4120,8 +4286,8 @@ fn install_from_zip_reports_skills_skipped_for_taken_directory() {
     let zip_path = home.path().join("team.zip");
     fs::write(&zip_path, build_skills_zip(&["My-Helper", "fresh"])).expect("write zip");
 
-    let result =
-        SkillService::install_from_zip(&db, &zip_path, &AppType::Claude).expect("install from zip");
+    let result = SkillService::install_from_zip(&db, &zip_path, Some(&AppType::Claude))
+        .expect("install from zip");
 
     assert_eq!(
         result
@@ -4143,7 +4309,7 @@ fn install_from_zip_reports_skills_skipped_for_taken_directory() {
     // 全部同名：不再报错，安装列表为空、跳过列表如实给出
     let only_taken = home.path().join("taken.zip");
     fs::write(&only_taken, build_skills_zip(&["fresh"])).expect("write zip");
-    let result = SkillService::install_from_zip(&db, &only_taken, &AppType::Claude)
+    let result = SkillService::install_from_zip(&db, &only_taken, Some(&AppType::Claude))
         .expect("all-skipped ZIP is not an error");
     assert!(result.installed.is_empty());
     assert_eq!(result.skipped.len(), 1);

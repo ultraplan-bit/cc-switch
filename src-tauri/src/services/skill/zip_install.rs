@@ -15,7 +15,7 @@ impl SkillService {
     pub fn install_from_zip(
         db: &Arc<Database>,
         zip_path: &Path,
-        current_app: &AppType,
+        current_app: Option<&AppType>,
     ) -> Result<ZipInstallResult> {
         // 解压到临时目录
         let temp_guard = Self::extract_local_zip(zip_path)?;
@@ -117,7 +117,9 @@ impl SkillService {
                 None => (install_name.clone(), None),
             };
 
-            Self::preflight_install_destination(&skill_dir, &install_name, current_app)?;
+            if let Some(app) = current_app {
+                Self::preflight_install_destination(&skill_dir, &install_name, app)?;
+            }
 
             // 复制到 SSOT
             let dest = ssot_dir.join(&install_name);
@@ -140,7 +142,7 @@ impl SkillService {
                 repo_name: None,
                 repo_branch: None,
                 readme_url: None,
-                apps: SkillApps::only(current_app),
+                apps: current_app.map(SkillApps::only).unwrap_or_default(),
                 installed_at: chrono::Utc::now().timestamp(),
                 content_hash,
                 updated_at: 0,

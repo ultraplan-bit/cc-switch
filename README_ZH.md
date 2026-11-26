@@ -118,14 +118,14 @@ paru -S cc-switch-bin
 3. **生效方式**：Claude Code 无需重启；Codex、Gemini CLI、Grok Build 需重启终端或对应的 CLI 工具；Claude Desktop 需重启应用本身（详见常见问题）
 4. **恢复官方登录**：切换到列表中自带的官方供应商（如“Claude Official”），重启工具后按照其登录/OAuth 流程操作
 5. **路由与聚合（可选）**：Claude Code、Codex、Gemini CLI、Grok Build 的页面顶部有「直连 / 路由」标签，Claude Code 和 Codex 还有「聚合」。点标签只是切换查看的内容，不会改动配置；真正切换要点页面上的“开始路由”或“切换到聚合模式”，回到直连点“回到直连”。想在 Claude Code 里使用 OpenAI 或 Gemini 格式的供应商，或在 Codex 里使用 Claude，用路由；想在同一个模型列表里混用多家供应商的模型，用聚合
-6. **管理工具**：侧栏的「应用」页集中显示每个 AI 编程工具的版本、安装位置和来源，可以安装、升级或全部升级，也可以选择哪些工具显示在侧栏
+6. **管理工具**：侧栏的「Agent 管理」集中显示各工具的版本、安装位置和来源，复用现有安装、升级、卸载和复查流程。配置侧栏只显示已检测安装且显示开关开启的 Agent；未安装时可从 Agent 管理页安装，Claude Desktop、WorkBuddy 提供官网入口。Claude Code、Codex 的“配置项目”可在安装前准备 Profile；安装后复查通过，再手动部署。
 
 ### MCP、提示词、Skills、项目与会话
 
 - **MCP**：点击侧栏的“MCP” → 通过模板或自定义配置添加服务器（或“导入已有”）→ 切换各工具的同步开关
 - **提示词**：点击侧栏的“提示词” → 使用 Markdown 编辑器创建提示词 → 启用后写入该工具的提示词文件
-- **Skills**：点击侧栏的“Skills” →“发现技能” → 搜索 skills.sh 或浏览 GitHub 仓库 → 一键安装到支持的工具
-- **项目**：先在「设置 → 通用」里打开“显示项目切换”，然后在 Claude Code、Claude Desktop 或 Codex 页面，打开顶部的项目切换器 →“新建项目”，把当前配置保存下来，之后从切换器里选择即可整套切换
+- **Skills**：点击侧栏的“Skills” →“发现技能” → 搜索 skills.sh 或浏览 GitHub 仓库 → 选择目标 Agent，或选择“仅保存到资源库”。ZIP 导入与备份恢复沿用同一目标选择；存储位置为 `~/.agents/skills` 时，仍遵循 Agent 的原生自动发现规则。
+- **Profile 与项目**：Claude Code/Codex 页头下方提供固定 Profile 入口，也可从「Agent 管理 → 配置项目」提前准备。Profile 统一编辑模型、行为、MCP、Skills 和指令；API 地址、密钥和账号引用供应商连接库。已有配置会保留源记录并迁入 Profile，支持从项目原生配置导入。保存后手动应用或部署，项目更新采用手动覆盖，不持续追踪或自动同步。Claude Desktop 支持全局连接引用与策略配置，模型路由保留原有管理能力。详见[项目级 Agent Profile](docs/project-agent-profiles-zh.md)。
 - **会话**：点击侧栏的“会话” → 浏览、搜索会话历史，打开阅读页，或恢复各工具的会话
 - **授权中心**：点击侧栏的“授权中心”，登录 GitHub Copilot、ChatGPT、xAI（Grok）、Kimi Code 账号，把订阅当作供应商使用。Kimi Code 支持同时保存多个官方账号，每个账号使用独立凭据和原生供应商，首个登录沿用 Kimi 原生默认凭据槽位，在此添加、重新登录和退出账号。仍在原生配置中的 Kimi 官方 OAuth 节点在供应商页受到保护；原生节点被移除后，可以删除留下的档案。
 
@@ -166,7 +166,7 @@ paru -S cc-switch-bin
 
 - **90+ 供应商预设** — 选择预设、填入 Key 即可添加，也可以创建自定义配置。添加面板支持按中文名和域名搜索，同一家的不同套餐和地区合并成一行
 - **只改关键字段** — 切换时只替换请求地址、Key、模型等连接信息，插件、Hook、MCP、你自己加的设置和注释都原样保留；编辑器底部显示切换后配置文件的样子，CC Switch 第一次改写配置文件前会自动备份原文件
-- **项目** — 把 Claude Code 或 Codex 当前的供应商、MCP、Skills 和提示词文件保存为一个项目（Claude Desktop 只保存供应商），之后在页面顶部的项目切换器或托盘里一键整套切换；切到其他项目时，当前状态会自动存回原项目。项目切换器默认隐藏，在「设置 → 通用」里打开“显示项目切换”
+- **项目** — Claude Code、Codex 支持原生项目导入、独立模型/行为/资源编辑、重命名、复制、改绑、解绑及删除 Profile；查看选择按 Agent 持久保存，返回编辑页外时保护未保存草稿。保存与手动部署分开，部署复用冲突处理及失败恢复；导入的原样未托管文件不因后来取消引用被删除。项目资源继续遵循原生作用域与继承规则，不自动同步。Claude Desktop 仅支持全局 Profile，其他 Agent 的项目适配尚未扩展。
 - **授权中心（Beta）** — 在侧栏的「授权中心」里登录多个 GitHub Copilot、ChatGPT、xAI（Grok）账号，把订阅当作供应商用在 Claude Code、Claude Desktop 和 Codex 中（除 Codex 的 OpenAI Official 外，都需要在路由模式下使用）。在官方客户端以外使用订阅可能违反厂商的服务条款，请自行评估风险
 - **Claude Desktop 接入第三方** — 可以直连 Anthropic 兼容端点；非 Claude 模型选“模型映射”，经本地路由把 Sonnet、Opus、Haiku 等档位映射到供应商的实际模型
 - **通用供应商** — 一份配置同步到 Claude Code、Codex 和 Gemini CLI

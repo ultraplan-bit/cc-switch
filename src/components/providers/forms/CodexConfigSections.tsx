@@ -99,6 +99,7 @@ export const CodexAuthSection: React.FC<CodexAuthSectionProps> = ({
 interface CodexConfigSectionProps {
   value: string;
   onChange: (value: string) => void;
+  context?: "provider" | "profile";
   providerName?: string;
   showRemoteCompaction?: boolean;
   configError?: string;
@@ -113,6 +114,7 @@ interface CodexConfigSectionProps {
 export const CodexConfigSection: React.FC<CodexConfigSectionProps> = ({
   value,
   onChange,
+  context = "provider",
   providerName,
   showRemoteCompaction = true,
   configError,
@@ -252,7 +254,7 @@ export const CodexConfigSection: React.FC<CodexConfigSectionProps> = ({
         </label>
 
         <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
-          {showRemoteCompaction && (
+          {showRemoteCompaction && context !== "profile" && (
             <label
               className="inline-flex cursor-pointer items-center gap-2 text-sm text-fg-2"
               title={t("codexConfig.remoteCompactionHint")}
@@ -270,38 +272,43 @@ export const CodexConfigSection: React.FC<CodexConfigSectionProps> = ({
       </div>
 
       <p className="text-xs text-fg-2">
-        {t("codexConfig.keyFieldsHint", {
-          defaultValue:
-            "地址、Key、模型、推理档位、上下文窗口和兼容开关随供应商切换；其余是 Codex 全局设置，保存后对所有供应商生效。",
-        })}
+        {context === "profile"
+          ? t("profiles.editor.nativeHint")
+          : t("codexConfig.keyFieldsHint", {
+              defaultValue:
+                "地址、Key、模型、推理档位、上下文窗口和兼容开关随供应商切换；其余是 Codex 全局设置，保存后对所有供应商生效。",
+            })}
       </p>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        <label className="inline-flex items-center gap-2 text-sm text-fg-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={toggleStates.contextWindow1M}
-            onChange={(e) => handleContextWindowToggle(e.target.checked)}
-            className="ui-checkbox"
-          />
-          <span>{t("codexConfig.contextWindow1M")}</span>
-        </label>
-        <label className="inline-flex items-center gap-2 text-sm text-fg-2">
-          <span>{t("codexConfig.autoCompactLimit")}:</span>
-          <input
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            key={toggleStates.compactLimit}
-            defaultValue={toggleStates.compactLimit}
-            disabled={!toggleStates.contextWindow1M}
-            onChange={(e) => handleCompactLimitChange(e.target.value)}
-            className={cn(fieldClass, "h-7 w-28 px-2")}
-          />
-        </label>
-      </div>
+      {context !== "profile" && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <label className="inline-flex items-center gap-2 text-sm text-fg-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={toggleStates.contextWindow1M}
+              onChange={(e) => handleContextWindowToggle(e.target.checked)}
+              className="ui-checkbox"
+            />
+            <span>{t("codexConfig.contextWindow1M")}</span>
+          </label>
+          <label className="inline-flex items-center gap-2 text-sm text-fg-2">
+            <span>{t("codexConfig.autoCompactLimit")}:</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              key={toggleStates.compactLimit}
+              defaultValue={toggleStates.compactLimit}
+              disabled={!toggleStates.contextWindow1M}
+              onChange={(e) => handleCompactLimitChange(e.target.value)}
+              className={cn(fieldClass, "h-7 w-28 px-2")}
+            />
+          </label>
+        </div>
+      )}
 
       <JsonEditor
+        ariaLabel={t("codexConfig.configToml")}
         value={localValue}
         onChange={handleLocalChange}
         placeholder=""
@@ -327,7 +334,7 @@ export const CodexConfigSection: React.FC<CodexConfigSectionProps> = ({
 
       {configError && <p className="text-xs text-danger-text">{configError}</p>}
 
-      {!configError && (
+      {!configError && context !== "profile" && (
         <p className="text-xs text-fg-2">
           {t(
             isProxyTakeover

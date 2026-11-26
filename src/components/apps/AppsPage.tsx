@@ -1,5 +1,7 @@
 import {
   createContext,
+  lazy,
+  Suspense,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -35,6 +37,7 @@ import {
   ChevronDown,
   Copy,
   Download,
+  FolderCog,
   GripVertical,
   LayoutGrid,
   Loader2,
@@ -50,6 +53,7 @@ import { DEFAULT_VISIBLE_APPS, orderAppIds } from "@/config/appConfig";
 import { useSettings } from "@/hooks/useSettings";
 import { isUpdateAvailable } from "@/lib/version";
 import { cn } from "@/lib/utils";
+import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { HelpTip } from "@/components/ui/help-tip";
@@ -93,6 +97,13 @@ import {
   type ToolLifecycleAction,
   type ToolName,
 } from "./useToolManagement";
+import type { ProjectEnvironmentTarget } from "./ProjectEnvironmentPanel";
+
+const ProjectEnvironmentPanel = lazy(() =>
+  import("./ProjectEnvironmentPanel").then((module) => ({
+    default: module.ProjectEnvironmentPanel,
+  })),
+);
 
 /** 安装来源的显示名：只标认得出的，认不出（system）就不标，免得标错。 */
 const SOURCE_LABEL: Record<string, string> = {
@@ -184,33 +195,34 @@ function formatCheckedAt(timestamp: number, locale: string): string {
 export function AppsPage() {
   const { t, i18n } = useTranslation();
   const tools = useToolManagement();
+  const [projectEnvironment, setProjectEnvironment] =
+    useState<ProjectEnvironmentTarget | null>(null);
   const { settings, updateSettings, autoSaveSettings } = useSettings();
   const tableRef = useRef<HTMLDivElement>(null);
-  const { data: desktopStatus, isPending: isDesktopStatusPending } = useQuery({
-    queryKey: ["claude-desktop-status"],
+  const { data: desktopStatus, refetch: refetchDesktopStatus } = useQuery({
+    queryKey: ["claudeDesktopStatus"],
     queryFn: () => providersApi.getClaudeDesktopStatus(),
     staleTime: 30_000,
+    networkMode: "always",
   });
-  const { data: workbuddyStatus, isPending: isWorkbuddyStatusPending } =
-    useQuery({
-      queryKey: ["config-status", "workbuddy"],
-      queryFn: () => settingsApi.getConfigStatus("workbuddy"),
-      staleTime: 30_000,
-    });
+  const { data: workbuddyStatus, refetch: refetchWorkbuddyStatus } = useQuery({
+    queryKey: ["config-status", "workbuddy"],
+    queryFn: () => settingsApi.getConfigStatus("workbuddy"),
+    staleTime: 30_000,
+    networkMode: "always",
+  });
 
   // 按「已安装 / 未安装」分两组。Claude Desktop 没有命令可探，用后端按数据目录 / 应用包推断的结果。
   // 首次探测还没出结果时不分组，免得各行探完一个跳一个；之后重新检查时沿用上次结果，位置不动。
   const rowInstalled = (row: Row): boolean | null => {
     if (row.kind === "desktop") {
-      return isDesktopStatusPending ? null : Boolean(desktopStatus?.installed);
+      return desktopStatus === undefined ? null : desktopStatus.installed;
     }
     // WorkBuddy 同样没有命令可探，按配置目录（~/.workbuddy）在不在判断
     if (row.kind === "workbuddy") {
-      return isWorkbuddyStatusPending ? null : Boolean(workbuddyStatus?.exists);
+      return workbuddyStatus === undefined ? null : workbuddyStatus.exists;
     }
-    const info = tools.toolVersionByName.get(row.tool);
-    if (!info && tools.isLoadingTools) return null;
-    return isToolPresent(info, tools.installReports?.[row.tool]);
+    return tools.installedTools[row.tool] ?? null;
   };
   // 两组共用一份顺序（拖动后写进设置，侧栏也按它排），每组只是按装没装过滤
   const appOrder = orderAppIds(settings?.appOrder);
@@ -293,12 +305,8 @@ export function AppsPage() {
     ...DEFAULT_VISIBLE_APPS,
     ...settings?.visibleApps,
   };
-  const visibleCount = Object.values(visibleApps).filter(Boolean).length;
-
   const setVisible = (app: AppId, visible: boolean) => {
     if (!settings) return;
-    // 至少留一个应用在侧栏
-    if (!visible && visibleCount <= 1) return;
     const next = { ...visibleApps, [app]: visible };
     const previous = settings.visibleApps;
     updateSettings({ visibleApps: next });
@@ -307,14 +315,34 @@ export function AppsPage() {
     );
   };
 
-  const visibilitySwitch = (app: AppId) => (
-    <Switch
-      size="sm"
-      checked={visibleApps[app]}
-      disabled={!settings || (visibleApps[app] && visibleCount <= 1)}
-      onCheckedChange={(checked) => setVisible(app, checked)}
-      aria-label={t("appsPage.showInSidebar", { name: APP_DISPLAY_NAME[app] })}
-    />
+  const visibilitySwitch = (app: AppId) =>
+    rowInstalled(ROW_BY_APP[app]) === true ? (
+      <Switch
+        size="sm"
+        checked={visibleApps[app]}
+        disabled={!settings}
+        onCheckedChange={(checked) => setVisible(app, checked)}
+        aria-label={t("appsPage.showInSidebar", {
+          name: APP_DISPLAY_NAME[app],
+        })}
+      />
+    ) : null;
+
+  const officialDownload = (url: string) => (
+    <HoverTip content={t("appsPage.manualInstallHint")}>
+      <Button
+        variant="neutral"
+        size="compact"
+        onClick={() => {
+          void settingsApi.openExternal(url).catch(() => {
+            toast.error(t("notifications.openLinkFailed"));
+          });
+        }}
+      >
+        <Download className="h-3.5 w-3.5" aria-hidden />
+        {t("appsPage.officialDownload")}
+      </Button>
+    </HoverTip>
   );
 
   // 检查更新时各工具逐个进入加载，可升级列表会先清零再逐个回来；页头沿用检查前的数，
@@ -371,6 +399,11 @@ export function AppsPage() {
           </span>
         }
         visibility={visibilitySwitch("workbuddy")}
+        action={
+          workbuddyStatus?.exists === false
+            ? officialDownload("https://www.workbuddy.cn/")
+            : undefined
+        }
       />
     ) : row.kind === "desktop" ? (
       <AppRow
@@ -392,6 +425,11 @@ export function AppsPage() {
           </span>
         }
         visibility={visibilitySwitch("claude-desktop")}
+        action={
+          desktopStatus?.supported && desktopStatus.installed === false
+            ? officialDownload("https://claude.com/download")
+            : undefined
+        }
       />
     ) : (
       <ToolRow
@@ -407,6 +445,12 @@ export function AppsPage() {
           }))
         }
         visibility={visibilitySwitch(TOOL_APP_IDS[row.tool])}
+        onConfigureProject={
+          row.tool === "claude" || row.tool === "codex"
+            ? () =>
+                setProjectEnvironment({ tool: row.tool as "claude" | "codex" })
+            : undefined
+        }
       />
     );
 
@@ -418,6 +462,7 @@ export function AppsPage() {
         titleExtra={
           <HelpTip title={t("appsPage.helpTitle")}>
             {t("appsPage.helpBody")}
+            <p className="mt-2">{t("profiles.environment.scopeHint")}</p>
           </HelpTip>
         }
         actions={
@@ -451,7 +496,13 @@ export function AppsPage() {
               variant="neutral"
               size="regular"
               disabled={tools.isLoadingTools || tools.isAnyBusy}
-              onClick={() => void tools.checkForUpdates()}
+              onClick={() =>
+                void Promise.all([
+                  tools.checkForUpdates(),
+                  refetchDesktopStatus(),
+                  refetchWorkbuddyStatus(),
+                ])
+              }
             >
               <RefreshCw
                 className={cn(
@@ -589,6 +640,17 @@ export function AppsPage() {
           ))}
         </div>
       </div>
+
+      {projectEnvironment && (
+        <Suspense fallback={<p role="status">{t("common.loading")}</p>}>
+          <ProjectEnvironmentPanel
+            key={projectEnvironment.tool}
+            target={projectEnvironment}
+            tools={tools}
+            onClose={() => setProjectEnvironment(null)}
+          />
+        </Suspense>
+      )}
 
       <Dialog open={showCommands} onOpenChange={setShowCommands}>
         <DialogContent className="max-w-2xl">
@@ -740,13 +802,15 @@ function ToolRow({
   expanded,
   onToggleExpanded,
   visibility,
+  onConfigureProject,
 }: {
   tool: ToolName;
   tools: ReturnType<typeof useToolManagement>;
-  onUninstall: () => void;
+  onUninstall?: () => void;
   expanded: boolean;
   onToggleExpanded: () => void;
   visibility: React.ReactNode;
+  onConfigureProject?: () => void;
 }) {
   const { t } = useTranslation();
   const info = tools.toolVersionByName.get(tool);
@@ -765,12 +829,13 @@ function ToolRow({
   const isOutdated = isUpdateAvailable(info?.version, info?.latest_version);
   const nodeGap = isOutdated ? info?.update_blocked_by_node : null;
   const broken = Boolean(info?.installed_but_broken);
+  const checkError = tools.toolCheckErrors[tool] || info?.error;
   const isBusy = tools.busyTools.has(tool);
   const busyAction = tools.busyTools.get(tool);
   const canUninstall = isToolPresent(info, report);
   const action: Exclude<ToolLifecycleAction, "uninstall"> | null =
     (busyAction !== "uninstall" ? busyAction : undefined) ??
-    (isVersionLoading || broken
+    (isVersionLoading || broken || checkError
       ? null
       : !info?.version
         ? "install"
@@ -810,7 +875,9 @@ function ToolRow({
       {t("appsPage.notRunnable")}
     </span>
   ) : (
-    <span className="text-caption text-fg-2">{t("common.notInstalled")}</span>
+    <span className="text-caption text-fg-2">
+      {t(checkError ? "common.unknown" : "common.notInstalled")}
+    </span>
   );
 
   const actionButton = action ? (
@@ -927,8 +994,8 @@ function ToolRow({
     ) : null;
 
   const errorLine =
-    !isVersionLoading && !info?.version && info?.error ? (
-      <ToolErrorMessage message={info.error} />
+    !isVersionLoading && checkError ? (
+      <ToolErrorMessage message={checkError} />
     ) : null;
 
   const nodeLine =
@@ -981,9 +1048,24 @@ function ToolRow({
       }
       meta={meta}
       version={version}
-      action={actionButton}
+      action={
+        <>
+          {actionButton}
+          {onConfigureProject && (
+            <Button
+              variant="neutral"
+              size="compact"
+              onClick={onConfigureProject}
+            >
+              <FolderCog className="h-3.5 w-3.5" aria-hidden />
+              {t("profiles.environment.configureProject")}
+            </Button>
+          )}
+        </>
+      }
       visibility={visibility}
       menu={
+        onUninstall &&
         (canUninstall || busyAction === "uninstall") && (
           <DropdownMenu>
             <HoverTip content={t("common.more")}>

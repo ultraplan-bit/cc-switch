@@ -87,6 +87,7 @@ import {
 } from "@/lib/api/copilot";
 import {
   fetchModelsForConfig,
+  fetchCodexOauthModels,
   fetchXaiOauthModels,
   modelFetchRequestHeaders,
   showFetchModelsError,
@@ -265,7 +266,7 @@ interface CodexFormFieldsProps {
    * 布局：`classic` 是直连 / 路由用的完整表单；`stack` 是 Stack 模式的简化面板（连接 +
    * 模型列表 + 高级），没有默认模型字段，列表第一行就是默认模型。
    */
-  variant?: "classic" | "stack";
+  variant?: "classic" | "stack" | "models" | "connections";
   /** 应用实际在直连时传：选了要靠路由转换的格式就在格式下面提示后果。 */
   directModeFormatNotice?: DirectModeFormatNotice;
 }
@@ -470,7 +471,7 @@ export function formatReasoningLevelsLabel(levels: string[]): string {
 // values, so "back to Auto" needs a non-empty value mapped to undefined.
 const AUTO_DEFAULT_REASONING_LEVEL = "__auto__";
 
-function ReasoningLevelsEditor({
+export function ReasoningLevelsEditor({
   levels,
   defaultLevel,
   onLevelsChange,
@@ -728,11 +729,17 @@ export function CodexFormFields({
   // Header 覆盖）一变即自增，清空旧列表并作废在途响应——/models 结果可能按
   // Key 的模型授权或请求头身份返回，换号/换 Header 后残留旧列表会误导选择
   const fetchModelsSeqRef = useRef(0);
+  const fetchedCatalogMetadataRef = useRef(
+    new Map<string, Partial<CodexCatalogModel>>(),
+  );
 
   useEffect(() => {
     fetchModelsSeqRef.current += 1;
     setFetchedModels((prev) => (prev.length === 0 ? prev : []));
+    setIsFetchingModels(false);
+    fetchedCatalogMetadataRef.current.clear();
   }, [
+    providerId,
     codexBaseUrl,
     isFullUrl,
     codexApiKey,
@@ -745,6 +752,8 @@ export function CodexFormFields({
     isXaiOauthPreset,
     isXaiOauthAuthenticated,
     selectedXaiAccountId,
+    isCodexOauthPreset,
+    selectedCodexAccountId,
   ]);
   // 思考能力随 Chat 格式显示（仅 Chat Completions 转换路径用得上）；模型映射常驻
   //（填了才生成 catalog）。两者都已与「路由接管」概念解耦。
@@ -762,7 +771,8 @@ export function CodexFormFields({
   const canEditCatalog = Boolean(onCatalogModelsChange);
   // 有模型列表的卡（两种布局）：列表第一行就是默认模型，没有单独的默认模型框；列表为空时
   // 直连布局才显示默认模型框。Grok Build 没有列表，官方卡不显示列表。
-  const firstRowIsDefault = canEditCatalog && category !== "official";
+  const firstRowIsDefault =
+    canEditCatalog && (category !== "official" || variant === "models");
   const canEditReasoning = Boolean(onCodexChatReasoningChange);
   const supportsThinking =
     codexChatReasoning.supportsThinking === true ||
@@ -921,12 +931,22 @@ export function CodexFormFields({
           console.warn(errorLogMessage, err);
           showFetchModelsError(err, t);
         })
-        .finally(() => setIsFetchingModels(false));
+        .finally(() => {
+          if (seq === fetchModelsSeqRef.current) setIsFetchingModels(false);
+        });
     },
     [canEditCatalog, t],
   );
 
   const handleFetchModels = useCallback(() => {
+    if (variant === "models" && isCodexOauthPreset) {
+      runModelFetch(
+        () => fetchCodexOauthModels(selectedCodexAccountId ?? null),
+        receiveFetchedModels,
+        "[CodexOAuth] Failed to fetch models:",
+      );
+      return;
+    }
     if (isCopilotPreset) {
       if (!isCopilotAuthenticated) {
         toast.error(
@@ -955,34 +975,40 @@ export function CodexFormFields({
             const existing = new Map(
               catalogModels.map((model) => [model.model, model]),
             );
-            onCatalogModelsChange(
-              usableModels.map((model) => ({
-                ...(existing.get(model.id) ?? {}),
-                model: model.id,
-                displayName: model.name || model.id,
-                contextWindow: resolveCopilotReportedPromptLimit(
-                  existing.get(model.id)?.contextWindow,
-                  model.context_window,
-                ),
-                supportsParallelToolCalls:
-                  model.supports_parallel_tool_calls ??
-                  existing.get(model.id)?.supportsParallelToolCalls ??
-                  false,
-                ...(model.supports_vision !== undefined
-                  ? {
-                      inputModalities: model.supports_vision
-                        ? ["text", "image"]
-                        : ["text"],
-                    }
-                  : {}),
-                ...(model.reasoning_effort !== undefined
-                  ? { reasoningLevels: model.reasoning_effort }
-                  : {}),
-              })),
-            );
+            const catalog = usableModels.map((model) => ({
+              ...(existing.get(model.id) ?? {}),
+              model: model.id,
+              displayName: model.name || model.id,
+              contextWindow: resolveCopilotReportedPromptLimit(
+                existing.get(model.id)?.contextWindow,
+                model.context_window,
+              ),
+              supportsParallelToolCalls:
+                model.supports_parallel_tool_calls ??
+                existing.get(model.id)?.supportsParallelToolCalls ??
+                false,
+              ...(model.supports_vision !== undefined
+                ? {
+                    inputModalities: model.supports_vision
+                      ? ["text", "image"]
+                      : ["text"],
+                  }
+                : {}),
+              ...(model.reasoning_effort !== undefined
+                ? { reasoningLevels: model.reasoning_effort }
+                : {}),
+            }));
+            if (variant === "models") {
+              fetchedCatalogMetadataRef.current = new Map(
+                catalog.map((row) => [row.model, row]),
+              );
+            } else {
+              onCatalogModelsChange(catalog);
+            }
           }
           if (
             usableModels.length > 0 &&
+            variant !== "models" &&
             onModelChange &&
             !usableModels.some((model) => model.id === codexModel)
           ) {
@@ -1065,6 +1091,9 @@ export function CodexFormFields({
     isXaiOauthPreset,
     isXaiOauthAuthenticated,
     selectedXaiAccountId,
+    variant,
+    isCodexOauthPreset,
+    selectedCodexAccountId,
     t,
   ]);
 
@@ -1248,7 +1277,13 @@ export function CodexFormFields({
       const configured = new Set(kept.map((row) => row.model.trim()));
       const picked = add
         .filter((id) => !configured.has(id))
-        .map((id) => createCatalogRow({ model: id, displayName: id }));
+        .map((id) =>
+          createCatalogRow({
+            model: id,
+            displayName: id,
+            ...fetchedCatalogMetadataRef.current.get(id),
+          }),
+        );
       const additions =
         current.length === 0 ? seedWithDefaultModel(picked) : picked;
       const next = [...kept, ...additions];
@@ -2061,6 +2096,7 @@ export function CodexFormFields({
     ariaLabel: string,
     inheritLabel: string,
     className: string,
+    levels: readonly string[] = CODEX_REASONING_LEVELS,
   ) => (
     <Select
       value={value || EFFORT_INHERIT}
@@ -2071,11 +2107,10 @@ export function CodexFormFields({
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={EFFORT_INHERIT}>{inheritLabel}</SelectItem>
-        {value &&
-          !(CODEX_REASONING_LEVELS as readonly string[]).includes(value) && (
-            <SelectItem value={value}>{value}</SelectItem>
-          )}
-        {CODEX_REASONING_LEVELS.map((level) => (
+        {value && !levels.includes(value) && (
+          <SelectItem value={value}>{value}</SelectItem>
+        )}
+        {levels.map((level) => (
           <SelectItem key={level} value={level}>
             {level}
           </SelectItem>
@@ -2087,12 +2122,14 @@ export function CodexFormFields({
   // 默认模型 —— config.toml 顶层 model，Codex 启动时默认请求的模型。实时写回 TOML；留空则删行。
   // 有模型列表时第一行就是它，不显示这个框（Grok Build 没有列表，一直显示）；列表为空时
   // 两种布局都显示，聚合模式下发布的就是它。
-  const defaultModelField = category !== "official" &&
+  const defaultModelField = (category !== "official" || variant === "models") &&
     onModelChange &&
     (!firstRowIsDefault || catalogRows.length === 0) && (
       <div className="space-y-1.5">
         {labelWithHelp(
-          t("codexConfig.defaultModelLabel", { defaultValue: "默认模型" }),
+          variant === "models"
+            ? t("profiles.editor.model")
+            : t("codexConfig.defaultModelLabel", { defaultValue: "默认模型" }),
           isGrokBuild
             ? t("grokBuild.defaultModelHint", {
                 defaultValue: "Grok Build 默认请求的模型，随时可改。",
@@ -2148,6 +2185,26 @@ export function CodexFormFields({
         </div>
       </div>
     );
+
+  if (variant === "connections") {
+    const showFormatFields =
+      (shouldShowSpeedTest || isCopilotPreset) && !isXaiOauthPreset;
+    return (
+      <>
+        {oauthSections}
+        {showFormatFields && upstreamFormatSelect}
+        {apiKeySection}
+        {showFormatFields && isAnthropicFormat && anthropicAuthFieldSelect}
+        {endpointSection}
+        {showFullUrlToggle && fullUrlToggle}
+        {showFormatFields && isAnthropicFormat && impersonateClaudeCodeToggle}
+        {showFormatFields && isAnthropicFormat && maxOutputTokensField}
+        {isChatFormat && canEditReasoning && reasoningFields}
+        {userAgentAndOverrides}
+        {speedTestModal}
+      </>
+    );
+  }
 
   if (variant === "stack") {
     const showFormatFields = shouldShowSpeedTest && !isXaiOauthPreset;
@@ -2284,9 +2341,13 @@ export function CodexFormFields({
 
   return (
     <>
-      {oauthSections}
-      {apiKeySection}
-      {endpointSection}
+      {variant !== "models" && (
+        <>
+          {oauthSections}
+          {apiKeySection}
+          {endpointSection}
+        </>
+      )}
 
       {/* 模型列表 —— 生成 Codex 的模型目录（model_catalog_json）：/model 菜单列哪些模型，
           各自的窗口和思考等级。留空不生成。第一行是默认模型，子代理也从这里选。 */}
@@ -2335,70 +2396,78 @@ export function CodexFormFields({
 
       {/* 子代理 —— config.toml 的 [agents] default_subagent_model / default_subagent_reasoning_effort。
           留空删键，子代理跟随主模型；聚合模式下不写进 live（改用聚合设置）。 */}
-      {category !== "official" && onSubagentModelChange && (
-        <div className="space-y-1.5">
-          {labelWithHelp(
-            t("codexConfig.subagentModelLabel", {
-              defaultValue: "子代理模型",
-            }),
-            t("codexConfig.subagentModelHint", {
-              defaultValue:
-                "Codex 派出的子代理默认用的模型和推理强度。留空时沿用主代理的；只填模型时用该模型自己的默认强度。聚合模式下不生效，改用聚合页签「聚合设置」里的子代理模型。",
-            }),
-            "codexSubagentModel",
-          )}
-          <div className="flex gap-1">
-            <Input
-              id="codexSubagentModel"
-              value={subagentModel}
-              onChange={(event) => onSubagentModelChange(event.target.value)}
-              placeholder={t("codexConfig.subagentModelPlaceholder", {
-                defaultValue: "留空则跟随主模型",
-              })}
-              className="flex-1"
-            />
-            {defaultModelSuggestions.length > 0 && (
-              <ModelDropdown
-                models={defaultModelSuggestions}
-                onSelect={(id) => onSubagentModelChange(id)}
-              />
-            )}
-            {onSubagentReasoningEffortChange &&
-              renderEffortSelect(
-                subagentReasoningEffort,
-                onSubagentReasoningEffortChange,
-                t("codexConfig.subagentReasoningEffortLabel", {
-                  defaultValue: "子代理推理强度",
-                }),
-                t("codexConfig.subagentReasoningEffortDefault", {
-                  defaultValue: "默认强度",
-                }),
-                "w-36 shrink-0",
-              )}
-          </div>
-          {isSubagentModelOutsideCatalog && (
-            <p className="flex flex-wrap items-center gap-x-2 text-xs leading-relaxed text-fg-2">
-              {t("codexConfig.subagentModelNotInCatalog", {
+      {(category !== "official" || variant === "models") &&
+        onSubagentModelChange && (
+          <div className="space-y-1.5">
+            {labelWithHelp(
+              t("codexConfig.subagentModelLabel", {
+                defaultValue: "子代理模型",
+              }),
+              t("codexConfig.subagentModelHint", {
                 defaultValue:
-                  "该模型不在模型列表中：Codex 拿不到它的上下文窗口；经路由转成 Chat / Anthropic 协议时会被换成默认模型。",
-              })}
-              {onCatalogModelsChange && (
-                <Button
-                  type="button"
-                  variant="link"
-                  size="sm"
-                  className="h-auto p-0 text-xs"
-                  onClick={handleAddSubagentModelToCatalog}
-                >
-                  {t("codexConfig.addToModelList", {
-                    defaultValue: "加入列表",
-                  })}
-                </Button>
+                  "Codex 派出的子代理默认用的模型和推理强度。留空时沿用主代理的；只填模型时用该模型自己的默认强度。聚合模式下不生效，改用聚合页签「聚合设置」里的子代理模型。",
+              }),
+              "codexSubagentModel",
+            )}
+            <div className="flex gap-1">
+              <Input
+                id="codexSubagentModel"
+                value={subagentModel}
+                onChange={(event) => onSubagentModelChange(event.target.value)}
+                placeholder={t("codexConfig.subagentModelPlaceholder", {
+                  defaultValue: "留空则跟随主模型",
+                })}
+                className="flex-1"
+              />
+              {defaultModelSuggestions.length > 0 && (
+                <ModelDropdown
+                  models={defaultModelSuggestions}
+                  onSelect={(id) => onSubagentModelChange(id)}
+                />
               )}
-            </p>
-          )}
-        </div>
-      )}
+              {onSubagentReasoningEffortChange &&
+                renderEffortSelect(
+                  subagentReasoningEffort,
+                  onSubagentReasoningEffortChange,
+                  t("codexConfig.subagentReasoningEffortLabel", {
+                    defaultValue: "子代理推理强度",
+                  }),
+                  t("codexConfig.subagentReasoningEffortDefault", {
+                    defaultValue: "默认强度",
+                  }),
+                  "w-36 shrink-0",
+                  variant === "models"
+                    ? catalogRows.find(
+                        (row) =>
+                          row.model ===
+                          (subagentModel.trim() || codexModel.trim()),
+                      )?.reasoningLevels
+                    : undefined,
+                )}
+            </div>
+            {isSubagentModelOutsideCatalog && (
+              <p className="flex flex-wrap items-center gap-x-2 text-xs leading-relaxed text-fg-2">
+                {t("codexConfig.subagentModelNotInCatalog", {
+                  defaultValue:
+                    "该模型不在模型列表中：Codex 拿不到它的上下文窗口；经路由转成 Chat / Anthropic 协议时会被换成默认模型。",
+                })}
+                {onCatalogModelsChange && (
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 text-xs"
+                    onClick={handleAddSubagentModelToCatalog}
+                  >
+                    {t("codexConfig.addToModelList", {
+                      defaultValue: "加入列表",
+                    })}
+                  </Button>
+                )}
+              </p>
+            )}
+          </div>
+        )}
 
       {/* 子代理并发上限 —— config.toml 的 [agents] max_threads，Codex 的全局设置（官方供应商也显示），
           保存时写进 live。留空删键，回到 Codex 默认值。 */}
@@ -2437,66 +2506,70 @@ export function CodexFormFields({
 
       {/* 自动审批 —— 写进模型目录每一行的 auto_review_model_override，Codex 按主模型那一行
           选审批模型。只能选列表里的模型；聚合模式下不生效，改用聚合设置。 */}
-      {category !== "official" && onAutoReviewModelChange && (
-        <div className="space-y-1.5">
-          {labelWithHelp(
-            t("codexConfig.autoReviewModelLabel", {
-              defaultValue: "自动审批模型",
-            }),
-            t("codexConfig.autoReviewModelHint", {
-              defaultValue:
-                "Codex 开了自动审批（Approve for me）时，判断操作能不能放行用的模型。审批请求和主对话发给同一家，所以只能选这张卡模型列表里的。聚合模式下不生效，改用聚合页签「聚合设置」里的自动审批模型。改完需要重启 Codex。",
-            }),
-            "codexAutoReviewModel",
-          )}
-          <Select
-            value={autoReviewSelectValue}
-            onValueChange={(next) => {
-              // 表单里的 Radix Select 带一个隐藏的原生 select：编辑页加载时列表和已存的值同时
-              // 到达，值先于选项注册，它会回报一次空串。选项都不是空值，空串只能是这个，忽略。
-              if (!next) return;
-              onAutoReviewModelChange(next === AUTO_REVIEW_DEFAULT ? "" : next);
-            }}
-            disabled={autoReviewChoices.length === 0}
-          >
-            <SelectTrigger
-              id="codexAutoReviewModel"
-              aria-label={t("codexConfig.autoReviewModelLabel", {
+      {(category !== "official" || variant === "models") &&
+        onAutoReviewModelChange && (
+          <div className="space-y-1.5">
+            {labelWithHelp(
+              t("codexConfig.autoReviewModelLabel", {
                 defaultValue: "自动审批模型",
-              })}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={AUTO_REVIEW_DEFAULT}>
-                {autoReviewDefaultIsCodex
-                  ? t("codexConfig.autoReviewModelCodexDefault", {
-                      defaultValue: "Codex 默认（codex-auto-review）",
-                    })
-                  : t("codexConfig.autoReviewModelMainDefault", {
-                      defaultValue: "主模型自己审批（默认）",
-                    })}
-              </SelectItem>
-              {autoReviewChoices.map((choice) => (
-                <SelectItem key={choice.model} value={choice.model}>
-                  {choice.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {autoReviewChoices.length === 0 && (
-            <p className="text-xs leading-relaxed text-fg-2">
-              {t("codexConfig.autoReviewModelNoList", {
+              }),
+              t("codexConfig.autoReviewModelHint", {
                 defaultValue:
-                  "这张卡没有模型列表：Codex 会用官方的 codex-auto-review 审批，只有部分转发 ChatGPT 账号的中转认它，不认就会报 404。在上面的模型列表里加上模型后就能选。",
-              })}
-            </p>
-          )}
-        </div>
-      )}
+                  "Codex 开了自动审批（Approve for me）时，判断操作能不能放行用的模型。审批请求和主对话发给同一家，所以只能选这张卡模型列表里的。聚合模式下不生效，改用聚合页签「聚合设置」里的自动审批模型。改完需要重启 Codex。",
+              }),
+              "codexAutoReviewModel",
+            )}
+            <Select
+              value={autoReviewSelectValue}
+              onValueChange={(next) => {
+                // 表单里的 Radix Select 带一个隐藏的原生 select：编辑页加载时列表和已存的值同时
+                // 到达，值先于选项注册，它会回报一次空串。选项都不是空值，空串只能是这个，忽略。
+                if (!next) return;
+                onAutoReviewModelChange(
+                  next === AUTO_REVIEW_DEFAULT ? "" : next,
+                );
+              }}
+              disabled={autoReviewChoices.length === 0}
+            >
+              <SelectTrigger
+                id="codexAutoReviewModel"
+                aria-label={t("codexConfig.autoReviewModelLabel", {
+                  defaultValue: "自动审批模型",
+                })}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={AUTO_REVIEW_DEFAULT}>
+                  {autoReviewDefaultIsCodex
+                    ? t("codexConfig.autoReviewModelCodexDefault", {
+                        defaultValue: "Codex 默认（codex-auto-review）",
+                      })
+                    : t("codexConfig.autoReviewModelMainDefault", {
+                        defaultValue: "主模型自己审批（默认）",
+                      })}
+                </SelectItem>
+                {autoReviewChoices.map((choice) => (
+                  <SelectItem key={choice.model} value={choice.model}>
+                    {choice.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {autoReviewChoices.length === 0 && (
+              <p className="text-xs leading-relaxed text-fg-2">
+                {t("codexConfig.autoReviewModelNoList", {
+                  defaultValue:
+                    "这张卡没有模型列表：Codex 会用官方的 codex-auto-review 审批，只有部分转发 ChatGPT 账号的中转认它，不认就会报 404。在上面的模型列表里加上模型后就能选。",
+                })}
+              </p>
+            )}
+          </div>
+        )}
 
       {/* 高级选项 —— 上游格式/思考能力/自定义 UA；预设供应商通常无需展开 */}
-      {category !== "official" && (
+      {variant === "models" && officialSpeedTiersToggle}
+      {category !== "official" && variant !== "models" && (
         <Collapsible
           open={advancedExpanded}
           onOpenChange={setAdvancedExpanded}
@@ -2559,7 +2632,7 @@ export function CodexFormFields({
         </Collapsible>
       )}
 
-      {speedTestModal}
+      {variant !== "models" && speedTestModal}
     </>
   );
 }

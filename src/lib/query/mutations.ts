@@ -101,6 +101,9 @@ export const useAddProviderMutation = (appId: AppId) => {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["providers", appId] });
+      await queryClient.invalidateQueries({
+        queryKey: ["profile-configuration", appId],
+      });
 
       if (appId === "opencode") {
         await queryClient.invalidateQueries({
@@ -190,6 +193,9 @@ export const useUpdateProviderMutation = (appId: AppId) => {
     },
     onSuccess: async (provider, variables) => {
       await queryClient.invalidateQueries({ queryKey: ["providers", appId] });
+      if (variables.editorSave?.connectionOnly) {
+        await queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      }
       await queryClient.invalidateQueries({
         queryKey: usageKeys.script(provider.id, appId),
       });
@@ -339,6 +345,7 @@ export const useSwitchProviderMutation = (appId: AppId) => {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["providers", appId] });
+      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
       if (appId === "claude") {
         // 切到绑了账号的官方卡时，后端可能把原来的默认登录收成了新账号：授权中心要重读
         await queryClient.invalidateQueries({
@@ -480,6 +487,7 @@ export const useSaveSettingsMutation = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
+    networkMode: "always",
     mutationFn: async (settings: Settings) => {
       await settingsApi.save(settings);
     },

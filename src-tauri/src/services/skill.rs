@@ -26,6 +26,7 @@ use crate::services::skill_repo_tokens::{RepoTokenList, RepoTokenStore};
 mod backup;
 mod discovery;
 mod download;
+mod project_import;
 mod repo;
 mod skills_sh;
 mod sync;
@@ -887,7 +888,7 @@ impl SkillService {
         db: &Arc<Database>,
         skill: &DiscoverableSkill,
         install_name: &str,
-        current_app: &AppType,
+        current_app: Option<&AppType>,
     ) -> Result<Option<InstalledSkill>> {
         let existing_skills = db.get_all_installed_skills()?;
         for existing in existing_skills.values() {
@@ -900,9 +901,11 @@ impl SkillService {
                 && existing.repo_host.as_deref().unwrap_or(GITHUB_HOST) == skill.repo_host;
             if same_repo {
                 let mut updated = existing.clone();
-                updated.apps.set_enabled_for(current_app, true);
-                db.save_skill(&updated)?;
-                Self::sync_to_app_dir(&updated.directory, current_app)?;
+                if let Some(app) = current_app {
+                    updated.apps.set_enabled_for(app, true);
+                    db.save_skill(&updated)?;
+                    Self::sync_to_app_dir(&updated.directory, app)?;
+                }
                 log::info!(
                     "Skill {} 已存在，更新 {:?} 启用状态",
                     updated.name,
@@ -945,7 +948,7 @@ impl SkillService {
         &self,
         db: &Arc<Database>,
         skill: &DiscoverableSkill,
-        current_app: &AppType,
+        current_app: Option<&AppType>,
     ) -> Result<InstalledSkill> {
         let ssot_dir = Self::get_ssot_dir()?;
 
@@ -1079,7 +1082,9 @@ impl SkillService {
                 .as_ref()
                 .map(|(_, source)| source)
                 .ok_or_else(|| anyhow!("Skill directory changed during install; please retry"))?;
-            Self::preflight_install_destination(source, &install_name, current_app)?;
+            if let Some(app) = current_app {
+                Self::preflight_install_destination(source, &install_name, app)?;
+            }
             Self::copy_dir_recursive(source, &dest)?;
         }
 
@@ -1104,7 +1109,7 @@ impl SkillService {
             repo_name: Some(skill.repo_name.clone()),
             repo_branch: Some(repo_branch),
             readme_url,
-            apps: SkillApps::only(current_app),
+            apps: current_app.map(SkillApps::only).unwrap_or_default(),
             installed_at: chrono::Utc::now().timestamp(),
             content_hash,
             updated_at: 0,
