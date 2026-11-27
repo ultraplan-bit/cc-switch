@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { IconPicker } from "@/components/IconPicker";
@@ -40,6 +41,14 @@ function renderPicker(props: {
         defaultName={props.defaultName}
       />,
     ),
+  );
+}
+
+function getLibrary() {
+  return within(
+    screen
+      .getByRole("heading", { name: "iconPicker.myIcons" })
+      .closest("section")!,
   );
 }
 
@@ -104,8 +113,9 @@ describe("IconPicker my icons", () => {
     ]);
     const onValueChange = vi.fn();
     renderPicker({ value: OTHER, onValueChange });
+    const library = getLibrary();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Relay A" }));
+    fireEvent.click(await library.findByRole("button", { name: "Relay A" }));
     expect(onValueChange).toHaveBeenCalledWith(CUSTOM);
     // 当前图标就在库里，不再单独显示「当前图标」
     expect(
@@ -119,14 +129,17 @@ describe("IconPicker my icons", () => {
       { id: "b", name: "Other", data: OTHER, createdAt: 2 },
     ]);
     renderPicker({ value: "claude" });
-    await screen.findByRole("button", { name: "Relay A" });
+    const library = getLibrary();
+    await library.findByRole("button", { name: "Relay A" });
 
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "relay" },
     });
-    expect(screen.getByRole("button", { name: "Relay A" })).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Other" }),
+      library.getByRole("button", { name: "Relay A" }),
+    ).toBeInTheDocument();
+    expect(
+      library.queryByRole("button", { name: "Other" }),
     ).not.toBeInTheDocument();
   });
 
@@ -150,17 +163,18 @@ describe("IconPicker my icons", () => {
     setCustomIcons([{ id: "a", name: "Old", data: CUSTOM, createdAt: 1 }]);
     const onValueChange = vi.fn();
     renderPicker({ value: "claude", onValueChange });
-    await screen.findByRole("button", { name: "Old" });
+    const library = getLibrary();
+    await library.findByRole("button", { name: "Old" });
 
-    fireEvent.click(screen.getByLabelText("iconPicker.rename"));
+    fireEvent.click(library.getByLabelText("iconPicker.rename"));
     const name = await screen.findByLabelText("iconPicker.nameLabel");
     fireEvent.change(name, { target: { value: "New" } });
     fireEvent.click(screen.getByText("common.save"));
     expect(
-      await screen.findByRole("button", { name: "New" }),
+      await library.findByRole("button", { name: "New" }),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText("iconPicker.delete"));
+    fireEvent.click(library.getByLabelText("iconPicker.delete"));
     fireEvent.click(
       await screen.findByRole("button", { name: "iconPicker.delete" }),
     );
