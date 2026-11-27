@@ -1,12 +1,20 @@
-//! 项目 Profile 管理命令
+//! 配置方案（Profile）管理命令
+//!
+//! 方案是某个 Agent 的一份配置；它可以应用到全局，也可以部署到任意已登记的项目目录。
 
+use crate::app_config::AppType;
 use crate::error::AppError;
 use serde::Serialize;
 use tauri::{Emitter, State};
 
 use super::run_db_task;
 use crate::database::Profile;
-use crate::services::profile::{ProfilePayload, ProfileScope, ProfileService};
+use crate::services::profile::{
+    ProfileConfig, ProfilePayload, ProfileScope, ProfileService, ProfileSource,
+};
+use crate::services::project_profile::{
+    ConflictResolution, ProjectDeployResult, ProjectProfileService, ProjectStatus,
+};
 use crate::store::AppState;
 
 #[derive(Debug, Serialize)]
@@ -41,20 +49,66 @@ impl From<Profile> for ProfileDto {
     }
 }
 
-/// 每个分组当前激活的项目 id（未使用项目时为 null）
+/// 按 Agent 分组的响应容器。JSON key 是 camelCase（`claudeDesktop`），
+/// 与命令参数里的分组字符串（`claude-desktop`）不同。
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CurrentProfileIds {
-    pub claude: Option<String>,
-    pub claude_desktop: Option<String>,
-    pub codex: Option<String>,
+pub struct PerScope<T> {
+    pub claude: T,
+    pub claude_desktop: T,
+    pub codex: T,
+}
+
+/// 某个 Agent 当前使用的方案。`stale` 表示方案在应用后被修改，或应用时有警告：
+/// 全局配置与它不完全一致，需要重新应用。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CurrentProfile {
+    pub id: String,
+    pub stale: bool,
+}
+
+/// 某个 Agent 实际生效的全局状态（读自真实配置，而不是方案标记）。
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalState {
+    pub provider_id: Option<String>,
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProfilesResponse {
     pub profiles: Vec<ProfileDto>,
-    pub current_ids: CurrentProfileIds,
+    pub current: PerScope<Option<CurrentProfile>>,
+    pub global_state: PerScope<Option<GlobalState>>,
+    pub projects: Vec<ProjectStatus>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileMigrationResult {
+    profiles: Vec<ProfileDto>,
+    warnings: Vec<String>,
+    ready: bool,
+}
+
+#[tauri::command]
+pub async fn migrate_legacy_agent_profiles(
+    state: State<'_, AppState>,
+    scope: String,
+) -> Result<ProfileMigrationResult, String> {
+    let scope = ProfileScope::parse(&scope)?;
+    profile_mutation(&state, move |state| {
+        ProfileService::migrate_legacy_agent_profiles(state, scope).map(|(profiles, warnings)| {
+            ProfileMigrationResult {
+                profiles: profiles.into_iter().map(ProfileDto::from).collect(),
+                ready: warnings.is_empty(),
+                warnings,
+            }
+        })
+    })
+    .await
 }
 
 /// Profile 应用完成后的统一收尾：发事件 + 重建托盘菜单
@@ -106,22 +160,70 @@ pub async fn list_profiles(state: State<'_, AppState>) -> Result<ProfilesRespons
         .map_err(|e| format!("读取项目列表任务失败: {e}"))?
 }
 
-fn list_profiles_blocking(state: &AppState) -> Result<ProfilesResponse, String> {
-    let profiles = ProfileService::list(state)?;
-    let current_ids = CurrentProfileIds {
-        claude: state
-            .db
-            .get_current_profile_id(ProfileScope::Claude.as_str())?,
-        claude_desktop: state
-            .db
-            .get_current_profile_id(ProfileScope::ClaudeDesktop.as_str())?,
-        codex: state
-            .db
-            .get_current_profile_id(ProfileScope::Codex.as_str())?,
+fn current_profile(
+    state: &AppState,
+    scope: ProfileScope,
+) -> Result<Option<CurrentProfile>, String> {
+    let Some(id) = state.db.get_current_profile_id(scope.as_str())? else {
+        return Ok(None);
     };
+    Ok(Some(CurrentProfile {
+        id,
+        stale: state.db.is_current_profile_stale(scope.as_str())?,
+    }))
+}
+
+/// Read failures must not hide the Profile list; the affected value is just unknown.
+fn global_state(state: &AppState, scope: ProfileScope) -> Option<GlobalState> {
+    let app = &scope.apps()[0];
+    let provider_id =
+        crate::mode::current::provider_for(&state.db, app, crate::mode::current::Purpose::InUse)
+            .unwrap_or_else(|error| {
+                log::warn!("读取 {} 当前供应商失败: {error}", app.as_str());
+                None
+            });
+    let model = if app == &AppType::ClaudeDesktop {
+        None
+    } else {
+        ProfileService::current_model(app).unwrap_or_else(|error| {
+            log::warn!("读取 {} 当前模型失败: {error}", app.as_str());
+            None
+        })
+    };
+    (provider_id.is_some() || model.is_some()).then_some(GlobalState { provider_id, model })
+}
+
+fn list_profiles_blocking(state: &AppState) -> Result<ProfilesResponse, String> {
+    // Seeding is serialized by the database transaction and guarded by its own marker.
+    ProfileService::seed_project_registry(state)?;
+    let profiles = ProfileService::list(state)?;
+    let payloads: std::collections::HashMap<&str, &str> = profiles
+        .iter()
+        .map(|profile| (profile.id.as_str(), profile.payload.as_str()))
+        .collect();
+    let projects = state
+        .db
+        .get_profile_projects()?
+        .iter()
+        .map(|path| {
+            ProjectProfileService::project_status_with(path, |id| {
+                payloads.get(id).map(|payload| payload.to_string())
+            })
+        })
+        .collect();
     Ok(ProfilesResponse {
+        current: PerScope {
+            claude: current_profile(state, ProfileScope::Claude)?,
+            claude_desktop: current_profile(state, ProfileScope::ClaudeDesktop)?,
+            codex: current_profile(state, ProfileScope::Codex)?,
+        },
+        global_state: PerScope {
+            claude: global_state(state, ProfileScope::Claude),
+            claude_desktop: global_state(state, ProfileScope::ClaudeDesktop),
+            codex: global_state(state, ProfileScope::Codex),
+        },
+        projects,
         profiles: profiles.into_iter().map(ProfileDto::from).collect(),
-        current_ids,
     })
 }
 
@@ -145,10 +247,52 @@ pub async fn create_profile(
     state: State<'_, AppState>,
     name: String,
     scope: String,
+    source: Option<ProfileSource>,
 ) -> Result<ProfileDto, String> {
     let scope = ProfileScope::parse(&scope)?;
     profile_mutation(&state, move |state| {
-        ProfileService::create(state, &name, scope).map(ProfileDto::from)
+        ProfileService::create_from(state, &name, scope, source.unwrap_or_default())
+            .map(ProfileDto::from)
+    })
+    .await
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectImportResult {
+    profile: ProfileDto,
+    warnings: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn import_project_profile(
+    state: State<'_, AppState>,
+    name: String,
+    scope: String,
+    project_path: String,
+) -> Result<ProjectImportResult, String> {
+    let scope = ProfileScope::parse(&scope)?;
+    profile_mutation(&state, move |state| {
+        ProjectProfileService::import_from_project(state, &name, scope, &project_path).map(
+            |(profile, warnings)| ProjectImportResult {
+                profile: profile.into(),
+                warnings,
+            },
+        )
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn duplicate_profile(
+    state: State<'_, AppState>,
+    source_id: String,
+    name: String,
+    scope: String,
+) -> Result<ProfileDto, String> {
+    let scope = ProfileScope::parse(&scope)?;
+    profile_mutation(&state, move |state| {
+        ProfileService::duplicate(state, &source_id, &name, scope).map(ProfileDto::from)
     })
     .await
 }
@@ -169,9 +313,53 @@ pub async fn update_profile(
     .await
 }
 
+/// 登记一个项目目录，之后任意方案都可以部署到它。
 #[tauri::command]
-pub async fn delete_profile(state: State<'_, AppState>, id: String) -> Result<(), String> {
-    profile_mutation(&state, move |state| ProfileService::delete(state, &id)).await
+pub async fn add_profile_project(state: State<'_, AppState>, path: String) -> Result<(), String> {
+    profile_mutation(&state, move |state| {
+        ProfileService::add_project(state, &path)
+    })
+    .await
+}
+
+/// 从列表移除一个项目目录；不改动目录里的任何文件。
+#[tauri::command]
+pub async fn remove_profile_project(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<(), String> {
+    profile_mutation(&state, move |state| {
+        ProfileService::remove_project(state, &path)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn update_profile_config(
+    state: State<'_, AppState>,
+    id: String,
+    scope: String,
+    config: ProfileConfig,
+    name: Option<String>,
+) -> Result<ProfileDto, String> {
+    let scope = ProfileScope::parse(&scope)?;
+    profile_mutation(&state, move |state| {
+        ProfileService::update_config(state, &id, scope, config, name).map(ProfileDto::from)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn delete_profile(
+    state: State<'_, AppState>,
+    id: String,
+    scope: String,
+) -> Result<(), String> {
+    let scope = ProfileScope::parse(&scope)?;
+    profile_mutation(&state, move |state| {
+        ProfileService::delete(state, &id, scope)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -202,6 +390,24 @@ pub async fn apply_profile(
         let warnings = ProfileService::apply(state, &id, scope)?;
         emit_profile_apply_events(&app, state, &id, scope);
         Ok::<_, AppError>(warnings)
+    })
+    .await
+}
+
+/// 将方案部署到指定的 Claude Code 或 Codex 项目目录。
+/// 与全局 apply 分开，避免更改用户级配置和 enabled 状态。
+#[tauri::command]
+pub async fn deploy_profile_to_project(
+    state: State<'_, AppState>,
+    id: String,
+    scope: String,
+    project_path: String,
+    resolution: Option<ConflictResolution>,
+) -> Result<ProjectDeployResult, String> {
+    let scope = ProfileScope::parse(&scope)?;
+    profile_mutation(&state, move |state| {
+        ProjectProfileService::deploy(state, &id, scope, &project_path, resolution)
+            .map_err(|err| err.to_string())
     })
     .await
 }

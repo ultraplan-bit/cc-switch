@@ -69,19 +69,19 @@ pub fn delete_skill_backup(backup_id: String) -> Result<bool, String> {
 ///
 /// 参数：
 /// - skill: 从发现列表获取的技能信息
-/// - current_app: 当前选中的应用，安装后默认启用该应用
+/// - current_app: 安装后启用的应用；为空时仅保存到资源库
 #[tauri::command]
 pub async fn install_skill_unified(
     skill: DiscoverableSkill,
-    current_app: String,
+    current_app: Option<String>,
     service: State<'_, SkillServiceState>,
     app_state: State<'_, AppState>,
 ) -> Result<InstalledSkill, String> {
-    let app_type = parse_app_type(&current_app)?;
+    let app_type = current_app.as_deref().map(parse_app_type).transpose()?;
 
     service
         .0
-        .install(&app_state.db, &skill, &app_type)
+        .install(&app_state.db, &skill, app_type.as_ref())
         .await
         .map_err(|e| e.to_string())
 }
@@ -101,12 +101,12 @@ pub async fn uninstall_skill_unified(
 #[tauri::command]
 pub async fn restore_skill_backup(
     backup_id: String,
-    current_app: String,
+    current_app: Option<String>,
     app_state: State<'_, AppState>,
 ) -> Result<InstalledSkill, String> {
-    let app_type = parse_app_type(&current_app)?;
+    let app_type = current_app.as_deref().map(parse_app_type).transpose()?;
     run_db_task(&app_state, move |state| {
-        SkillService::restore_from_backup(&state.db, &backup_id, &app_type)
+        SkillService::restore_from_backup(&state.db, &backup_id, app_type.as_ref())
             .map_err(|e| e.to_string())
     })
     .await
@@ -364,13 +364,14 @@ pub async fn delete_skill_repo_token(
 #[tauri::command]
 pub async fn install_skills_from_zip(
     file_path: String,
-    current_app: String,
+    current_app: Option<String>,
     app_state: State<'_, AppState>,
 ) -> Result<ZipInstallResult, String> {
-    let app_type = parse_app_type(&current_app)?;
+    let app_type = current_app.as_deref().map(parse_app_type).transpose()?;
     run_db_task(&app_state, move |state| {
         let path = std::path::Path::new(&file_path);
-        SkillService::install_from_zip(&state.db, path, &app_type).map_err(|e| e.to_string())
+        SkillService::install_from_zip(&state.db, path, app_type.as_ref())
+            .map_err(|e| e.to_string())
     })
     .await
 }

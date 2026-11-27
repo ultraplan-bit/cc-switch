@@ -134,7 +134,9 @@ function renderPage(
   overrides: Partial<React.ComponentProps<typeof SkillsPage>> = {},
 ) {
   const installTo = vi.fn(
-    async (install: (first: AppId) => Promise<Array<{ id: string }>>) => ({
+    async (
+      install: (first: AppId | null) => Promise<Array<{ id: string }>>,
+    ) => ({
       installed: await install("codex"),
       failures: [],
     }),
@@ -168,6 +170,45 @@ describe("SkillsPage (Discover)", () => {
     m.installed = [];
     m.repos = [];
     searchCache.clear();
+  });
+
+  it("lets users choose library-only storage or clear the last Agent", async () => {
+    const onChange = vi.fn();
+    renderPage({ installTargets: ["codex"], onInstallTargetsChange: onChange });
+    await userEvent.click(
+      screen.getByRole("button", { name: /skillsPage.installTo.prefix/ }),
+    );
+    await userEvent.click(
+      screen.getByRole("checkbox", {
+        name: "skillsPage.installTo.libraryOnly",
+      }),
+    );
+    expect(onChange).toHaveBeenLastCalledWith([]);
+    await userEvent.click(screen.getByRole("checkbox", { name: "Codex" }));
+    expect(onChange).toHaveBeenLastCalledWith([]);
+  });
+
+  it("passes a library-only installation through the existing discovery mutation", async () => {
+    m.repos = [makeRepo()];
+    m.discoverable = [makeDiscoverable()];
+    const installTo = vi.fn(
+      async (
+        install: (app: AppId | null) => Promise<Array<{ id: string }>>,
+      ) => ({
+        installed: await install(null),
+        failures: [],
+      }),
+    );
+    renderPage({ installTargets: [], installTo: installTo as never });
+    await userEvent.click(
+      screen.getByRole("button", { name: "skillsPage.discover.installAria" }),
+    );
+    await waitFor(() =>
+      expect(m.install).toHaveBeenCalledWith({
+        skill: m.discoverable[0],
+        currentApp: null,
+      }),
+    );
   });
 
   it("installs the chosen skills.sh result into the first install-to app", async () => {

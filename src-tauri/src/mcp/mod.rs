@@ -13,8 +13,8 @@
 //! - `omp` - Omp MCP 同步和导入
 
 pub mod agy;
-mod claude;
-mod codex;
+pub(crate) mod claude;
+pub(crate) mod codex;
 pub(crate) mod dsh;
 mod gemini;
 mod grokbuild;

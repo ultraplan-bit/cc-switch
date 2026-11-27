@@ -19,6 +19,8 @@ const QUICK_TOGGLES = [
 interface CommonConfigEditorProps {
   value: string;
   onChange: (value: string) => void;
+  context?: "provider" | "profile";
+  showQuickToggles?: boolean;
   /** 行里保存着、但不随切换生效的字段；可以一键加进上方 JSON（保存后成为全局设置）。 */
   inactiveFields?: ProviderEditorInactiveField[];
 }
@@ -48,6 +50,8 @@ const setFieldInConfig = (
 export function CommonConfigEditor({
   value,
   onChange,
+  context = "provider",
+  showQuickToggles = true,
   inactiveFields = [],
 }: CommonConfigEditorProps) {
   const { t } = useTranslation();
@@ -208,39 +212,47 @@ export function CommonConfigEditor({
     <div className="space-y-2">
       <Label htmlFor="settingsConfig">{t("provider.configJson")}</Label>
       <p className="text-xs text-fg-2">
-        {t("claudeConfig.keyFieldsHint", {
-          defaultValue:
-            "地址、Key、模型、上下文窗口和兼容开关随供应商切换；其余字段是 Claude Code 全局设置，保存后对所有供应商生效。",
-        })}
+        {context === "profile"
+          ? t("profiles.editor.nativeHint")
+          : t("claudeConfig.keyFieldsHint", {
+              defaultValue:
+                "地址、Key、模型、上下文窗口和兼容开关随供应商切换；其余字段是 Claude Code 全局设置，保存后对所有供应商生效。",
+            })}
       </p>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        {QUICK_TOGGLES.map((key) => (
-          <span key={key} className="inline-flex items-center gap-1">
-            <label className="inline-flex items-center gap-2 text-sm text-fg-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={toggleStates[key]}
-                onChange={(e) => handleToggle(key, e.target.checked)}
-                className="ui-checkbox"
-              />
-              <span>{t(`claudeConfig.${key}`)}</span>
-            </label>
-            <HelpTip title={t(`claudeConfig.${key}`)}>
-              {t(`claudeConfig.${key}Help`)}
-            </HelpTip>
-          </span>
-        ))}
-      </div>
+      {showQuickToggles && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          {QUICK_TOGGLES.map((key) => (
+            <span key={key} className="inline-flex items-center gap-1">
+              <label className="inline-flex items-center gap-2 text-sm text-fg-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={toggleStates[key]}
+                  onChange={(e) => handleToggle(key, e.target.checked)}
+                  className="ui-checkbox"
+                />
+                <span>{t(`claudeConfig.${key}`)}</span>
+              </label>
+              <HelpTip title={t(`claudeConfig.${key}`)}>
+                {t(`claudeConfig.${key}Help`)}
+              </HelpTip>
+            </span>
+          ))}
+        </div>
+      )}
       <JsonEditor
         value={localValue}
         onChange={handleLocalChange}
         ariaLabel={t("provider.configJson")}
-        placeholder={`{
+        placeholder={
+          context === "profile"
+            ? '{\n  "permissions": {}\n}'
+            : `{
   "env": {
     "ANTHROPIC_BASE_URL": "https://your-api-endpoint.com",
     "ANTHROPIC_AUTH_TOKEN": "your-api-key-here"
   }
-}`}
+}`
+        }
         darkMode={isDarkMode}
         rows={3}
         showValidation={true}

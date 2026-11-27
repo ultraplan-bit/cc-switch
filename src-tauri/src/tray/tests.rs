@@ -19,6 +19,82 @@ fn now() -> chrono::DateTime<chrono::Local> {
 }
 
 #[test]
+#[serial_test::serial]
+fn the_tray_lists_profiles_configured_for_that_agent_and_keeps_a_pending_one_checked() {
+    let _home = crate::test_support::TestHome::new();
+    let state = AppState::new(std::sync::Arc::new(
+        crate::database::Database::memory().unwrap(),
+    ));
+    let settings = crate::settings::AppSettings {
+        show_profile_switcher: true,
+        ..Default::default()
+    };
+    for scope in crate::services::profile::ProfileScope::ALL {
+        let app = &scope.apps()[0];
+        let mut payload = crate::services::profile::ProfilePayload::default();
+        *payload.native_config.get_mut(app).unwrap() = Some("{}".into());
+        let own = crate::database::Profile {
+            id: "own".to_string(),
+            name: "Own".to_string(),
+            payload: serde_json::to_string(&payload).unwrap(),
+            sort_order: None,
+            created_at: None,
+            updated_at: None,
+        };
+        // Configured only for other Agents, or not at all.
+        let foreign = crate::database::Profile {
+            id: "foreign".to_string(),
+            name: "Foreign".to_string(),
+            payload: "{}".to_string(),
+            ..own.clone()
+        };
+        let snapshot = |profiles: &[crate::database::Profile]| {
+            collect_app_snapshot(
+                &state,
+                &en(),
+                &settings,
+                app,
+                None,
+                profiles,
+                &TrayAccountLabels::default(),
+            )
+            .unwrap()
+        };
+        state
+            .db
+            .set_current_profile_id(scope.as_str(), Some(&foreign.id))
+            .unwrap();
+        let section = snapshot(&[own.clone(), foreign.clone()]).profiles.unwrap();
+        assert_eq!(section.items, [(own.id.clone(), own.name.clone())]);
+        assert_eq!(section.current, None);
+        assert!(snapshot(std::slice::from_ref(&foreign)).profiles.is_none());
+
+        state
+            .db
+            .set_current_profile(scope.as_str(), Some(&own.id), true)
+            .unwrap();
+        assert_eq!(
+            snapshot(&[own.clone(), foreign.clone()])
+                .profiles
+                .unwrap()
+                .current,
+            Some(own.id.clone())
+        );
+        let hidden = collect_app_snapshot(
+            &state,
+            &en(),
+            &crate::settings::AppSettings::default(),
+            app,
+            None,
+            std::slice::from_ref(&own),
+            &TrayAccountLabels::default(),
+        )
+        .unwrap();
+        assert!(hidden.profiles.is_none());
+    }
+}
+
+#[test]
 fn an_unreadable_provider_is_left_out_of_the_tray_instead_of_breaking_it() {
     use std::sync::Arc;
     let state = AppState::new(Arc::new(crate::database::Database::memory().unwrap()));
@@ -1807,8 +1883,7 @@ fn projects_live_inside_the_app_submenu() {
             "直连",
             "DeepSeek",
             "---",
-            "项目",
-            "不使用项目",
+            "配置方案",
             "个人项目",
             "公司项目",
             "---",
@@ -1816,10 +1891,10 @@ fn projects_live_inside_the_app_submenu() {
         ]
     );
     assert!(
-        matches!(&children[4], TrayEntry::Check { id, checked: false, .. } if id == "profile_none_codex")
+        matches!(&children[4], TrayEntry::Check { id, checked: false, .. } if id == "profile_codex_p1")
     );
     assert!(
-        matches!(&children[6], TrayEntry::Check { id, checked: true, .. } if id == "profile_codex_p2")
+        matches!(&children[5], TrayEntry::Check { id, checked: true, .. } if id == "profile_codex_p2")
     );
 }
 
@@ -2037,7 +2112,7 @@ fn feedback_row_is_a_grey_line_after_the_problems() {
                 name: "公司项目".to_string()
             }
         ),
-        "已把项目「公司项目」用到 Claude Code"
+        "已把配置方案「公司项目」用到 Claude Code"
     );
     assert_eq!(
         feedback_text(

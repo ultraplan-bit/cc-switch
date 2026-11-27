@@ -58,7 +58,7 @@ const ROW_HEIGHT = 56;
 export type SkillsPageSource = "repos" | "skillssh";
 
 type InstallRunner = <T extends { id: string }>(
-  install: (firstApp: AppId) => Promise<T[]>,
+  install: (firstApp: AppId | null) => Promise<T[]>,
   apps?: AppId[],
 ) => Promise<{
   installed: T[];
@@ -420,10 +420,15 @@ export function SkillsPage({
         }),
       ]);
       toast.success(
-        t("skillsPage.toast.installed", {
-          name: row.name,
-          apps: names(installTargets),
-        }),
+        t(
+          installTargets.length
+            ? "skillsPage.toast.installed"
+            : "skillsPage.toast.savedToLibrary",
+          {
+            name: row.name,
+            apps: names(installTargets),
+          },
+        ),
         { closeButton: true },
       );
       if (failures.length) {
@@ -459,12 +464,14 @@ export function SkillsPage({
 
   // ─── 渲染 ───────────────────────────────────────────────────────────
   const installToLabel =
-    installTargets.length <= 2
-      ? names(installTargets)
-      : t("skillsPage.installTo.many", {
-          first: APP_DISPLAY_NAME[installTargets[0]],
-          count: installTargets.length,
-        });
+    installTargets.length === 0
+      ? t("skillsPage.installTo.libraryOnly")
+      : installTargets.length <= 2
+        ? names(installTargets)
+        : t("skillsPage.installTo.many", {
+            first: APP_DISPLAY_NAME[installTargets[0]],
+            count: installTargets.length,
+          });
 
   const loadingList = isSkillsSh
     ? (loadingSkillsSh || fetchingSkillsSh) && accumulated.length === 0
@@ -961,6 +968,18 @@ function InstallToPopover({
             {t("skillsPage.installTo.help")}
           </HelpTip>
         </div>
+        <label className="flex cursor-pointer items-center gap-2 text-body">
+          <input
+            type="checkbox"
+            className={CHECKBOX_CLASS}
+            checked={targets.length === 0}
+            onChange={() => onChange([])}
+          />
+          {t("skillsPage.installTo.libraryOnly")}
+        </label>
+        <p className="m-0 text-caption text-fg-2">
+          {t("skillsPage.installTo.libraryOnlyHint")}
+        </p>
         <div className="grid grid-cols-2 gap-x-3 gap-y-2">
           {apps.map((app) => {
             const checked = targets.includes(app);
@@ -977,8 +996,7 @@ function InstallToPopover({
                     const next = event.target.checked
                       ? [...targets, app]
                       : targets.filter((item) => item !== app);
-                    // 至少留一个：后端安装必须落到某个应用
-                    if (next.length) onChange(next);
+                    onChange(next);
                   }}
                 />
                 <AppGlyph app={app} size={16} badgeClassName="bg-surface" />

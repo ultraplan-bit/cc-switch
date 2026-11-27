@@ -527,29 +527,8 @@ pub(super) fn build_tool_search_paths(tool: &str) -> Vec<std::path::PathBuf> {
         // of the npm directory so a native install wins over a stale npm shim
         // (#4701).
         if let Some(local_data) = dirs::data_local_dir() {
-            if tool == "codex" {
-                // OpenAI Codex Installer.exe / .msi standalone install location
-                // (#6061, #6047).
-                push_unique_path(
-                    &mut search_paths,
-                    local_data
-                        .join("Programs")
-                        .join("OpenAI")
-                        .join("Codex")
-                        .join("bin"),
-                );
-            }
-            if tool == "claude" {
-                // `winget install Anthropic.ClaudeCode` / official native
-                // installer location (#6278).
-                push_unique_path(
-                    &mut search_paths,
-                    local_data.join("Programs").join("claude"),
-                );
-            }
-            if tool == "agy" {
-                // Antigravity CLI official install.ps1 location.
-                push_unique_path(&mut search_paths, local_data.join("agy").join("bin"));
+            for path in windows_standalone_installer_paths(tool, &local_data) {
+                push_unique_path(&mut search_paths, path);
             }
         }
         if let Some(appdata) = dirs::data_dir() {
@@ -630,6 +609,20 @@ pub(super) fn build_tool_search_paths(tool: &str) -> Vec<std::path::PathBuf> {
     let path_env = effective_path_os();
     extend_from_cli_path_env(&mut search_paths, path_env);
     search_paths.into_iter().collect()
+}
+
+#[cfg(target_os = "windows")]
+fn windows_standalone_installer_paths(tool: &str, local_data: &Path) -> Vec<PathBuf> {
+    match tool {
+        "codex" => vec![local_data
+            .join("Programs")
+            .join("OpenAI")
+            .join("Codex")
+            .join("bin")],
+        "claude" => vec![local_data.join("Programs").join("claude")],
+        "agy" => vec![local_data.join("agy").join("bin")],
+        _ => Vec::new(),
+    }
 }
 
 #[cfg(target_os = "windows")]

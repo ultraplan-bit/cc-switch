@@ -37,6 +37,8 @@ import type { UniversalProviderPreset } from "@/config/universalProviderPresets"
 import type { AuthCenterTarget } from "@/lib/api";
 import type { AppMode } from "@/types/proxy";
 import { appHas } from "@/config/appSpecs";
+import { useProviderConnectionMode } from "./useProviderConnectionMode";
+import { Notice } from "@/components/ui/notice";
 
 interface AddProviderDialogProps {
   open: boolean;
@@ -63,6 +65,11 @@ export function AddProviderDialog({
   modeView,
 }: AddProviderDialogProps) {
   const { t } = useTranslation();
+  const {
+    connectionsOnly,
+    pending: resolvingConnectionMode,
+    migrationError,
+  } = useProviderConnectionMode(appId, open, modeView);
   // OpenCode and OpenClaw don't support universal providers
   const showUniversalTab =
     appId !== "opencode" &&
@@ -130,15 +137,17 @@ export function AddProviderDialog({
     [],
   );
   // 新增时表单自己把预设投影到配置文件上的应用（Claude Code 在对话框里取底，见上）。
-  const projectsDraft = appId !== "claude" && appHas(appId, "editorView");
+  const projectsDraft =
+    !connectionsOnly && appId !== "claude" && appHas(appId, "editorView");
   const { submitWithConflictRetry, conflictDialog } = useLiveEditConflict();
 
   useEffect(() => {
-    if (!open || appId !== "claude") {
+    if (!open || appId !== "claude" || connectionsOnly) {
       setClaudeLiveBase(null);
       setClaudeBaseLoaded(false);
       return;
     }
+    if (resolvingConnectionMode) return;
     let cancelled = false;
     providersApi
       .getEditorView(appId, {})
@@ -158,7 +167,7 @@ export function AddProviderDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, appId, t]);
+  }, [open, appId, t, connectionsOnly, resolvingConnectionMode]);
 
   const closeDialog = useCallback(() => {
     setAuthSettingsTarget(null);
@@ -450,7 +459,11 @@ export function AddProviderDialog({
       const submit = async (onConflict: EditorConflictPolicy) => {
         await onSubmit({
           ...providerData,
-          ...(editorBase ? { editorSave: { ...editorBase, onConflict } } : {}),
+          ...(connectionsOnly
+            ? { editorSave: { base: {}, connectionOnly: true } }
+            : editorBase
+              ? { editorSave: { ...editorBase, onConflict } }
+              : {}),
         });
         closeDialog();
       };
@@ -464,10 +477,13 @@ export function AddProviderDialog({
       projectsDraft,
       draftEditorBase,
       submitWithConflictRetry,
+      connectionsOnly,
     ],
   );
 
-  const waitingForClaudeBase = appId === "claude" && !claudeBaseLoaded;
+  const waitingForClaudeBase =
+    resolvingConnectionMode ||
+    (!connectionsOnly && appId === "claude" && !claudeBaseLoaded);
 
   // 表单已经挂上、却没有预设选择器（没有预设可选的表单）：直接进第 2 步。
   // 子组件的 effect 先于这里执行，选择器在同一次提交里已经登记过了。
@@ -514,8 +530,11 @@ export function AddProviderDialog({
       onSubmitReadyChange={handleSubmitReadyChange}
       onAccountLoginChange={setAccountLogin}
       showButtons={false}
+      connectionsOnly={connectionsOnly}
       claudeLiveBase={
-        appId === "claude" ? (claudeLiveBase ?? undefined) : undefined
+        !connectionsOnly && appId === "claude"
+          ? (claudeLiveBase ?? undefined)
+          : undefined
       }
       onEditorBaseChange={projectsDraft ? handleDraftEditorBase : undefined}
       onUniversalPresetSelect={
@@ -560,6 +579,19 @@ export function AddProviderDialog({
             : "pt-4"
       }
     >
+      {migrationError && (
+        <Notice tone="warning" title={t("profiles.migration.failed")}>
+          {String(migrationError)}
+        </Notice>
+      )}
+      {connectionsOnly && step === "form" && (
+        <Notice
+          tone="neutral"
+          title={t("provider.connectionsSavedNotice", {
+            defaultValue: "连接保存到供应商库。直连配置需重新应用 Profile。",
+          })}
+        />
+      )}
       <PresetStepContext.Provider value={stepState}>
         {step === "pick" && (
           <div ref={setPickerHost} className="min-h-0 flex-1" />

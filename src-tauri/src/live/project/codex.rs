@@ -595,7 +595,7 @@ const DESKTOP_RUNS_CODEX_IN_WSL: &str = "runCodexInWindowsSubsystemForLinux";
 /// （#9375）。没有对两边都绝对的写法，只能保裸文件名；其余情况见 [`catalog_pointer_value`]。
 /// 只在 Windows 宿主上看这个开关：别的系统上没有 WSL 侧读取方，从 Windows 同步来的配置
 /// 带着开关也照写绝对指针，免得重新撞上 #7294。
-fn catalog_pointer_for(config_dir: &Path, doc: &DocumentMut) -> String {
+pub(crate) fn catalog_pointer_for(config_dir: &Path, doc: &DocumentMut) -> String {
     let runs_in_wsl = cfg!(windows)
         && doc
             .get("desktop")

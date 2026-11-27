@@ -20,6 +20,7 @@ interface SkillRestoreDialogProps {
   isDeleting: boolean;
   /** 恢复后会在这些应用启用（写在说明里，不藏） */
   targetsLabel: string;
+  libraryOnly: boolean;
   onRestore: (backupId: string) => void;
   onDelete: (backup: SkillBackupEntry) => void;
   onClose: () => void;
@@ -33,6 +34,7 @@ export function SkillRestoreDialog({
   isRestoring,
   isDeleting,
   targetsLabel,
+  libraryOnly,
   onRestore,
   onDelete,
   onClose,
@@ -52,7 +54,12 @@ export function SkillRestoreDialog({
           {t("skills.restoreFromBackup.title")}
         </DialogTitle>
         <DialogDescription className="text-caption text-fg-2">
-          {t("skillsPage.restore.lead", { apps: targetsLabel })}
+          {t(
+            libraryOnly
+              ? "skillsPage.restore.libraryOnlyLead"
+              : "skillsPage.restore.lead",
+            { apps: targetsLabel },
+          )}
         </DialogDescription>
       </div>
 

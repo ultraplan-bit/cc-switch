@@ -39,6 +39,7 @@ import {
 } from "@/lib/api";
 import { checkAllEnvConflicts, checkEnvConflicts } from "@/lib/api/env";
 import { useProviderActions } from "@/hooks/useProviderActions";
+import { useAgentAvailability } from "@/hooks/useAgentAvailability";
 import { openclawKeys, useOpenClawHealth } from "@/hooks/useOpenClaw";
 import { hermesKeys, useOpenHermesWebUI } from "@/hooks/useHermes";
 import { hermesApi } from "@/lib/api/hermes";
@@ -91,7 +92,7 @@ import {
 } from "@/components/shell/AppPageHeader";
 import { WindowControls } from "@/components/shell/WindowControls";
 import { APP_DISPLAY_NAME, AppGlyph } from "@/components/shell/AppGlyph";
-import { ProfileSwitcher } from "@/components/profiles/ProfileSwitcher";
+import { ProfilesPage } from "@/components/profiles/ProfilesPage";
 import { ProviderList } from "@/components/providers/ProviderList";
 import {
   hasOpencodeDefinition,
@@ -285,7 +286,10 @@ function App() {
     storeView(currentView);
   }, [currentView]);
 
-  const { data: settingsData } = useSettingsQuery();
+  const { data: settingsData, isPending: isSettingsPending } =
+    useSettingsQuery();
+  const { installedApps, isPending: isAvailabilityPending } =
+    useAgentAvailability();
   // Windows 一律去掉系统标题栏，用页头里的应用内窗口按钮；Linux 由设置决定
   const useAppWindowControls =
     isWindows() || (isLinux() && (settingsData?.useAppWindowControls ?? false));
@@ -297,30 +301,44 @@ function App() {
     [settingsData?.visibleApps],
   );
 
-  const getFirstVisibleApp = (): AppId => {
-    return (
-      orderAppIds(settingsData?.appOrder).find((app) => visibleApps[app]) ??
-      "claude"
-    );
-  };
-
-  useEffect(() => {
-    if (!visibleApps[activeApp]) {
-      setActiveApp(getFirstVisibleApp());
-    }
-  }, [visibleApps, activeApp]);
+  // 用户偏好与本机状态分别保存：安装探测不能覆盖隐藏偏好或资源启用状态。
+  const sidebarVisibleApps = useMemo<VisibleApps>(
+    () =>
+      Object.fromEntries(
+        APP_IDS.map((app) => [
+          app,
+          !isSettingsPending && visibleApps[app] && installedApps[app] === true,
+        ]),
+      ) as VisibleApps,
+    [installedApps, isSettingsPending, visibleApps],
+  );
+  const activeAppVisible = sidebarVisibleApps[activeApp];
+  const firstVisibleApp = orderAppIds(settingsData?.appOrder).find(
+    (app) => sidebarVisibleApps[app],
+  );
 
   // 启动后把其他可见应用的供应商列表预取进缓存：第一次切过去直接有数据，不先画骨架
   const providersPrefetchedRef = useRef(false);
   useEffect(() => {
-    if (!settingsData || providersPrefetchedRef.current) return;
+    if (
+      !settingsData ||
+      isAvailabilityPending ||
+      providersPrefetchedRef.current
+    )
+      return;
     providersPrefetchedRef.current = true;
     for (const app of APP_IDS) {
-      if (app !== activeApp && visibleApps[app]) {
+      if (app !== activeApp && sidebarVisibleApps[app]) {
         void queryClient.prefetchQuery(providersQueryOptions(app));
       }
     }
-  }, [settingsData, visibleApps, activeApp, queryClient]);
+  }, [
+    settingsData,
+    isAvailabilityPending,
+    sidebarVisibleApps,
+    activeApp,
+    queryClient,
+  ]);
 
   // 「启动时检查应用更新」（默认关）：打开了才在后台查一次，查到新版本侧栏「应用」上出现圆点
   const checkToolUpdatesOnStartup =
@@ -528,6 +546,8 @@ function App() {
             await queryClient.invalidateQueries({
               queryKey: ["providers", event.appType],
             });
+            // Tray/provider switches can clear an applied Profile marker.
+            await queryClient.invalidateQueries({ queryKey: ["profiles"] });
             if (event.appType === "pi") {
               await invalidatePiProviderCaches(queryClient);
             }
@@ -568,6 +588,10 @@ function App() {
 
   useTauriEvent("universal-provider-synced", async () => {
     await queryClient.invalidateQueries({ queryKey: ["providers"] });
+    await queryClient.invalidateQueries({
+      queryKey: ["profile-configuration"],
+    });
+    await queryClient.invalidateQueries({ queryKey: ["profiles"] });
     try {
       await providersApi.updateTrayMenu();
     } catch (error) {
@@ -594,6 +618,10 @@ function App() {
     await queryClient.invalidateQueries({
       queryKey: ["providers", "claude-desktop"],
     });
+  });
+
+  useTauriEvent("profile-application-cleared", async () => {
+    await queryClient.invalidateQueries({ queryKey: ["profiles"] });
   });
 
   useTauriEvent<SyncStatusUpdatedPayload | null | undefined>(
@@ -949,6 +977,44 @@ function App() {
     return true;
   };
 
+  // 探测完成后才调整页面；草稿必须沿用已有离开确认，不能把 A 的编辑器切到 B。
+  const hasUnsavedEditor = hasUnsavedChanges();
+  const unavailableAppPromptedRef = useRef<AppId | null>(null);
+  useEffect(() => {
+    if (activeAppVisible || !isAppPage(currentView)) {
+      unavailableAppPromptedRef.current = null;
+      return;
+    }
+    if (isSettingsPending || isAvailabilityPending) return;
+    const leaveUnavailableApp = () => {
+      closeProviderPanels();
+      setTrayNeedsRoute(null);
+      if (firstVisibleApp) {
+        setActiveApp(firstVisibleApp);
+        localStorage.setItem(APP_STORAGE_KEY, firstVisibleApp);
+        setCurrentView("providers");
+      } else {
+        setCurrentView("apps");
+      }
+    };
+    if (hasUnsavedEditor) {
+      if (unavailableAppPromptedRef.current === activeApp) return;
+      unavailableAppPromptedRef.current = activeApp;
+    }
+    if (!confirmLeave(leaveUnavailableApp)) leaveUnavailableApp();
+    // Navigation helpers intentionally stay out: changing pendingLeave must not
+    // reopen the confirmation after the user chooses to keep editing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    activeApp,
+    activeAppVisible,
+    currentView,
+    firstVisibleApp,
+    hasUnsavedEditor,
+    isAvailabilityPending,
+    isSettingsPending,
+  ]);
+
   const openSettings = (
     section: SettingsSection = "general",
     appConfigTarget?: AppId,
@@ -972,6 +1038,11 @@ function App() {
     if (managementBusyRef.current) return;
     if (confirmLeave(() => selectApp(app))) return;
     closeProviderPanels();
+    if (!sidebarVisibleApps[app]) {
+      setTrayNeedsRoute(null);
+      setCurrentView("apps");
+      return;
+    }
     setActiveApp(app);
     localStorage.setItem(APP_STORAGE_KEY, app);
     setCurrentView("providers");
@@ -995,7 +1066,11 @@ function App() {
     }
     setCurrentView(page);
   };
-  useTrayAppPageSeen(currentView === "providers" ? activeApp : null);
+  useTrayAppPageSeen(
+    currentView === "providers" && sidebarVisibleApps[activeApp]
+      ? activeApp
+      : null,
+  );
 
   useTrayNavigation((navigation) => {
     const navigate = () => {
@@ -1005,6 +1080,8 @@ function App() {
       }
       if (!navigation.app) return;
       selectApp(navigation.app);
+      if (managementBusyRef.current || !sidebarVisibleApps[navigation.app])
+        return;
       // 托盘先换应用：新应用那格还没报上来，按它实际生效的模式
       if (navigation.intent === "add") openAddProvider(undefined);
       if (navigation.intent === "needsRoute" && navigation.providerId) {
@@ -1433,8 +1510,6 @@ function App() {
   };
 
   const handleHideActiveApp = async () => {
-    const visibleCount = Object.values(visibleApps).filter(Boolean).length;
-    if (visibleCount <= 1) return;
     try {
       const current = await settingsApi.get();
       await settingsApi.save({
@@ -1498,10 +1573,7 @@ function App() {
           {t("appPage.installAndUpgrade")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          disabled={Object.values(visibleApps).filter(Boolean).length <= 1}
-          onSelect={() => void handleHideActiveApp()}
-        >
+        <DropdownMenuItem onSelect={() => void handleHideActiveApp()}>
           {t("appPage.hideFromSidebar")}
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -1540,14 +1612,6 @@ function App() {
       }
       actions={
         <>
-          {currentView === "providers" &&
-            activeApp !== "mcode" &&
-            activeApp !== "dsh" &&
-            activeApp !== "kimi" &&
-            activeApp !== "workbuddy" &&
-            (settingsData?.showProfileSwitcher ?? false) && (
-              <ProfileSwitcher activeApp={activeApp} />
-            )}
           {activeApp === "hermes" && (
             <Button
               variant="quiet"
@@ -1601,6 +1665,30 @@ function App() {
   // OpenClaw / Hermes 没有模式 tab，那一行放它们自己的页面导航。
   // 换整块内容的是页面导航，用下划线页签；分段控件只留给模式和页内筛选。
   const renderAppSegments = () => {
+    if (appPageBelongsTo("profiles", activeApp)) {
+      return (
+        <div className="shrink-0 px-6 pt-2">
+          <PageTabs<"providers" | "profiles">
+            aria-label={APP_DISPLAY_NAME[activeApp]}
+            idPrefix="agent-configuration"
+            controls="main-content"
+            value={currentView === "profiles" ? "profiles" : "providers"}
+            onValueChange={(view) => {
+              if (view === currentView) return;
+              const navigate = () => {
+                closeProviderPanels();
+                setCurrentView(view);
+              };
+              if (!confirmLeave(navigate)) navigate();
+            }}
+            items={[
+              { value: "providers", label: t("appPage.providers") },
+              { value: "profiles", label: t("profiles.title") },
+            ]}
+          />
+        </div>
+      );
+    }
     if (activeApp === "openclaw") {
       return (
         <div className="shrink-0 px-6 pt-2">
@@ -1738,6 +1826,17 @@ function App() {
   const renderAppPage = () => {
     const body = (() => {
       switch (currentView) {
+        case "profiles":
+          return (
+            <div
+              id="main-content"
+              role="tabpanel"
+              aria-labelledby="agent-configuration-profiles"
+              className="min-h-0 flex-1 overflow-y-auto scroll-stable"
+            >
+              <ProfilesPage activeApp={activeApp} />
+            </div>
+          );
         case "workspace":
           return <WorkspaceFilesPanel />;
         case "openclawConfig":
@@ -1910,7 +2009,12 @@ function App() {
         />
       );
     }
-    return isAppPage(currentView) ? renderAppPage() : renderGlobalPage();
+    if (isAppPage(currentView)) {
+      if (!sidebarVisibleApps[activeApp] && !hasUnsavedEditor)
+        return <PageLoading />;
+      return renderAppPage();
+    }
+    return renderGlobalPage();
   };
 
   return (
@@ -1921,7 +2025,7 @@ function App() {
         <Sidebar
           activeApp={activeApp}
           view={currentView}
-          visibleApps={visibleApps}
+          visibleApps={sidebarVisibleApps}
           settingsSection={settingsSection}
           onSelectApp={selectApp}
           onSelectPage={openPageFromNav}

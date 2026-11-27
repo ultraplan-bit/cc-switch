@@ -280,7 +280,7 @@ fn restore_skill_backup_restores_files_to_ssot_and_current_app() {
     .to_string_lossy()
     .to_string();
 
-    let restored = SkillService::restore_from_backup(&state.db, &backup_id, &AppType::Claude)
+    let restored = SkillService::restore_from_backup(&state.db, &backup_id, Some(&AppType::Claude))
         .expect("restore from backup");
 
     assert_eq!(restored.directory, "restore-skill");

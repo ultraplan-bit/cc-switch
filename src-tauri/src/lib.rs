@@ -1664,10 +1664,17 @@ pub fn run() {
             // Profile management (项目配置方案)
             commands::list_profiles,
             commands::create_profile,
+            commands::migrate_legacy_agent_profiles,
+            commands::import_project_profile,
+            commands::duplicate_profile,
             commands::update_profile,
+            commands::update_profile_config,
+            commands::add_profile_project,
+            commands::remove_profile_project,
             commands::delete_profile,
             commands::clear_current_profile,
             commands::apply_profile,
+            commands::deploy_profile_to_project,
             // Fetch OpenAI-compatible and Anthropic model lists. Response data structure:
             // data[].id, data[]?.owned_by. Special: supports Zhipu OpenAI Responses models[].slug.
             commands::fetch_models_for_config,

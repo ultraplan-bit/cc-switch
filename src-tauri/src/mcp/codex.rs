@@ -51,7 +51,14 @@ pub fn import_from_codex(config: &mut MultiAppConfig) -> Result<usize, AppError>
 
     let root: toml::Table = toml::from_str(&text)
         .map_err(|e| AppError::McpValidation(format!("解析 ~/.codex/config.toml 失败: {e}")))?;
+    import_from_document(config, &root)
+}
 
+/// Share transport/header conversion with project imports.
+pub(crate) fn import_from_document(
+    config: &mut MultiAppConfig,
+    root: &toml::Table,
+) -> Result<usize, AppError> {
     // 确保新结构存在
     let servers = config.mcp.servers.get_or_insert_with(HashMap::new);
 
@@ -282,7 +289,7 @@ pub fn import_from_codex(config: &mut MultiAppConfig) -> Result<usize, AppError>
 /// （如 `mcp_servers = "x"` / `[]`），仅判 `contains_key` 会跳过重建，随后的
 /// `doc["mcp_servers"][id] = …` 会触发 toml_edit 的 `IndexMut` panic
 /// （panic 发生在 Tauri command 内、跨 FFI 展开）。这里统一归一化后再插入。
-fn upsert_mcp_server_table(
+pub(crate) fn upsert_mcp_server_table(
     doc: &mut toml_edit::DocumentMut,
     id: &str,
     table: toml_edit::Table,
@@ -315,7 +322,7 @@ fn upsert_mcp_server_table(
 /// 加载。这比 panic 更隐蔽，因为用户往往正是发现某个 MCP 有问题才来关它的。
 ///
 /// 与写入分离成纯 doc 级函数，使守卫可脱离真实 `~/.codex/config.toml` 单测。
-fn remove_mcp_server_from_doc(doc: &mut toml_edit::DocumentMut, id: &str) {
+pub(crate) fn remove_mcp_server_from_doc(doc: &mut toml_edit::DocumentMut, id: &str) {
     if let Some(item) = doc.get_mut("mcp_servers") {
         // `Item::None` 是 toml_edit 的占位形态，不是用户写下的值——对它告警是噪音。
         // 必须在取可变借用之前算出来。
@@ -535,7 +542,7 @@ const NON_CODEX_SERVER_FIELDS: &[&str] = &["timeout", "autoApprove"];
 
 /// Codex 专用的 JSON → TOML 转换：在通用转换的基础上去掉 Codex 不认的字段。
 /// Grok Build 复用通用转换，不受影响。
-fn json_server_to_codex_toml_table(spec: &Value) -> Result<toml_edit::Table, AppError> {
+pub(crate) fn json_server_to_codex_toml_table(spec: &Value) -> Result<toml_edit::Table, AppError> {
     let mut table = json_server_to_toml_table(spec)?;
     for key in NON_CODEX_SERVER_FIELDS {
         table.remove(key);

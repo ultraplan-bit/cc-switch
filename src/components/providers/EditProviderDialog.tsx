@@ -27,6 +27,7 @@ import type {
 import { useLiveEditConflict } from "@/components/providers/LiveEditConflictDialog";
 import { toastEditorViewFailed } from "@/components/providers/forms/hooks/useDraftEditorProjection";
 import { appHas } from "@/config/appSpecs";
+import { useProviderConnectionMode } from "./useProviderConnectionMode";
 
 interface EditProviderDialogProps {
   open: boolean;
@@ -75,6 +76,11 @@ export function EditProviderDialog({
   modeView,
 }: EditProviderDialogProps) {
   const { t } = useTranslation();
+  const {
+    connectionsOnly,
+    pending: resolvingConnectionMode,
+    migrationError,
+  } = useProviderConnectionMode(appId, open, modeView, provider?.id);
   // 表单用了聚合的简化布局：页头应用名后标「聚合模式」
   const [stackLayout, setStackLayout] = useState(false);
   const [authSettingsTarget, setAuthSettingsTarget] =
@@ -131,8 +137,17 @@ export function EditProviderDialog({
     unknown
   > | null>(null);
 
-  // 使用 ref 标记是否已经加载过，防止重复读取覆盖用户编辑
-  const [hasLoadedLive, setHasLoadedLive] = useState(false);
+  // A provider/app change starts a fresh load even while the dialog remains open.
+  const [loadedLiveSession, setLoadedLiveSession] = useState<number | null>(
+    null,
+  );
+  const hasLoadedLive = loadedLiveSession === formSessionToken;
+  const setHasLoadedLive = useCallback(
+    (loaded: boolean) => {
+      setLoadedLiveSession(loaded ? formSessionToken : null);
+    },
+    [formSessionToken],
+  );
 
   // Claude：底部 JSON 显示「切到这个供应商之后 settings.json 的样子」，保存时拿它做三方比较。
   const [editorView, setEditorView] = useState<ProviderEditorView | null>(null);
@@ -166,9 +181,17 @@ export function EditProviderDialog({
       if (hasLoadedLive) {
         return;
       }
+      if (resolvingConnectionMode) return;
 
       // 切换式应用：编辑任何供应商都显示切换投影（关键字段、独有字段来自这一行，其余
       // 来自 live），代理模式下也一样，关键字段显示的是这个供应商自己的值。
+      if (connectionsOnly) {
+        setLiveSettings(null);
+        setEditorView(null);
+        setHasLoadedLive(true);
+        return;
+      }
+
       if (appHas(appId, "editorView")) {
         try {
           const view = await providersApi.getEditorView(
@@ -279,14 +302,27 @@ export function EditProviderDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, provider?.id, appId, hasLoadedLive, isProxyTakeover]); // 只依赖 provider.id，不依赖整个 provider 对象
+  }, [
+    open,
+    provider?.id,
+    appId,
+    hasLoadedLive,
+    isProxyTakeover,
+    connectionsOnly,
+    resolvingConnectionMode,
+    setHasLoadedLive,
+  ]); // 只依赖 provider.id，不依赖整个 provider 对象
 
   const initialSettingsConfig = useMemo(
-    () => liveSettings ?? asRecord(provider?.settingsConfig) ?? {},
-    [liveSettings, provider?.settingsConfig],
+    () =>
+      (connectionsOnly || !hasLoadedLive ? null : liveSettings) ??
+      asRecord(provider?.settingsConfig) ??
+      {},
+    [connectionsOnly, hasLoadedLive, liveSettings, provider?.settingsConfig],
   ); // 只依赖表单初始化所需字段，不依赖整个 provider
 
-  // 固定 initialData，防止 provider 对象更新时重置表单
+  // Freeze the completed initial projection for this edit session. Background
+  // provider/endpoint refreshes must not reset the form's unsaved values.
   const initialData = useMemo(() => {
     if (!provider) return null;
     return {
@@ -299,12 +335,7 @@ export function EditProviderDialog({
       icon: provider.icon,
       iconColor: provider.iconColor,
     };
-  }, [
-    open, // 修复：编辑保存后再次打开显示旧数据，依赖 open 确保每次打开时重新读取最新 provider 数据
-    provider?.id, // 只依赖 ID，provider 对象更新不会触发重新计算
-    provider?.meta, // 供应商元数据变化时重新初始化表单
-    initialSettingsConfig,
-  ]);
+  }, [formSessionToken, hasLoadedLive]);
 
   const handleSubmit = useCallback(
     async (values: ProviderFormValues) => {
@@ -340,9 +371,16 @@ export function EditProviderDialog({
         await onSubmit({
           provider: updatedProvider,
           originalId: provider.id,
-          ...(editorView
-            ? { editorSave: { base: editorView.settings, onConflict } }
-            : {}),
+          ...(connectionsOnly
+            ? {
+                editorSave: {
+                  base: asRecord(provider.settingsConfig) ?? {},
+                  connectionOnly: true,
+                },
+              }
+            : editorView
+              ? { editorSave: { base: editorView.settings, onConflict } }
+              : {}),
         });
         if (currentFormSessionToken.current === formSessionToken) closeDialog();
       };
@@ -356,6 +394,7 @@ export function EditProviderDialog({
       editorView,
       submitWithConflictRetry,
       formSessionToken,
+      connectionsOnly,
     ],
   );
 
@@ -363,26 +402,34 @@ export function EditProviderDialog({
     return null;
   }
 
-  const waitingForEditorView = appHas(appId, "editorView") && !hasLoadedLive;
+  const waitingForEditorView =
+    resolvingConnectionMode ||
+    (!connectionsOnly && appHas(appId, "editorView") && !hasLoadedLive);
 
   const liveFile = !isProxyTakeover ? LIVE_FILE[appId] : undefined;
-  const currentNotice =
-    isCurrent && SWITCH_APPS.includes(appId) ? (
-      <Notice
-        tone="neutral"
-        title={
-          liveFile ? (
-            <>
-              {t("provider.editCurrentNoticeFile")}{" "}
-              <code className="font-mono text-caption">{liveFile}</code>
-              {t("provider.editCurrentNoticeFileEnd")}
-            </>
-          ) : (
-            t("provider.editCurrentNotice")
-          )
-        }
-      />
-    ) : null;
+  const currentNotice = connectionsOnly ? (
+    <Notice
+      tone="neutral"
+      title={t("provider.connectionsSavedNotice", {
+        defaultValue: "连接保存到供应商库。直连配置需重新应用 Profile。",
+      })}
+    />
+  ) : isCurrent && SWITCH_APPS.includes(appId) ? (
+    <Notice
+      tone="neutral"
+      title={
+        liveFile ? (
+          <>
+            {t("provider.editCurrentNoticeFile")}{" "}
+            <code className="font-mono text-caption">{liveFile}</code>
+            {t("provider.editCurrentNoticeFileEnd")}
+          </>
+        ) : (
+          t("provider.editCurrentNotice")
+        )
+      }
+    />
+  ) : null;
 
   return (
     <FullScreenPanel
@@ -425,6 +472,11 @@ export function EditProviderDialog({
         </>
       }
     >
+      {migrationError && (
+        <Notice tone="warning" title={t("profiles.migration.failed")}>
+          {String(migrationError)}
+        </Notice>
+      )}
       {currentNotice}
       {waitingForEditorView ? (
         <div className="py-12 text-center text-body text-fg-2">
@@ -444,6 +496,7 @@ export function EditProviderDialog({
           initialData={initialData}
           showButtons={false}
           isProxyTakeover={isProxyTakeover}
+          connectionsOnly={connectionsOnly}
           inactiveFields={editorView?.inactive}
           modeView={modeView}
           onStackLayoutChange={setStackLayout}

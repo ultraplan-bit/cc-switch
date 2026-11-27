@@ -177,6 +177,7 @@ async function openMenu(trigger: string, item: string) {
 
 describe("UnifiedSkillsPanel", () => {
   beforeEach(() => {
+    localStorage.removeItem("cc-switch:skills:install-to");
     m.installed = [];
     m.backups = [];
     m.updates = [];
@@ -923,6 +924,38 @@ describe("UnifiedSkillsPanel", () => {
     );
     expect(m.toastInfo).not.toHaveBeenCalledWith(
       "skills.installFromZip.noSkillsFound",
+      expect.anything(),
+    );
+    dialog.mockRestore();
+  });
+
+  it("installs ZIP Skills into the library without toggling Agent targets", async () => {
+    localStorage.setItem("cc-switch:skills:install-to", "[]");
+    m.installed = [makeSkill()];
+    const dialog = vi
+      .spyOn(skillsApi, "openZipFileDialog")
+      .mockResolvedValue("/tmp/library.zip");
+    m.installFromZip.mockResolvedValueOnce({
+      installed: [makeSkill()],
+      skipped: [],
+    });
+    renderPanel();
+    await userEvent.click(
+      screen.getByRole("button", { name: /skillsPage.add/ }),
+    );
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: "skillsPage.addMenu.zip" }),
+    );
+
+    await waitFor(() =>
+      expect(m.installFromZip).toHaveBeenCalledWith({
+        filePath: "/tmp/library.zip",
+        currentApp: null,
+      }),
+    );
+    expect(m.toggle).not.toHaveBeenCalled();
+    expect(m.toastSuccess).toHaveBeenCalledWith(
+      "skillsPage.toast.savedToLibrary",
       expect.anything(),
     );
     dialog.mockRestore();

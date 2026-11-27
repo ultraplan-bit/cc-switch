@@ -12,6 +12,7 @@ mod codex_editor;
 mod codex_login;
 pub(crate) mod codex_official_models;
 pub(crate) mod codex_terminal;
+mod connection_editor;
 pub(crate) mod copilot_direct;
 mod editor_toml;
 mod endpoints;
@@ -297,6 +298,13 @@ mod tests {
         let env = EnvVars::new()
             .set("CC_SWITCH_TEST_HOME", temp.path())
             .set("HOME", temp.path());
+        #[cfg(windows)]
+        let env = env
+            .set("USERPROFILE", temp.path())
+            .set("LOCALAPPDATA", temp.path().join("AppData").join("Local"))
+            .remove("HERMES_HOME");
+        #[cfg(not(windows))]
+        let env = env.remove("HERMES_HOME");
 
         let db = Arc::new(Database::memory().expect("in-memory database"));
         let state = AppState::new(db);
@@ -6472,6 +6480,9 @@ impl ProviderService {
         add_to_live: bool,
         editor: Option<EditorSave>,
     ) -> Result<bool, AppError> {
+        if editor.as_ref().is_some_and(|editor| editor.connection_only) {
+            return connection_editor::save(state, app_type, provider, true);
+        }
         match (app_type, editor) {
             (AppType::Claude, Some(editor)) => {
                 Self::add_claude_from_editor(state, provider, editor)
@@ -6501,6 +6512,12 @@ impl ProviderService {
         provider: Provider,
         editor: Option<EditorSave>,
     ) -> Result<bool, AppError> {
+        if editor.as_ref().is_some_and(|editor| editor.connection_only) {
+            if original_id.is_some_and(|original| original != provider.id) {
+                return Err(AppError::InvalidInput("供应商连接标识不可变更".into()));
+            }
+            return connection_editor::save(state, app_type, provider, false);
+        }
         match (app_type, editor) {
             (AppType::Claude, Some(editor))
                 if original_id.is_none_or(|original| original == provider.id) =>
@@ -7424,9 +7441,47 @@ impl ProviderService {
     /// - 代理模式：只换代理路由，直连指针不变；契约没变时客户端文件不读也不写。
     /// - 直连模式：切换式应用只替换客户端文件里的关键字段（不回填），文件和指针在同一个
     ///   操作里提交；累加式应用按各自的规则写入。
+    ///
+    /// Claude Code / Codex 的模型与行为归配置方案管：切到一个连接后接着应用
+    /// 它的默认方案（聚合模式除外），没有可跟随的方案时清除当前方案标记。
     pub fn switch(state: &AppState, app_type: AppType, id: &str) -> Result<SwitchResult, AppError> {
+        // A connection switch and its default Profile are one operation with respect to
+        // other switches, Profile edits and explicit applications.
+        let _profile_guard = crate::services::profile::ProfileScope::for_app(&app_type)
+            .map(|_| futures::executor::block_on(crate::commands::PROFILE_LOCK.lock()));
+        Self::switch_with(state, app_type, id, true)
+    }
+
+    /// 只切换连接，不处理当前方案标记：由正在应用方案的调用方自己收尾。
+    pub(crate) fn switch_connection_only(
+        state: &AppState,
+        app_type: AppType,
+        id: &str,
+    ) -> Result<SwitchResult, AppError> {
+        Self::switch_with(state, app_type, id, false)
+    }
+
+    fn switch_with(
+        state: &AppState,
+        app_type: AppType,
+        id: &str,
+        follow_profile: bool,
+    ) -> Result<SwitchResult, AppError> {
         let app = app_type.as_str().to_string();
-        let result = Self::switch_inner(state, app_type, id);
+        let mut result = Self::switch_inner(state, app_type.clone(), id);
+        if let (true, Ok(result)) = (follow_profile, &mut result) {
+            if let Err(error) = crate::services::profile::ProfileService::follow_connection_switch(
+                state,
+                &app_type,
+                id,
+                &mut result.warnings,
+            ) {
+                result.warnings.push(format!(
+                    "{}无法更新当前配置方案标记: {error}",
+                    crate::services::profile::PROFILE_FOLLOW_WARNING_PREFIX
+                ));
+            }
+        }
         match &result {
             Ok(result) if result.warnings.is_empty() => {
                 log::info!("[SWITCH] {app} 切到 {id} 完成");

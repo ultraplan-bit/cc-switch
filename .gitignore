@@ -24,8 +24,10 @@ flatpak/cc-switch.deb
 flatpak-build/
 flatpak-repo/
 .worktrees/
+/.workbuddy/
 .spec-workflow/
 copilot-api
 .history
 CODEBUDDY.md
 mainWindow.js
+/.pnpm-store/

@@ -97,6 +97,165 @@ fn seed_settings(text: &str) {
     fs::write(path, text).unwrap();
 }
 
+fn seed_applied_profile(state: &AppState, provider_id: &str) {
+    use crate::services::profile::ProfilePayload;
+    let mut payload = ProfilePayload::default();
+    payload.providers.claude = Some(provider_id.into());
+    payload.models.claude = Some("profile-main".into());
+    payload.model_settings.claude = Some(std::collections::BTreeMap::from([(
+        "ANTHROPIC_DEFAULT_SONNET_MODEL".into(),
+        "profile-sonnet".into(),
+    )]));
+    payload.native_config.claude =
+        Some(r#"{"env":{"CLAUDE_CODE_MAX_OUTPUT_TOKENS":"4096"}}"#.into());
+    let profile = crate::database::Profile {
+        id: "applied-profile".into(),
+        name: "Applied".into(),
+        payload: serde_json::to_string(&payload).unwrap(),
+        sort_order: None,
+        created_at: None,
+        updated_at: None,
+    };
+    state.db.save_profile(&profile).unwrap();
+    state
+        .db
+        .set_current_profile_id("claude", Some(&profile.id))
+        .unwrap();
+}
+
+#[tokio::test]
+#[serial]
+async fn explicit_mode_changes_clear_profile_markers_only_after_successful_configuration_changes() {
+    let _home = Home::new();
+    seed_settings(USER_SETTINGS);
+    let state = state_with(
+        AppType::Claude,
+        &[
+            claude("a", "https://a.example", json!({})),
+            claude("b", "https://b.example", json!({})),
+        ],
+        "a",
+    )
+    .await;
+    seed_applied_profile(&state, "a");
+    assert!(
+        enter_with_route(&state, &AppType::Claude, false, Some("missing"))
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        state
+            .db
+            .get_current_profile_id("claude")
+            .unwrap()
+            .as_deref(),
+        Some("applied-profile")
+    );
+    enter(&state, &AppType::Claude, false).await.unwrap();
+    assert!(state.db.get_current_profile_id("claude").unwrap().is_none());
+    seed_applied_profile(&state, "a");
+    exit(&state, &AppType::Claude).await.unwrap();
+    assert!(state.db.get_current_profile_id("claude").unwrap().is_none());
+    enter(&state, &AppType::Claude, true).await.unwrap();
+    seed_applied_profile(&state, "a");
+    set_stack_member(&state, &AppType::Claude, "b", true)
+        .await
+        .unwrap();
+    assert!(state.db.get_current_profile_id("claude").unwrap().is_none());
+    exit(&state, &AppType::Claude).await.unwrap();
+}
+
+#[tokio::test]
+#[serial]
+async fn startup_attach_restores_applied_profile_projection_without_modifying_provider_defaults() {
+    let _home = Home::new();
+    seed_settings(USER_SETTINGS);
+    let row = claude(
+        "a",
+        "https://a.example",
+        json!({"CLAUDE_CODE_MAX_OUTPUT_TOKENS":"1024"}),
+    );
+    let state = state_with(AppType::Claude, std::slice::from_ref(&row), "a").await;
+    enter(&state, &AppType::Claude, false).await.unwrap();
+    seed_applied_profile(&state, "a");
+    detach_all(&state).await;
+    assert_eq!(
+        state
+            .db
+            .get_current_profile_id("claude")
+            .unwrap()
+            .as_deref(),
+        Some("applied-profile")
+    );
+    startup(&state).await;
+    assert!(mode(&AppType::Claude).attached);
+    let live = settings();
+    assert_eq!(
+        live["env"]["ANTHROPIC_DEFAULT_SONNET_MODEL"],
+        "profile-sonnet"
+    );
+    assert_eq!(live["env"]["CLAUDE_CODE_MAX_OUTPUT_TOKENS"], "4096");
+    assert_eq!(
+        state
+            .db
+            .get_current_profile_id("claude")
+            .unwrap()
+            .as_deref(),
+        Some("applied-profile")
+    );
+    assert_eq!(
+        state
+            .db
+            .get_provider_by_id("a", &AppType::Claude)
+            .unwrap()
+            .unwrap()
+            .settings_config,
+        row.settings_config
+    );
+    exit(&state, &AppType::Claude).await.unwrap();
+}
+
+#[tokio::test]
+#[serial]
+async fn startup_attach_does_not_project_a_profile_edited_after_it_was_applied() {
+    let _home = Home::new();
+    seed_settings(USER_SETTINGS);
+    let row = claude(
+        "a",
+        "https://a.example",
+        json!({"CLAUDE_CODE_MAX_OUTPUT_TOKENS":"1024"}),
+    );
+    let state = state_with(AppType::Claude, std::slice::from_ref(&row), "a").await;
+    enter(&state, &AppType::Claude, false).await.unwrap();
+    let before = settings();
+    seed_applied_profile(&state, "a");
+    state
+        .db
+        .mark_current_profile_stale("claude", "applied-profile")
+        .unwrap();
+    detach_all(&state).await;
+    startup(&state).await;
+    assert!(mode(&AppType::Claude).attached);
+    let live = settings();
+    for key in [
+        "ANTHROPIC_DEFAULT_SONNET_MODEL",
+        "CLAUDE_CODE_MAX_OUTPUT_TOKENS",
+    ] {
+        assert_eq!(live["env"].get(key), before["env"].get(key), "{key}");
+    }
+    // It stays the current Profile, still pending re-application.
+    assert_eq!(
+        state
+            .db
+            .get_current_profile_id("claude")
+            .unwrap()
+            .as_deref(),
+        Some("applied-profile")
+    );
+    assert!(state.db.is_current_profile_stale("claude").unwrap());
+    exit(&state, &AppType::Claude).await.unwrap();
+}
+
 /// 落定后的 `settings.json`：切换写进去的空值墓碑几秒后才删（见 `claude_direct`），
 /// 这里先把它们删完再读。
 fn settled_bytes() -> Vec<u8> {
@@ -561,6 +720,7 @@ async fn nothing_is_saved_while_the_previous_write_cannot_be_finished() {
         None,
         row,
         Some(crate::services::provider::EditorSave {
+            connection_only: false,
             base,
             draft: None,
             on_conflict: Default::default(),
@@ -2114,6 +2274,7 @@ async fn codex_editor_saves_key_fields_to_the_row_and_global_edits_to_live() {
             Some(id),
             row,
             Some(crate::services::provider::EditorSave {
+                connection_only: false,
                 base,
                 draft: None,
                 on_conflict: Default::default(),
@@ -2242,6 +2403,7 @@ async fn codex_editor_leaves_exclusive_fields_from_live_to_the_user() {
             None,
             row,
             Some(crate::services::provider::EditorSave {
+                connection_only: false,
                 base,
                 draft: None,
                 on_conflict: Default::default(),
@@ -2339,6 +2501,7 @@ async fn codex_editor_leaves_what_the_user_did_not_touch_to_the_client() {
         None,
         row,
         Some(crate::services::provider::EditorSave {
+            connection_only: false,
             base,
             draft: None,
             on_conflict: Default::default(),
@@ -2450,6 +2613,7 @@ async fn codex_add_dialog_leaves_a_live_field_changed_after_opening_to_the_clien
         legacy,
         true,
         Some(crate::services::provider::EditorSave {
+            connection_only: false,
             base,
             draft: None,
             on_conflict: Default::default(),
@@ -2500,6 +2664,7 @@ async fn codex_editor_route_table_renamed_in_the_editor_stays_with_the_provider(
         None,
         row,
         Some(crate::services::provider::EditorSave {
+            connection_only: false,
             base: view.settings,
             draft: None,
             on_conflict: Default::default(),
@@ -2807,6 +2972,7 @@ async fn gemini_editor_saves_key_fields_to_the_row_and_global_edits_to_live() {
         Some("a"),
         row,
         Some(crate::services::provider::EditorSave {
+            connection_only: false,
             base: view.settings.clone(),
             draft: None,
             on_conflict: Default::default(),
@@ -2852,6 +3018,7 @@ async fn gemini_editor_saves_key_fields_to_the_row_and_global_edits_to_live() {
         Some("vertex"),
         row,
         Some(crate::services::provider::EditorSave {
+            connection_only: false,
             base: view.settings,
             draft: None,
             on_conflict: Default::default(),
@@ -3148,6 +3315,7 @@ async fn grok_editor_saves_the_table_to_the_row_and_global_edits_to_live() {
         Some("a"),
         row,
         Some(crate::services::provider::EditorSave {
+            connection_only: false,
             base: view.settings,
             draft: None,
             on_conflict: Default::default(),
@@ -3201,6 +3369,7 @@ fn add_from_editor(
         row,
         true,
         Some(crate::services::provider::EditorSave {
+            connection_only: false,
             base,
             draft: Some(draft),
             on_conflict: Default::default(),
@@ -5711,6 +5880,7 @@ async fn codex_editor_catalog_pointer_belongs_to_the_card() {
             None,
             row,
             Some(crate::services::provider::EditorSave {
+                connection_only: false,
                 base,
                 draft: None,
                 on_conflict: Default::default(),
@@ -6613,6 +6783,7 @@ async fn codex_editing_the_current_provider_into_a_keyless_row_is_refused() {
         None,
         row,
         Some(crate::services::provider::EditorSave {
+            connection_only: false,
             base,
             draft: None,
             on_conflict: Default::default(),

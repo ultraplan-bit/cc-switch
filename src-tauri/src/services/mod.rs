@@ -22,6 +22,7 @@ pub mod pi_prompt_files;
 pub(crate) mod pi_state;
 pub mod plugin_manager;
 pub mod profile;
+pub(crate) mod project_profile;
 pub mod prompt;
 pub mod provider;
 pub mod proxy;

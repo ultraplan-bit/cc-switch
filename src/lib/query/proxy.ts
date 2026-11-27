@@ -139,6 +139,7 @@ export function useSetProxyStackMember() {
       );
     },
     onSettled: (_data, _error, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
       queryClient.invalidateQueries({
         queryKey: ["providers", variables.appType],
       });
@@ -171,6 +172,7 @@ export function useAdoptCodexStackCatalog() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["providers", "codex"] });
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
     },
   });
 }
@@ -205,6 +207,7 @@ export function useRestartCodexAppServerDaemon() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["providers", "codex"] });
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
     },
   });
 }
@@ -219,6 +222,7 @@ export function useAcknowledgeCodexStaleClients() {
     mutationFn: () => proxyApi.acknowledgeCodexStaleClients(),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["providers", "codex"] });
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
     },
   });
 }

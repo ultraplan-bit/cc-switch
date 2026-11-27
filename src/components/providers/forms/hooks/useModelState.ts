@@ -69,7 +69,7 @@ export function copilotOneMAvailable(
 /**
  * Parse model values from settings config JSON
  */
-function parseModelsFromConfig(settingsConfig: string) {
+export function parseModelsFromConfig(settingsConfig: string) {
   try {
     const cfg = settingsConfig ? JSON.parse(settingsConfig) : {};
     const env = cfg?.env || {};

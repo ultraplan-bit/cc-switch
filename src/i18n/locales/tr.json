@@ -280,7 +280,12 @@
     "formSubtitleStack": "{{app}} (Birleştirme modu)",
     "editCurrentNoticeFile": "Bu, kullanımda olan sağlayıcıdır. Kaydetme şunu yazar:",
     "editCurrentNoticeFileEnd": "hemen; sonraki istek bunu kullanır.",
-    "editCurrentNotice": "Bu, kullanımda olan sağlayıcıdır. Kaydetme hemen etkili olur; sonraki istek yeni ayarları kullanır."
+    "editCurrentNotice": "Bu, kullanımda olan sağlayıcıdır. Kaydetme hemen etkili olur; sonraki istek yeni ayarları kullanır.",
+    "connectionsSavedNotice": "Bağlantı sağlayıcı kitaplığına kaydedildi. Doğrudan bağlantı ayarlarını güncellemek için Profile kaydını yeniden uygulayın.",
+    "connectionConfig": "Gelişmiş bağlantı ayarları",
+    "connectionConfigHint": "Yalnızca adresleri, kimlik doğrulamayı, istek başlıklarını ve bulut hizmeti bağlantılarını yapılandırın. Modelleri ve Agent davranışını Profile içinde düzenleyin.",
+    "connectionConfigOnly": "Burada yalnızca bağlantı alanları düzenlenebilir. Modelleri ve davranışı Profile içinde değiştirin.",
+    "connectionConfigInvalid": "Kaydetmeden önce bağlantı yapılandırmasını düzeltin."
   },
   "claudeCode": {
     "needsRouting": "Yönlendirme Gerekiyor"
@@ -450,7 +455,7 @@
       "quotaDisplayHelp": "Sağlayıcı kartlarındaki, Hesaplar'daki ve tepsideki her kota penceresinin ne kadar kaldığını veya ne kadar kullanıldığını gösterip göstermediği. Bakiyeler ve Krediler her zaman kalanları gösterir.",
       "sidebarAndHeader": "Kenar çubuğu ve başlık",
       "visibleApps": "Kenar çubuğunda gösterilen uygulamalar",
-      "goToApps": "Uygulamaları seç",
+      "goToApps": "Agent yönetimini aç",
       "updates": "Uygulamalarınızın yeni sürümleri",
       "checkToolUpdates": "Açılışta uygulama güncellemelerini kontrol et",
       "checkToolUpdatesHelp": "CC Switch açıkken, her başlatıldığında yüklü komut satırı uygulamalarınızı yeni sürümler için kontrol eder ve bulursa kenar çubuğunda Uygulamalar üzerinde bir nokta gösterir. Hiçbir şey otomatik olarak yükseltilmez.",
@@ -950,8 +955,8 @@
     "appVisibility": {
       "title": "Ana Sayfa Ekranı",
       "description": "Ana sayfada hangi uygulamaların gösterileceğini seçin",
-      "showProfileSwitcher": "Proje değiştiriciyi göster",
-      "showProfileSwitcherDescription": "Proje değiştiriciyi ana sayfa başlığında göster",
+      "showProfileSwitcher": "Profilleri tepside göster",
+      "showProfileSwitcherDescription": "Hızlı uygulamak için profilleri tepsi menüsünde listele",
       "showProviderSearch": "Sağlayıcı aramasını göster",
       "showProviderSearchDescription": "Sağlayıcıları ada, notlara, web sitesine veya API adresine göre bulmak için sağlayıcı sayfasının üst kısmında bir arama düğmesi gösterin. Gizlendiğinde, ⌘F / Ctrl+F yine de aramayı açar"
     },
@@ -3074,40 +3079,165 @@
     }
   },
   "profiles": {
-    "switcherAriaLabel": "Proje: {{name}}",
-    "switcherTooltip": {
-      "claude": "Projeler: Claude Code sağlayıcısını / MCP / Becerileri / bellek dosyalarını tek tıklamayla değiştirin",
-      "claude-desktop": "Projeler: Claude Desktop sağlayıcısını tek tıklamayla değiştirin",
-      "codex": "Projeler: Codex sağlayıcısını / MCP / Becerileri / bellek dosyalarını tek tıklamayla değiştirin"
+    "title": "Profiller",
+    "noMatches": "Eşleşen profil yok",
+    "defaultModel": "Varsayılan model",
+    "loadFailed": "Profiller yüklenemedi",
+    "searchPlaceholder": "Profil, model veya sağlayıcı ara",
+    "empty": "Bu Agent için henüz profil yok. Başlamak için bir tane oluşturun.",
+    "createFromCurrent": "Yeni profil",
+    "createDescription": "Profil, tek bir Agent’ın bağlantısını, modellerini, davranışını ve kaynaklarını kaydeder. Oluşturmak hiçbir şeyi değiştirmez; profil uygulandığında veya dağıtıldığında geçerli olur.",
+    "createAndEdit": "Oluştur ve düzenle",
+    "createSource": {
+      "label": "Başlangıç içeriği",
+      "blank": "Boş profil",
+      "blankHint": "Geçerli bağlantıyı ve varsayılan modeli kullanır. MCP, Skills ve talimatlar kullanıldığı yerde olduğu gibi kalır.",
+      "current": "Geçerli genel yapılandırma",
+      "currentHint": "Bu Agent’ın şu anda genel olarak kullandığı bağlantıyı, modelleri, davranışı, MCP, Skills ve talimatları kopyalar.",
+      "project": "Mevcut proje yapılandırması",
+      "projectHint": "Proje klasöründe bulunan modeli, MCP, Skills ve talimatları okur. Proje dosyaları değiştirilmez."
     },
-    "none": "Proje yok",
-    "searchPlaceholder": "Proje ara",
-    "empty": "Henüz proje yok",
-    "createFromCurrent": "Yeni proje",
-    "createDescription": {
-      "claude": "Mevcut Claude Code sağlayıcısını, MCP'yi, Becerileri ve bellek dosyasını daha sonra geçiş yapabileceğiniz bir proje olarak kaydedin.",
-      "claude-desktop": "Mevcut Claude Desktop sağlayıcısını daha sonra geçiş yapabileceğiniz bir proje olarak kaydedin.",
-      "codex": "Geçerli Codex sağlayıcısını, MCP'yi, Becerileri ve bellek dosyası yapılandırmasını daha sonra geçiş yapabileceğiniz bir proje olarak kaydedin."
-    },
-    "manage": "Projeleri yönet",
-    "manageTitle": "Projeleri Yönet",
-    "manageDescription": "Projeler yapılandırma anlık görüntüleridir. Projeleri değiştirdiğinizde mevcut konfigürasyon otomatik olarak ayrılmakta olduğunuz projeye kaydedilir.",
     "namePlaceholder": "örneğin Geliştirme, Çizim",
+    "apply": "Genel olarak uygula",
+    "applyAgain": "Yeniden uygula",
+    "applied": "Genel olarak kullanımda",
+    "pendingApply": "Yeniden uygulanmalı",
+    "pendingDeploy": "Yeniden dağıtılmalı",
+    "followsResources": "MCP, Skills ve talimatlar yönetilmiyor",
     "rename": "Yeniden adlandır",
-    "noSnapshotForScope": "Bu uygulama için henüz kaydedilmedi",
+    "duplicate": "Çoğalt",
+    "duplicateName": "{{name}} kopyası",
+    "duplicateTitle": "Profili çoğalt",
+    "captureCurrent": "Geçerli genel yapılandırmayla üzerine yaz",
+    "captureCurrentDescription": "“{{name}}” profilinin içeriğini, bu Agent’ın şu anda genel olarak kullandığı bağlantı, modeller, davranış, MCP, Skills ve talimatlarla değiştirir. Değişikliği kullanmak için ardından profili uygulayın veya dağıtın.",
     "delete": "Sil",
     "deleteConfirmTitle": "Silmeyi Onayla",
-    "deleteConfirmMessage": "\"{{name}}\" projesini silmek istediğinizden emin misiniz? Mevcut yapılandırmanız değişmeyecek.",
-    "createSuccess": "Proje oluşturuldu",
-    "createFailed": "Proje oluşturulamadı: {{detail}}",
-    "updateSuccess": "Proje güncellendi",
-    "updateFailed": "Proje güncellenemedi: {{detail}}",
-    "deleteSuccess": "Proje silindi",
-    "deleteFailed": "Proje silinemedi: {{detail}}",
-    "applySuccess": "Uygulanan proje",
-    "applyFailed": "Proje uygulanamadı: {{detail}}",
-    "applyWarnings": "{{warningCount}} uyarı(lar)ıyla uygulanan proje:\n{{details}}",
-    "clearSuccess": "Hiçbir projeye geçilmedi"
+    "deleteConfirmMessage": "“{{name}}” profili silinsin mi? Daha önce yazılmış yapılandırma korunur.",
+    "createSuccess": "Profil oluşturuldu",
+    "createFailed": "Profil oluşturulamadı: {{detail}}",
+    "updateSuccess": "Profil güncellendi",
+    "updateFailed": "Profil güncellenemedi: {{detail}}",
+    "deleteSuccess": "Profil silindi",
+    "deleteFailed": "Profil silinemedi: {{detail}}",
+    "applySuccess": "Profil genel olarak uygulandı",
+    "applyFailed": "Profil uygulanamadı: {{detail}}",
+    "applyWarnings": "Profil {{warningCount}} notla uygulandı:\n{{details}}",
+    "switchFollowWarning": "Bağlantı değiştirildi ancak profili tam olarak uygulanamadı:\n{{details}}",
+    "scope": {
+      "label": "Kullanım yeri",
+      "global": "Genel",
+      "project": "Proje"
+    },
+    "context": {
+      "title": "Profiller",
+      "rowActions": "{{name}} için diğer işlemler"
+    },
+    "inEffect": {
+      "global": "Genel olarak geçerli",
+      "project": "Dağıtılan profil",
+      "none": "Yok",
+      "noProfile": "Profil kullanılmıyor",
+      "notDeployed": "Henüz dağıtılmadı",
+      "deletedProfile": "Silinmiş bir profil"
+    },
+    "projects": {
+      "select": "Proje seç",
+      "search": "Proje adı veya yolu ara…",
+      "noMatches": "Eşleşen proje yok",
+      "add": "Proje klasörü ekle",
+      "addFailed": "Proje klasörü eklenemedi: {{detail}}",
+      "remove": "Proje listesinden kaldır",
+      "removeConfirm": "{{path}} proje listesinden kaldırılsın mı? Daha önce dağıtılan dosyalar korunur.",
+      "removed": "Proje listeden kaldırıldı",
+      "removeFailed": "Proje kaldırılamadı: {{detail}}",
+      "empty": "Henüz proje yok. Profil dağıtmak için bir proje klasörü ekleyin.",
+      "unavailable": "Bu klasör şu anda okunamıyor, bu yüzden dağıtım yapılamaz."
+    },
+    "projectPath": {
+      "label": "Proje klasörü",
+      "placeholder": "Klasör seçilmedi",
+      "pick": "Klasör seç",
+      "pickFailed": "Proje klasörü seçilemedi: {{detail}}"
+    },
+    "projectDeploy": {
+      "current": "Bu projeye dağıtıldı",
+      "button": "Projeye dağıt",
+      "again": "Yeniden dağıt",
+      "pending": "Projeye dağıtılıyor…",
+      "success": "Profil projeye dağıtıldı.",
+      "notes": "Dağıtım notları",
+      "completedWithNotes": "Proje dağıtımı notlarla tamamlandı.",
+      "failed": "Projeye dağıtım başarısız: {{detail}}",
+      "conflictTitle": "Projeye dağıtım çakışmaları",
+      "conflictMessage": "{{files}} dosyada kullanıcıya ait veya düzenlenmiş içerik var. Nasıl işlem yapılsın?",
+      "overwrite": "Çakışmaları üzerine yaz",
+      "keepCurrent": "Mevcut içeriği koru",
+      "skip": "Dağıtımı iptal et",
+      "skipped": "Çakışan öğeler değiştirilmeden bırakıldı.",
+      "codexTrustWarning": "Codex, `.codex/` proje yapılandırmasını yalnızca proje güvenilir olarak işaretlendikten sonra yükler.",
+      "sensitiveMcpSkipped": "Gömülü kimlik bilgileri içeren MCP sunucuları atlandı. Açık metin değerleri yerine ortam değişkeni başvuruları kullanın."
+    },
+    "import": {
+      "completedWithNotes": "Proje yapılandırması içe aktarıldı; notları inceleyin"
+    },
+    "migration": {
+      "pending": "Mevcut Agent yapılandırması hazırlanıyor…",
+      "failed": "Mevcut yapılandırmanın geçişi tamamlanmadı"
+    },
+    "environment": {
+      "title": "Proje ortamı",
+      "configureProject": "Projeyi yapılandır",
+      "busy": "Aracı işlemi sürüyor",
+      "checkFailed": "Aracı durumunun doğrulanması gerekiyor",
+      "ready": "Aracı çalıştırılabilir",
+      "recheck": "Bu aracıyı yeniden denetle",
+      "wslHint": "{{distro}} içinde algılandı. Kurulum yolları ana sistemde denetlenir ve bu WSL kurulumunu yansıtmayabilir. Dağıtım, CC Switch'in erişebildiği seçili klasörü kullanır; bir WSL dağıtımı seçmez. Aracının aynı projeyi açtığını doğrulayın.",
+      "scopeHint": "Proje kurulumu şu anda Claude Code ve Codex'i destekler.",
+      "projectConfiguration": "Proje profilleri",
+      "projectHint": "Bir proje klasörü seçin ve ona bir profil dağıtın. Yükleme, güncelleme ve tanılama için Agent yönetimine dönün.",
+      "prepareHint": "Profili şimdi hazırlayabilirsiniz. Aracı çalıştırılabilir duruma geldiğinde ve denetimler başarılı olduğunda dağıtım kullanılabilir."
+    },
+    "editor": {
+      "title": "Profili düzenle",
+      "description": "Bu Agent’ın tüm yapılandırmasını düzenleyin. Kaydetmek yalnızca profili günceller; ardından uygulayın veya dağıtın.",
+      "name": "Ad",
+      "provider": "Sağlayıcı",
+      "inheritProvider": "Geçerli genel sağlayıcıyı kullan",
+      "providerReferenceHint": "Model özellikleri seçilen sağlayıcıyı kullanır. API adresleri, anahtarlar ve hesaplar sağlayıcıda kalır. Projeye dağıtım genel bağlantıyı değiştirmez.",
+      "model": "Model",
+      "resetModels": "Sağlayıcı model ayarlarını geri yükle",
+      "runtimeSettings": "Akıl yürütme ve bağlam",
+      "mainReasoningEffort": "Ana modelin muhakeme çabası",
+      "planReasoningEffort": "Plan modunun muhakeme çabası",
+      "incompleteModels": "Model listesindeki boş model kimliklerini doldurun.",
+      "sections": "Profil bölümleri",
+      "modelsTab": "Genel ve modeller",
+      "behaviorTab": "Davranış ve gelişmiş ayarlar",
+      "resourcesTab": "Kaynaklar",
+      "instructionsTab": "Talimatlar",
+      "scopeSummary": "{{agent}} için bağımsız yapılandırma",
+      "nativeHint": "İzinler, korumalı alan, Hooks, eklentiler ve diğer Agent ayarları bu profilde saklanır. Model ve kaynakların ayrı sekmeleri vardır; adres, anahtar ve hesaplar sağlayıcıdan alınır. Kaydettikten sonra uygulayın veya dağıtın.",
+      "nativeObjectRequired": "Yapılandırma bir JSON nesnesi olmalıdır",
+      "nativeInvalid": "Geçersiz yapılandırma: {{detail}}",
+      "manageResources": "MCP, Skills ve talimatları bu profille yönet",
+      "resourcesManagedHint": "Uygulama veya dağıtım sırasında yalnızca burada seçilen kaynaklar etkinleştirilir, diğerleri kapatılır.",
+      "resourcesFollowHint": "Bu profil MCP, Skills ve talimatlara dokunmaz. Genel olarak etkin olanlar veya projede zaten bulunanlar olduğu gibi kalır.",
+      "mcp": "MCP sunucuları",
+      "skills": "Beceriler",
+      "searchResources": "MCP veya Skills ara",
+      "selectedCount": "{{count}} seçili",
+      "noMatchingResources": "Eşleşen kaynak yok",
+      "emptyResources": "Kitaplıkta kaynak yok",
+      "missing": "Eksik kaynak: {{id}}",
+      "unavailable": "Kullanılamıyor",
+      "missingResourcesHint": "Kullanılamayan kaynakların başvuruları kaydederken korunur ve uygularken atlanır. Başvuruyu kaldırmak için kaynağın işaretini kaldırın.",
+      "loadFailed": "Kaynaklar yüklenemedi: {{detail}}",
+      "prompt": "Talimat şablonu",
+      "noPrompt": "Talimat şablonu yok",
+      "instructionHint": "Kitaplıktaki bir istemi kullanır. Uygulama veya dağıtım sırasında bu Agent’ın talimat dosyasına yazılır.",
+      "instructionsFollowHint": "Bu profil talimatları yönetmiyor. Şablon seçmek için kaynak yönetimini açın.",
+      "saveHint": "Kaydetmek yalnızca profili günceller. Değişiklikleri kullanmak için genel olarak uygulayın veya bir projeye dağıtın."
+    }
   },
   "workspace": {
     "title": "Çalışma Alanı Dosyaları",
@@ -4233,9 +4363,9 @@
     "skills": "Beceriler",
     "prompts": "İstemler",
     "sessions": "Oturumlar",
-    "apps": "Uygulamalar",
-    "appsTitle": "Uygulamalar: yükleyin, yükseltin, kenar çubuğunda hangilerinin gösterileceğini seçin",
-    "appsHasUpdate": "Uygulamalar · güncellemeler mevcut",
+    "apps": "Agent yönetimi",
+    "appsTitle": "Yükleme, güncelleme, tanılama ve kenar çubuğu görünürlüğü",
+    "appsHasUpdate": "Agent yönetimi · Güncelleme var",
     "settings": "Ayarlar",
     "settingsHasUpdate": "Ayarlar · yeni bir CC Switch sürümü mevcut",
     "mode": {
@@ -4250,8 +4380,8 @@
     "showInSidebar": "Kenar çubuğunda {{name}}'yi göster",
     "lastChecked": "Son kontrol: {{time}}",
     "neverChecked": "Güncellemeler henüz kontrol edilmedi",
-    "helpTitle": "Uygulamalar",
-    "helpBody": "Komut satırı uygulamalarını buradan yükleyip yükseltin ve kenar çubuğunda hangilerinin gösterileceğini seçin.",
+    "helpTitle": "Agent yönetimi",
+    "helpBody": "Yükleme, güncelleme, tanılama ve kenar çubuğu görünürlüğü",
     "checking": "Kontrol ediliyor…",
     "checkUpdates": "Güncellemeleri kontrol edin",
     "moreActions": "Daha fazla işlem",
@@ -4262,7 +4392,7 @@
     "dragHandle": "{{name}} öğesini yeniden sıralamak için sürükleyin",
     "columnVersion": "Sürüm",
     "columnVisible": "Göster",
-    "visibleHelp": "Kapalıyken uygulama artık kenar çubuğunda, tepsi menüsünde, MCP / Skills uygulama sütunlarında veya İstemler ve Oturumlar'daki uygulama seçicilerde görünmez. Yalnızca gizlenir: sağlayıcıları, MCP sunucuları ve diğer ayarları yerinde kalır, kendi yapılandırma dosyalarına da dokunulmaz.",
+    "visibleHelp": "Kenar çubuğunda yalnızca yüklü ve bu anahtarı açık olan uygulamalar gösterilir. Yüklü olmayan uygulamaları buradan yükleyip ardından gösterilip gösterilmeyeceklerini seçebilirsiniz. Kapalıyken uygulama artık kenar çubuğunda, tepsi menüsünde, MCP / Skills uygulama sütunlarında veya İstemler ve Oturumlar'daki uygulama seçicilerde görünmez. Yalnızca gizlenir: sağlayıcıları, MCP sunucuları ve diğer ayarları yerinde kalır, kendi yapılandırma dosyalarına da dokunulmaz.",
     "desktopHelp": "Claude Desktop bir masaüstü uygulamasıdır ve buraya yüklenemez veya yükseltilemez; CC Switch, yapılandırma dosyası aracılığıyla ona bağlanır.",
     "desktopUnsupported": "Bu sistemde desteklenmiyor",
     "desktopConnected": "Bağlı",
@@ -4289,7 +4419,9 @@
       "omp": "Resmi komut dosyasıyla yüklenir",
       "copilot": "npm ile kurulur"
     },
-    "workbuddyHelp": "WorkBuddy bir masaüstü uygulamasıdır; buradan kurulamaz veya yükseltilemez, kendini günceller. CC Switch ona yapılandırma dosyası (~/.workbuddy/models.json) üzerinden bağlanır."
+    "workbuddyHelp": "WorkBuddy bir masaüstü uygulamasıdır; buradan kurulamaz veya yükseltilemez, kendini günceller. CC Switch ona yapılandırma dosyası (~/.workbuddy/models.json) üzerinden bağlanır.",
+    "officialDownload": "Resmî siteden indir",
+    "manualInstallHint": "İndirip yükledikten sonra kurulumu algılamak için “Güncellemeleri kontrol et”e tıklayın."
   },
   "appPage": {
     "moreActions": "{{name}} için diğer işlemler",
@@ -4861,7 +4993,9 @@
       "noUpdatesInSelection": "Seçilen Becerilerin hiçbirinde güncelleme yok",
       "selectionAlreadyOn": "{{count}}'nin seçilen Becerileri zaten {{app}}'de etkindir",
       "selectionAlreadyOff": "Seçilen {{count}} Becerilerinden hiçbiri {{app}}'de etkin değil",
-      "disabledSelection": "{{app}}'de {{count}} {{noun}} kapatıldı"
+      "disabledSelection": "{{app}}'de {{count}} {{noun}} kapatıldı",
+      "savedToLibrary": "{{name}} kitaplığa kaydedildi",
+      "savedManyToLibrary": "{{count}} Skills kitaplığa kaydedildi"
     },
     "installTo": {
       "prefix": "Şuraya yükleyin:",
@@ -4869,7 +5003,9 @@
       "many": "{{first}} ve {{count}} daha fazla",
       "title": "Yükledikten sonra bu uygulamalarda etkinleştirin",
       "helpTitle": "Bu hatırlanıyor mu?",
-      "help": "Evet, son seçiminiz varsayılandır. Bunu istediğiniz zaman Yüklendi altında değiştirebilirsiniz. ZIP'ten yüklemek ve yedeklemeden geri yüklemek için de bu seçeneği kullanın."
+      "help": "Evet, son seçiminiz varsayılandır. Bunu istediğiniz zaman Yüklendi altında değiştirebilirsiniz. ZIP'ten yüklemek ve yedeklemeden geri yüklemek için de bu seçeneği kullanın.",
+      "libraryOnly": "Yalnızca kitaplık",
+      "libraryOnlyHint": "Agent etkinleştirilmez veya eşitlenmez. ~/.agents/skills konumunda saklanırsa Agent’ın yerel keşif kuralları geçerlidir."
     },
     "discover": {
       "searchPlaceholder": "Ad, açıklama veya repoyu arayın",
@@ -4927,7 +5063,8 @@
       "submit": "{{count}}'yi içe aktar"
     },
     "restore": {
-      "lead": "Dosyalarını geri yüklemek için bir yedek seçin ve onu {{apps}}'de etkinleştirilen listeye geri ekleyin (Keşfet'te \"Yükle\" ile ayarlanır)."
+      "lead": "Dosyalarını geri yüklemek için bir yedek seçin ve onu {{apps}}'de etkinleştirilen listeye geri ekleyin (Keşfet'te \"Yükle\" ile ayarlanır).",
+      "libraryOnlyLead": "Agent’ı etkinleştirmeden veya eşitlemeden kitaplığa geri yükle."
     },
     "repoFail": {
       "title": "{{count}} depoları okunamadı: {{repos}}",

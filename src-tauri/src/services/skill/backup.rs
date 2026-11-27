@@ -59,7 +59,7 @@ impl SkillService {
     pub fn restore_from_backup(
         db: &Arc<Database>,
         backup_id: &str,
-        current_app: &AppType,
+        current_app: Option<&AppType>,
     ) -> Result<InstalledSkill> {
         let _state_guard = skill_state_write_guard();
         let backup_path = Self::backup_path_for_id(backup_id)?;
@@ -102,7 +102,7 @@ impl SkillService {
         let mut restored_skill = metadata.skill;
         restored_skill.directory = directory;
         restored_skill.installed_at = Utc::now().timestamp();
-        restored_skill.apps = SkillApps::only(current_app);
+        restored_skill.apps = current_app.map(SkillApps::only).unwrap_or_default();
         restored_skill.updated_at = 0;
 
         Self::copy_dir_recursive(&backup_skill_dir, &restore_path)?;
@@ -115,8 +115,8 @@ impl SkillService {
             return Err(err.into());
         }
 
-        if !restored_skill.apps.is_empty() {
-            if let Err(err) = Self::sync_to_app_dir(&restored_skill.directory, current_app) {
+        if let Some(app) = current_app {
+            if let Err(err) = Self::sync_to_app_dir(&restored_skill.directory, app) {
                 let _ = db.delete_skill(&restored_skill.id);
                 let _ = fs::remove_dir_all(&restore_path);
                 return Err(err);

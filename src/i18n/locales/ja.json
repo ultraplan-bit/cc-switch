@@ -280,7 +280,12 @@
     "formSubtitleStack": "{{app}}（集約モード）",
     "editCurrentNoticeFile": "使用中のプロバイダーです。保存するとすぐに",
     "editCurrentNoticeFileEnd": " に書き込まれ、次のリクエストから反映されます。",
-    "editCurrentNotice": "使用中のプロバイダーです。保存するとすぐに反映され、次のリクエストから新しい設定が使われます。"
+    "editCurrentNotice": "使用中のプロバイダーです。保存するとすぐに反映され、次のリクエストから新しい設定が使われます。",
+    "connectionsSavedNotice": "接続をプロバイダーライブラリに保存しました。直結設定を更新するには Profile を再適用してください。",
+    "connectionConfig": "詳細な接続設定",
+    "connectionConfigHint": "URL、認証、リクエストヘッダー、クラウドサービス接続のみを設定します。モデルと Agent の動作は Profile で編集します。",
+    "connectionConfigOnly": "ここでは接続フィールドのみ編集できます。モデルと動作は Profile で変更してください。",
+    "connectionConfigInvalid": "接続設定の形式を修正してから保存してください。"
   },
   "claudeCode": {
     "needsRouting": "ルーティングが必要"
@@ -450,7 +455,7 @@
       "quotaDisplayHelp": "プロバイダーカード、アカウント、トレイで、各枠の残量を「残り」と「使用済み」のどちらで表示するかを選びます。残高と Credits は常に残りを表示します。",
       "sidebarAndHeader": "サイドバーとヘッダー",
       "visibleApps": "サイドバーに表示するアプリ",
-      "goToApps": "「アプリ」を開く",
+      "goToApps": "Agent 管理を開く",
       "updates": "各アプリの新しいバージョン",
       "checkToolUpdates": "起動時に各アプリの新しいバージョンを確認",
       "checkToolUpdatesHelp": "オンにすると、CC Switch の起動時にインストール済みのコマンドラインアプリの新しいバージョンを確認し、見つかればサイドバーの「アプリ」に点を表示します。自動でアップグレードはしません。",
@@ -950,8 +955,8 @@
     "appVisibility": {
       "title": "ホームページ表示",
       "description": "ホームページに表示するアプリを選択",
-      "showProfileSwitcher": "プロジェクト切り替えを表示",
-      "showProfileSwitcherDescription": "メイン画面上部にプロジェクト切り替えを表示します",
+      "showProfileSwitcher": "トレイにプロファイルを表示",
+      "showProfileSwitcherDescription": "トレイメニューにプロファイルを一覧表示し、すばやく適用できるようにします",
       "showProviderSearch": "プロバイダー検索を表示",
       "showProviderSearchDescription": "プロバイダー画面の上部に検索ボタンを表示し、名前・メモ・公式サイト・API アドレスで検索できます。非表示にしても ⌘F / Ctrl+F で検索を開けます"
     },
@@ -3145,40 +3150,165 @@
     }
   },
   "profiles": {
-    "switcherAriaLabel": "プロジェクト：{{name}}",
-    "switcherTooltip": {
-      "claude": "プロジェクト：Claude Code のプロバイダー / MCP / Skills / メモリファイルをワンクリックで切り替え",
-      "claude-desktop": "プロジェクト：Claude Desktop のプロバイダーをワンクリックで切り替え",
-      "codex": "プロジェクト：Codex のプロバイダー / MCP / Skills / メモリファイルをワンクリックで切り替え"
+    "title": "プロファイル",
+    "noMatches": "一致するプロファイルはありません",
+    "defaultModel": "既定のモデル",
+    "loadFailed": "プロファイルを読み込めませんでした",
+    "searchPlaceholder": "プロファイル・モデル・プロバイダーを検索",
+    "empty": "この Agent のプロファイルはまだありません。作成して始めましょう。",
+    "createFromCurrent": "プロファイルを作成",
+    "createDescription": "プロファイルは 1 つの Agent の接続、モデル、動作、リソースを保存します。作成しただけでは何も変更されず、適用またはデプロイすると有効になります。",
+    "createAndEdit": "作成して編集",
+    "createSource": {
+      "label": "初期内容",
+      "blank": "空のプロファイル",
+      "blankHint": "現在の接続と既定のモデルを使用します。MCP、Skills、指示は使用先の現状のままです。",
+      "current": "現在のグローバル設定",
+      "currentHint": "この Agent が現在グローバルで使用している接続、モデル、動作、MCP、Skills、指示をコピーします。",
+      "project": "既存のプロジェクト設定",
+      "projectHint": "プロジェクトディレクトリにあるモデル、MCP、Skills、指示を読み込みます。プロジェクトのファイルは変更しません。"
     },
-    "none": "プロジェクトを使用しない",
-    "searchPlaceholder": "プロジェクトを検索",
-    "empty": "プロジェクトはまだありません",
-    "createFromCurrent": "新規プロジェクト",
-    "createDescription": {
-      "claude": "Claude Code の現在のプロバイダー、MCP、Skills、メモリファイルをプロジェクトとして保存し、後からワンクリックで切り替えられます。",
-      "claude-desktop": "Claude Desktop の現在のプロバイダーをプロジェクトとして保存し、後からワンクリックで切り替えられます。",
-      "codex": "Codex の現在のプロバイダー、MCP、Skills、メモリファイルの設定をプロジェクトとして保存し、後からワンクリックで切り替えられます。"
-    },
-    "manage": "プロジェクトを管理",
-    "manageTitle": "プロジェクト管理",
-    "manageDescription": "プロジェクトは設定のスナップショットです。プロジェクトを切り替えると、現在の設定は元のプロジェクトに自動的に保存されます。",
     "namePlaceholder": "例：開発、イラスト",
+    "apply": "グローバルに適用",
+    "applyAgain": "再適用",
+    "applied": "グローバルで使用中",
+    "pendingApply": "再適用が必要",
+    "pendingDeploy": "再デプロイが必要",
+    "followsResources": "MCP・Skills・指示は管理しない",
     "rename": "名前を変更",
-    "noSnapshotForScope": "このアプリ側は未保存",
+    "duplicate": "複製",
+    "duplicateName": "{{name}} のコピー",
+    "duplicateTitle": "プロファイルを複製",
+    "captureCurrent": "現在のグローバル設定で上書き",
+    "captureCurrentDescription": "「{{name}}」の内容を、この Agent が現在グローバルで使用している接続、モデル、動作、MCP、Skills、指示で置き換えます。変更を使うには、その後で適用またはデプロイしてください。",
     "delete": "削除",
     "deleteConfirmTitle": "削除の確認",
-    "deleteConfirmMessage": "プロジェクト「{{name}}」を削除してもよろしいですか？現在の設定は変更されません。",
-    "createSuccess": "プロジェクトを作成しました",
-    "createFailed": "プロジェクトの作成に失敗しました: {{detail}}",
-    "updateSuccess": "プロジェクトを更新しました",
-    "updateFailed": "プロジェクトの更新に失敗しました: {{detail}}",
-    "deleteSuccess": "プロジェクトを削除しました",
-    "deleteFailed": "プロジェクトの削除に失敗しました: {{detail}}",
-    "applySuccess": "プロジェクトを適用しました",
-    "applyFailed": "プロジェクトの適用に失敗しました: {{detail}}",
-    "applyWarnings": "プロジェクトを適用しました（警告 {{warningCount}} 件）：\n{{details}}",
-    "clearSuccess": "プロジェクトを使用しない状態に切り替えました"
+    "deleteConfirmMessage": "プロファイル「{{name}}」を削除しますか？すでに書き込まれた設定は残ります。",
+    "createSuccess": "プロファイルを作成しました",
+    "createFailed": "プロファイルを作成できませんでした：{{detail}}",
+    "updateSuccess": "プロファイルを更新しました",
+    "updateFailed": "プロファイルを更新できませんでした：{{detail}}",
+    "deleteSuccess": "プロファイルを削除しました",
+    "deleteFailed": "プロファイルを削除できませんでした：{{detail}}",
+    "applySuccess": "プロファイルをグローバルに適用しました",
+    "applyFailed": "プロファイルを適用できませんでした：{{detail}}",
+    "applyWarnings": "プロファイルを適用しました（注意 {{warningCount}} 件）：\n{{details}}",
+    "switchFollowWarning": "接続は切り替わりましたが、対応するプロファイルを完全には適用できませんでした：\n{{details}}",
+    "scope": {
+      "label": "使用先",
+      "global": "グローバル",
+      "project": "プロジェクト"
+    },
+    "context": {
+      "title": "プロファイル",
+      "rowActions": "{{name}} のその他の操作"
+    },
+    "inEffect": {
+      "global": "グローバルで有効",
+      "project": "デプロイ済みのプロファイル",
+      "none": "なし",
+      "noProfile": "プロファイル未使用",
+      "notDeployed": "未デプロイ",
+      "deletedProfile": "削除されたプロファイル"
+    },
+    "projects": {
+      "select": "プロジェクトを選択",
+      "search": "プロジェクト名またはパスを検索…",
+      "noMatches": "一致するプロジェクトはありません",
+      "add": "プロジェクトディレクトリを追加",
+      "addFailed": "プロジェクトディレクトリを追加できませんでした：{{detail}}",
+      "remove": "プロジェクト一覧から削除",
+      "removeConfirm": "{{path}} をプロジェクト一覧から削除しますか？デプロイ済みのファイルは残ります。",
+      "removed": "プロジェクト一覧から削除しました",
+      "removeFailed": "プロジェクトを削除できませんでした：{{detail}}",
+      "empty": "プロジェクトはまだありません。ディレクトリを追加すると、プロファイルをデプロイできます。",
+      "unavailable": "このディレクトリは現在読み取れないため、デプロイできません。"
+    },
+    "projectPath": {
+      "label": "プロジェクトディレクトリ",
+      "placeholder": "ディレクトリ未選択",
+      "pick": "ディレクトリを選択",
+      "pickFailed": "プロジェクトディレクトリを選択できませんでした：{{detail}}"
+    },
+    "projectDeploy": {
+      "current": "このプロジェクトにデプロイ済み",
+      "button": "プロジェクトにデプロイ",
+      "again": "再デプロイ",
+      "pending": "プロジェクトにデプロイ中…",
+      "success": "プロファイルをプロジェクトにデプロイしました。",
+      "notes": "デプロイに関する注意事項",
+      "completedWithNotes": "プロジェクトへのデプロイが終了しました。注意事項を確認してください。",
+      "failed": "プロジェクトへのデプロイに失敗しました：{{detail}}",
+      "conflictTitle": "プロジェクトのデプロイ競合",
+      "conflictMessage": "{{files}}件のファイルに既存または編集済みの内容があります。処理方法を選択してください。",
+      "overwrite": "競合内容を上書き",
+      "keepCurrent": "現在の内容を保持",
+      "skip": "デプロイを中止",
+      "skipped": "競合した項目は変更せずに残しました。",
+      "codexTrustWarning": "Codexはプロジェクトを信頼した後にのみ、`.codex/`のプロジェクト設定を読み込みます。",
+      "sensitiveMcpSkipped": "認証情報が直接記述されたMCPサーバーはスキップしました。値を直接書かず、環境変数参照を使用してください。"
+    },
+    "import": {
+      "completedWithNotes": "プロジェクト設定をインポートしました。注意事項を確認してください"
+    },
+    "migration": {
+      "pending": "既存の Agent 設定を準備しています…",
+      "failed": "既存設定の移行が完了していません"
+    },
+    "environment": {
+      "title": "プロジェクト環境",
+      "configureProject": "プロジェクトを設定",
+      "busy": "エージェントの操作を実行中",
+      "checkFailed": "エージェントの状態を確認する必要があります",
+      "ready": "エージェントは実行可能です",
+      "recheck": "このエージェントを再確認",
+      "wslHint": "{{distro}} で検出されました。インストール先はホスト側で検出するため、この WSL 内のインストールとは異なる場合があります。デプロイには CC Switch がアクセスできる選択済みフォルダーを使用し、WSL ディストリビューションは選択しません。エージェントが同じプロジェクトを開くことを確認してください。",
+      "scopeHint": "プロジェクトのセットアップは現在 Claude Code と Codex に対応しています。",
+      "projectConfiguration": "プロジェクトのプロファイル",
+      "projectHint": "プロジェクトディレクトリを選び、プロファイルをデプロイします。インストール、更新、診断は Agent 管理に戻って行います。",
+      "prepareHint": "プロファイルは今すぐ準備できます。Agent が実行可能になり、確認に成功するとデプロイできます。"
+    },
+    "editor": {
+      "title": "プロファイルを編集",
+      "description": "この Agent の設定全体を編集します。保存はプロファイルのみを更新し、適用またはデプロイ後に有効になります。",
+      "name": "名前",
+      "provider": "プロバイダー",
+      "inheritProvider": "現在のグローバルプロバイダーを使用",
+      "providerReferenceHint": "モデル機能は選択したプロバイダーを使用します。API アドレス、キー、アカウントは引き続きプロバイダーを参照します。プロジェクトへのデプロイでグローバル接続は切り替わりません。",
+      "model": "モデル",
+      "resetModels": "プロバイダーのモデル設定に戻す",
+      "runtimeSettings": "推論とコンテキスト",
+      "mainReasoningEffort": "メインモデルの推論強度",
+      "planReasoningEffort": "Plan モードの推論強度",
+      "incompleteModels": "モデル一覧の空のモデル ID を入力してください。",
+      "sections": "プロファイルのセクション",
+      "modelsTab": "基本とモデル",
+      "behaviorTab": "動作と詳細設定",
+      "resourcesTab": "リソース",
+      "instructionsTab": "指示",
+      "scopeSummary": "{{agent}} の独立した設定",
+      "nativeHint": "権限、サンドボックス、Hooks、プラグインなどの Agent 設定はこのプロファイルに保存します。モデルとリソースは専用タブで編集し、URL、キー、アカウントはプロバイダーを参照します。保存後に適用またはデプロイしてください。",
+      "nativeObjectRequired": "設定は JSON オブジェクトである必要があります",
+      "nativeInvalid": "設定形式が無効です：{{detail}}",
+      "manageResources": "このプロファイルで MCP、Skills、指示を管理する",
+      "resourcesManagedHint": "適用またはデプロイすると、ここで選択したリソースだけが有効になり、それ以外は無効になります。",
+      "resourcesFollowHint": "このプロファイルは MCP、Skills、指示を変更しません。グローバルで有効なものやプロジェクトに既にあるものはそのまま残ります。",
+      "mcp": "MCP サーバー",
+      "skills": "Skills",
+      "searchResources": "MCP または Skills を検索",
+      "selectedCount": "{{count}} 件選択済み",
+      "noMatchingResources": "一致するリソースがありません",
+      "emptyResources": "ライブラリにリソースがありません",
+      "missing": "リソースが見つかりません：{{id}}",
+      "unavailable": "利用不可",
+      "missingResourcesHint": "利用できないリソースへの参照は保存時に保持され、適用時にはスキップされます。参照を削除するにはチェックを外してください。",
+      "loadFailed": "リソースの読み込みに失敗しました：{{detail}}",
+      "prompt": "指示テンプレート",
+      "noPrompt": "指示テンプレートなし",
+      "instructionHint": "ライブラリのプロンプトを参照します。適用またはデプロイ時に、この Agent の指示ファイルへ書き込みます。",
+      "instructionsFollowHint": "このプロファイルは指示を管理しません。リソース管理をオンにするとテンプレートを選択できます。",
+      "saveHint": "保存はプロファイルのみを更新します。グローバルに適用するか、プロジェクトにデプロイすると有効になります。"
+    }
   },
   "workspace": {
     "title": "ワークスペースファイル",
@@ -4304,9 +4434,9 @@
     "skills": "Skills",
     "prompts": "プロンプト",
     "sessions": "セッション",
-    "apps": "アプリ",
-    "appsTitle": "アプリ：インストール、アップグレード、サイドバーに表示するもの",
-    "appsHasUpdate": "アプリ · 更新があります",
+    "apps": "Agent 管理",
+    "appsTitle": "インストール、更新、診断、サイドバー表示",
+    "appsHasUpdate": "Agent 管理 · 更新あり",
     "settings": "設定",
     "settingsHasUpdate": "設定 · CC Switch の新しいバージョンがあります",
     "mode": {
@@ -4321,8 +4451,8 @@
     "showInSidebar": "{{name}} をサイドバーに表示",
     "lastChecked": "最終確認 {{time}}",
     "neverChecked": "まだ更新を確認していません",
-    "helpTitle": "アプリ",
-    "helpBody": "ここでコマンドラインアプリをインストール・アップグレードし、サイドバーに表示するものを選びます。",
+    "helpTitle": "Agent 管理",
+    "helpBody": "インストール、更新、診断、サイドバー表示",
     "checking": "確認中…",
     "checkUpdates": "更新を確認",
     "moreActions": "その他の操作",
@@ -4333,7 +4463,7 @@
     "dragHandle": "ドラッグして {{name}} の順序を変更",
     "columnVersion": "バージョン",
     "columnVisible": "表示",
-    "visibleHelp": "オフにすると、このアプリはサイドバー、トレイメニュー、MCP / Skills のアプリ列、プロンプトとセッションのアプリ選択に表示されなくなります。表示しないだけで、プロバイダーや MCP などの設定はそのまま残り、アプリ自身の設定ファイルも変更されません。",
+    "visibleHelp": "サイドバーには、インストール済みでこのスイッチがオンのアプリのみ表示されます。未インストールのアプリはここでインストールし、その後に表示するか選べます。オフにすると、このアプリはサイドバー、トレイメニュー、MCP / Skills のアプリ列、プロンプトとセッションのアプリ選択に表示されなくなります。表示しないだけで、プロバイダーや MCP などの設定はそのまま残り、アプリ自身の設定ファイルも変更されません。",
     "desktopHelp": "Claude Desktop はデスクトップアプリのため、ここではインストールやアップグレードはできません。CC Switch は設定ファイル経由で接続します。",
     "workbuddyHelp": "WorkBuddy はデスクトップアプリのため、ここではインストールやアップグレードはできません（自動で更新されます）。CC Switch は設定ファイル（~/.workbuddy/models.json）を通じて連携します。",
     "desktopUnsupported": "このシステムには対応していません",
@@ -4360,7 +4490,9 @@
       "agy": "公式インストールスクリプトでインストール",
       "copilot": "npm でインストール",
       "omp": "公式インストールスクリプトでインストール"
-    }
+    },
+    "officialDownload": "公式サイトでダウンロード",
+    "manualInstallHint": "ダウンロードしてインストールした後、「更新を確認」でインストール状態を再確認してください。"
   },
   "appPage": {
     "moreActions": "{{name}} のその他の操作",
@@ -4932,7 +5064,9 @@
       "noUpdatesInSelection": "選択した Skill に更新はありません",
       "selectionAlreadyOn": "選択した {{count}} 件の Skill は既に {{app}} で有効です",
       "selectionAlreadyOff": "選択した {{count}} 件の Skill はどれも {{app}} で有効ではありません",
-      "disabledSelection": "{{app}} で {{count}} 件の {{noun}} をオフにしました"
+      "disabledSelection": "{{app}} で {{count}} 件の {{noun}} をオフにしました",
+      "savedToLibrary": "{{name}} をライブラリに保存しました",
+      "savedManyToLibrary": "{{count}} 個の Skills をライブラリに保存しました"
     },
     "installTo": {
       "prefix": "インストール先：",
@@ -4940,7 +5074,9 @@
       "many": "{{first}} ほか {{count}} 件",
       "title": "インストール後に有効にするアプリ",
       "helpTitle": "選んだアプリは記憶されますか",
-      "help": "はい、前回の選択が既定になります。インストール後も「インストール済み」でいつでも変更できます。ZIP からのインストールとバックアップからの復元もこの選択を使います。"
+      "help": "はい、前回の選択が既定になります。インストール後も「インストール済み」でいつでも変更できます。ZIP からのインストールとバックアップからの復元もこの選択を使います。",
+      "libraryOnly": "ライブラリのみに保存",
+      "libraryOnlyHint": "Agent への有効化や同期は行いません。保存先が ~/.agents/skills の場合、Agent 本来の自動検出は引き続き適用されます。"
     },
     "discover": {
       "searchPlaceholder": "名前・説明・リポジトリを検索",
@@ -4998,7 +5134,8 @@
       "submit": "{{count}} 件を取り込む"
     },
     "restore": {
-      "lead": "バックアップを選ぶとファイルを復元してリストに戻し、{{apps}} で有効にします（「見つける」の「インストール先」で決まります）。"
+      "lead": "バックアップを選ぶとファイルを復元してリストに戻し、{{apps}} で有効にします（「見つける」の「インストール先」で決まります）。",
+      "libraryOnlyLead": "Agent への有効化や同期を行わず、ライブラリに復元します。"
     },
     "repoFail": {
       "title": "{{count}} 個のリポジトリを読み込めませんでした：{{repos}}",

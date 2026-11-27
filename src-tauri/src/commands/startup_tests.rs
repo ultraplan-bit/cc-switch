@@ -101,7 +101,10 @@ fn startup_database_commands_yield_during_session_sync_contention() {
     let mode = query!(get_app_mode, "claude".into());
     assert_eq!(mode.mode, "direct");
     assert_eq!(mode.direct_provider_id, Some(provider.id));
-    assert!(query!(list_profiles).profiles.is_empty());
+    let listed = query!(list_profiles);
+    assert!(listed.profiles.is_empty());
+    assert!(listed.projects.is_empty());
+    assert!(listed.current.claude.is_none());
 
     let pricing = ModelPricingInfo {
         model_id: "issue-9084-test-model".into(),
@@ -230,7 +233,36 @@ fn remaining_database_commands_yield_during_session_sync_contention() {
     );
     assert!(!batch.is_empty());
 
-    let profile = query!(create_profile, "Test profile".into(), "claude".into());
+    let profile = query!(create_profile, "Test profile".into(), "claude".into(), None);
+    let blank = query!(
+        create_profile,
+        "Blank".into(),
+        "claude".into(),
+        Some(crate::services::profile::ProfileSource::Blank)
+    );
+    let copy = query!(
+        duplicate_profile,
+        blank.id.clone(),
+        "Copy".into(),
+        "claude".into()
+    );
+    query!(delete_profile, copy.id, "claude".into());
+    query!(delete_profile, blank.id, "claude".into());
+    let project = tempfile::tempdir().unwrap();
+    let project_path = project.path().to_string_lossy().into_owned();
+    query!(add_profile_project, project_path.clone());
+    let listed = query!(list_profiles);
+    assert_eq!(listed.profiles.len(), 1);
+    assert_eq!(listed.projects.len(), 1);
+    assert!(listed.projects[0].available);
+    assert!(listed.projects[0].deployed.is_empty());
+    query!(remove_profile_project, project_path);
+    assert!(query!(list_profiles).projects.is_empty());
+    assert!(tauri::async_runtime::block_on(super::add_profile_project(
+        app.state(),
+        "relative".into()
+    ))
+    .is_err());
     assert_eq!(
         query!(
             update_profile,
@@ -242,7 +274,7 @@ fn remaining_database_commands_yield_during_session_sync_contention() {
         .name,
         "Renamed"
     );
-    query!(delete_profile, profile.id);
+    query!(delete_profile, profile.id, "claude".into());
     query!(clear_current_profile, "claude".into());
 
     assert!(skill_query!(get_installed_skills).is_empty());
@@ -273,7 +305,8 @@ fn remaining_database_commands_yield_during_session_sync_contention() {
     assert!(tauri::async_runtime::block_on(super::create_profile(
         app.state(),
         "x".into(),
-        "nope".into()
+        "nope".into(),
+        None
     ))
     .is_err());
 }
@@ -392,13 +425,13 @@ fn profile_and_universal_mutations_wait_for_their_serial_locks() {
     let profile = while_serialized(
         &super::profile::PROFILE_LOCK,
         "create_profile",
-        super::create_profile(app.state(), "Serialized".into(), "claude".into()),
+        super::create_profile(app.state(), "Serialized".into(), "claude".into(), None),
     )
     .unwrap();
     while_serialized(
         &super::profile::PROFILE_LOCK,
         "delete_profile",
-        super::delete_profile(app.state(), profile.id),
+        super::delete_profile(app.state(), profile.id, "claude".into()),
     )
     .unwrap();
 

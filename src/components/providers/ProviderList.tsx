@@ -257,6 +257,9 @@ export function ProviderList({
     onSuccess: (imported) => {
       if (imported) {
         queryClient.invalidateQueries({ queryKey: ["providers", appId] });
+        queryClient.invalidateQueries({
+          queryKey: ["profile-configuration", appId],
+        });
         if (appId === "claude-desktop") {
           queryClient.invalidateQueries({ queryKey: ["claudeDesktopStatus"] });
         }

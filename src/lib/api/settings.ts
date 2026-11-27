@@ -279,6 +279,7 @@ export const settingsApi = {
       string,
       { wslShell?: string | null; wslShellFlag?: string | null }
     >,
+    localOnly?: boolean,
   ): Promise<
     Array<{
       name: string;
@@ -291,7 +292,11 @@ export const settingsApi = {
       update_blocked_by_node: NodeRequirementGap | null;
     }>
   > {
-    return await invoke("get_tool_versions", { tools, wslShellByTool });
+    return await invoke("get_tool_versions", {
+      tools,
+      wslShellByTool,
+      ...(localOnly === undefined ? {} : { localOnly }),
+    });
   },
 
   async runToolLifecycleAction(

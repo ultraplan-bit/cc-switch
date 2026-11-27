@@ -45,6 +45,16 @@ describe("GeneralSection tray style", () => {
     platform.linux = false;
   });
 
+  it("does not expose the obsolete Profile visibility preference", () => {
+    renderSection({ showProfileSwitcher: false });
+    expect(
+      screen.queryByText("settings.appVisibility.showProfileSwitcher"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "settings.general.goToApps" }),
+    ).toBeInTheDocument();
+  });
+
   it("defaults to the panel and saves the native menu when Menu is picked", () => {
     const onAutoSave = renderSection();
     const group = screen.getByRole("group", {

@@ -22,6 +22,14 @@ pub fn import_from_claude(config: &mut MultiAppConfig) -> Result<usize, AppError
 
     let v: Value = serde_json::from_str(&text)
         .map_err(|e| AppError::McpValidation(format!("解析 ~/.claude.json 失败: {e}")))?;
+    import_from_document(config, &v)
+}
+
+/// Reuse the native parser for explicitly selected project files, without live writes.
+pub(crate) fn import_from_document(
+    config: &mut MultiAppConfig,
+    v: &Value,
+) -> Result<usize, AppError> {
     let Some(map) = v.get("mcpServers").and_then(|x| x.as_object()) else {
         return Ok(0);
     };

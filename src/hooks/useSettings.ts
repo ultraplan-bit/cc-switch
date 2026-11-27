@@ -4,6 +4,7 @@ import { toast } from "@/lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { providersApi, settingsApi } from "@/lib/api";
 import { syncCurrentProvidersLiveSafe } from "@/utils/postChangeSync";
+import { refreshToolsForDirectoryChanges } from "@/components/apps/useToolManagement";
 import {
   invalidatePiDirectoryCaches,
   useSettingsQuery,
@@ -210,12 +211,14 @@ export function useSettings(): UseSettingsResult {
 
         // 在 mutate 之前从实时缓存捕获上一次持久化的插件集成状态，
         // 避免 closure 里的 data 因 React 尚未 re-render 而滞后
-        const prevPluginEnabled = queryClient.getQueryData<Settings>([
-          "settings",
-        ])?.enableClaudePluginIntegration;
+        const previousSettings =
+          queryClient.getQueryData<Settings>(["settings"]) ?? data;
+        const prevPluginEnabled =
+          previousSettings?.enableClaudePluginIntegration;
 
         // 保存到配置文件
         await saveMutation.mutateAsync(payload);
+        void refreshToolsForDirectoryChanges(previousSettings, payload);
 
         // 如果开机自启状态改变，调用系统 API
         if (
@@ -329,11 +332,13 @@ export function useSettings(): UseSettingsResult {
 
         // 在 mutate 之前从实时缓存捕获上一次持久化的插件集成状态，
         // 避免 closure 里的 data 因 React 尚未 re-render 而滞后
-        const prevPluginEnabled = queryClient.getQueryData<Settings>([
-          "settings",
-        ])?.enableClaudePluginIntegration;
+        const previousSettings =
+          queryClient.getQueryData<Settings>(["settings"]) ?? data;
+        const prevPluginEnabled =
+          previousSettings?.enableClaudePluginIntegration;
 
         await saveMutation.mutateAsync(payload);
+        void refreshToolsForDirectoryChanges(previousSettings, payload);
 
         await settingsApi.setAppConfigDirOverride(sanitizedAppDir ?? null);
         // 基准值换成刚存的：设置页不卸载，下次比较和「需要重启」都只跟真正没保存的改动走

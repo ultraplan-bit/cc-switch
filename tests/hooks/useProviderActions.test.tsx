@@ -299,6 +299,24 @@ describe("useProviderActions", () => {
     ]);
   });
 
+  it("reports default profile warnings separately after a connection switch", async () => {
+    switchProviderMutateAsync.mockResolvedValueOnce({
+      warnings: ["profile_follow:Missing instructions"],
+    });
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useProviderActions("claude"), {
+      wrapper,
+    });
+    await act(async () => {
+      await result.current.switchProvider(
+        createProvider({ category: "custom" }),
+      );
+    });
+    expect(toastWarningMock.mock.calls.map(([message]) => message)).toEqual([
+      "profiles.switchFollowWarning",
+    ]);
+  });
+
   it("does not infer a hot switch solely from the UI takeover flag", async () => {
     switchProviderMutateAsync.mockResolvedValueOnce({ warnings: [] });
     const { wrapper } = createWrapper();
