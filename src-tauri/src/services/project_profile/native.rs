@@ -241,6 +241,7 @@ pub(crate) fn capture_native_config(root: &Path, app: &AppType) -> Result<String
 mod tests {
     use super::*;
     use crate::database::Profile;
+    use crate::services::project_profile::test_projects;
     use crate::test_support::TempUserHome;
     use serial_test::serial;
 
@@ -252,11 +253,11 @@ mod tests {
             name: "Native".into(),
             payload: serde_json::to_string(&payload).unwrap(),
             sort_order: None,
-            project_path: Some(root.to_string_lossy().into()),
             created_at: None,
             updated_at: None,
         };
         state.db.save_profile(&profile).unwrap();
+        test_projects::use_project(root);
         profile
     }
 
@@ -276,12 +277,12 @@ mod tests {
             r#"{"permissions":{"allow":["Write"]},"future":{"enabled":true}}"#,
         );
         assert!(matches!(
-            ProjectProfileService::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap(),
+            test_projects::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap(),
             ProjectDeployResult::NeedsResolution { .. }
         ));
         let before = fs::read(&file).unwrap();
         assert!(matches!(
-            ProjectProfileService::deploy(
+            test_projects::deploy(
                 &state,
                 &profile.id,
                 ProfileScope::Claude,
@@ -291,7 +292,7 @@ mod tests {
             ProjectDeployResult::Skipped
         ));
         assert_eq!(fs::read(&file).unwrap(), before);
-        ProjectProfileService::deploy(
+        test_projects::deploy(
             &state,
             &profile.id,
             ProfileScope::Claude,
@@ -306,7 +307,7 @@ mod tests {
         assert_eq!(current["permissions"]["deny"], serde_json::json!(["Bash"]));
         assert_eq!(current["env"]["ANTHROPIC_AUTH_TOKEN"], "keep");
         seed(&state, project.path(), ProfileScope::Claude, "{}");
-        ProjectProfileService::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap();
+        test_projects::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap();
         let current: Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
         assert!(current["permissions"].get("allow").is_none());
         assert_eq!(current["permissions"]["deny"], serde_json::json!(["Bash"]));
@@ -323,7 +324,7 @@ mod tests {
         fs::create_dir_all(file.parent().unwrap()).unwrap();
         fs::write(&file, "# Keep comment\nmodel_provider='custom'\n[model_providers.custom]\nbase_url='https://keep.test'\n").unwrap();
         let profile = seed(&state, project.path(), ProfileScope::Codex, "sandbox_mode='read-only'\n[features]\nfuture=true\n[agents.worker]\nconfig_file='worker.toml'\n");
-        ProjectProfileService::deploy(&state, &profile.id, ProfileScope::Codex, None).unwrap();
+        test_projects::deploy(&state, &profile.id, ProfileScope::Codex, None).unwrap();
         let current = fs::read_to_string(&file).unwrap();
         assert!(current.contains("# Keep comment"));
         let parsed: toml::Value = toml::from_str(&current).unwrap();
@@ -342,7 +343,7 @@ mod tests {
             ProfileScope::Codex,
             "experimental_bearer_token='forbidden'",
         );
-        assert!(ProjectProfileService::deploy(
+        assert!(test_projects::deploy(
             &state,
             &profile.id,
             ProfileScope::Codex,
@@ -367,7 +368,7 @@ mod tests {
             ProfileScope::Claude,
             r#"{"future":{"managed":1}}"#,
         );
-        ProjectProfileService::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap();
+        test_projects::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap();
         seed(
             &state,
             project.path(),
@@ -375,10 +376,10 @@ mod tests {
             r#"{"future":"replacement"}"#,
         );
         assert!(matches!(
-            ProjectProfileService::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap(),
+            test_projects::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap(),
             ProjectDeployResult::NeedsResolution { .. }
         ));
-        ProjectProfileService::deploy(
+        test_projects::deploy(
             &state,
             &profile.id,
             ProfileScope::Claude,

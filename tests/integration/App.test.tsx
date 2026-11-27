@@ -191,8 +191,8 @@ vi.mock("@/components/settings/SettingsPage", () => ({
   SettingsPage: () => <div data-testid="settings-page" />,
 }));
 
-vi.mock("@/components/profiles/ProfileSwitcher", () => ({
-  ProfileSwitcher: () => (
+vi.mock("@/components/profiles/ProfilesPage", () => ({
+  ProfilesPage: () => (
     <section data-testid="profile-context">Profile context</section>
   ),
 }));
@@ -550,18 +550,24 @@ describe("App integration with MSW", () => {
   });
 
   it("opens Agent management directly from the sidebar and keeps Profile visible despite the legacy hidden preference", async () => {
-    setSettings({ showProfileSwitcher: false });
+    setSettings({
+      showProfileSwitcher: false,
+      firstRunNoticeConfirmed: true,
+      newLayoutNoticeConfirmed: true,
+    });
     const originalVisibility = getSettings().visibleApps;
     const { default: App } = await import("@/App");
     renderApp(App);
-    const profileContext = await screen.findByTestId("profile-context");
-    expect(profileContext.closest("header")).toBeNull();
+    expect(await screen.findByTestId("provider-list")).toBeInTheDocument();
+    expect(screen.queryByTestId("profile-context")).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "profiles.title" }));
+    expect(await screen.findByTestId("profile-context")).toBeInTheDocument();
+    expect(screen.queryByTestId("provider-list")).toBeNull();
     expect(
-      screen.getByRole("heading", {
-        name: "profiles.connections.title",
-        hidden: true,
-      }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "provider.addProvider" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "appPage.providers" }));
+    expect(await screen.findByTestId("provider-list")).toBeInTheDocument();
     const manage = sidebarApp("nav.apps");
     expect(manage.closest("[data-agent-management-nav]")).not.toBeNull();
     fireEvent.click(manage);
@@ -570,7 +576,10 @@ describe("App integration with MSW", () => {
     ).toBeInTheDocument();
     expect(screen.queryByTestId("profile-context")).toBeNull();
     fireEvent.click(sidebarApp("Claude Code"));
-    expect(await screen.findByTestId("profile-context")).toBeInTheDocument();
+    expect(await screen.findByTestId("provider-list")).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "profiles.title" }),
+    ).toBeInTheDocument();
     expect(getSettings().visibleApps).toEqual(originalVisibility);
   });
 
@@ -731,6 +740,10 @@ describe("App integration with MSW", () => {
   }, 10_000);
 
   it("keeps the unsaved guard when re-clicking the current page", async () => {
+    setSettings({
+      firstRunNoticeConfirmed: true,
+      newLayoutNoticeConfirmed: true,
+    });
     const { default: App } = await import("@/App");
     renderApp(App);
     await waitFor(() =>

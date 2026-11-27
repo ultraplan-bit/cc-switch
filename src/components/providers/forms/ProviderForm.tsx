@@ -368,6 +368,16 @@ function CodexConfigEditorWithName({
   return <CodexConfigEditor {...props} providerName={providerName} />;
 }
 
+function ConnectionConfigEditorWithName({
+  control,
+  ...props
+}: Omit<ComponentProps<typeof ConnectionConfigEditor>, "providerName"> & {
+  control: Control<ProviderFormData>;
+}) {
+  const providerName = useWatch({ control, name: "name" });
+  return <ConnectionConfigEditor {...props} providerName={providerName} />;
+}
+
 export function ProviderForm(props: ProviderFormProps) {
   if (props.appId === "kimi") return <KimiProviderForm {...props} />;
   if (props.appId === "copilot") return <CopilotProviderForm {...props} />;
@@ -3147,8 +3157,10 @@ function ProviderFormFull({
           !useStackLayout &&
           (appId === "claude" || appId === "codex") ? (
             <>
-              <ConnectionConfigEditor
+              <ConnectionConfigEditorWithName
+                control={form.control}
                 app={appId}
+                showRemoteCompaction={category !== "official"}
                 value={
                   appId === "codex"
                     ? {

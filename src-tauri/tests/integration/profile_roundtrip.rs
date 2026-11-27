@@ -407,7 +407,6 @@ fn profile_apply_reports_dangling_references_and_continues() {
         name: "Dangling".to_string(),
         payload: payload.to_string(),
         sort_order: None,
-        project_path: None,
         created_at: Some(1_000),
         updated_at: Some(1_000),
     };
@@ -428,15 +427,16 @@ fn profile_apply_reports_dangling_references_and_continues() {
         "m1 enabled despite warnings"
     );
 
-    // best-effort 可应用可用资源，但有警告时不声称 Profile 完整应用
+    // The attempted Profile stays current, and the stale flag records the partial apply.
     assert_eq!(
         state
             .db
             .get_current_profile_id("claude")
             .expect("get current profile id")
             .as_deref(),
-        None
+        Some("dangling-test")
     );
+    assert!(state.db.is_current_profile_stale("claude").unwrap());
 }
 
 #[test]
@@ -869,6 +869,9 @@ fn claude_desktop_profile_scope_is_independent() {
     let payload: ProfilePayload =
         serde_json::from_str(&project.payload).expect("parse desktop payload");
     assert_eq!(payload.providers.claude_desktop.as_deref(), Some("d1"));
+    assert!(payload.mcp.claude_desktop.is_none());
+    assert!(payload.skills.claude_desktop.is_none());
+    assert!(payload.prompts.claude_desktop.is_none());
     assert_eq!(payload.providers.claude, None, "claude slot untouched");
     assert_eq!(payload.providers.codex, None, "codex slot untouched");
 

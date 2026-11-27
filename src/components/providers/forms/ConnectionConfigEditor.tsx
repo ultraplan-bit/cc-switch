@@ -4,6 +4,10 @@ import { parse, stringify } from "smol-toml";
 import JsonEditor from "@/components/JsonEditor";
 import { Label } from "@/components/ui/label";
 import {
+  isCodexRemoteCompactionEnabled,
+  setCodexRemoteCompaction,
+} from "@/utils/codexConfigUtils";
+import {
   CLAUDE_MODEL_ROLE_FIELDS,
   CLAUDE_SUBAGENT_MODEL_FIELD,
 } from "./modelSettings";
@@ -121,12 +125,16 @@ export function ConnectionConfigEditor({
   onChange,
   onValidityChange,
   darkMode,
+  providerName,
+  showRemoteCompaction = true,
 }: {
   app: "claude" | "codex";
   value: Record<string, unknown>;
   onChange: (value: Record<string, unknown>) => void;
   onValidityChange: (valid: boolean) => void;
   darkMode: boolean;
+  providerName?: string;
+  showRemoteCompaction?: boolean;
 }) {
   const { t } = useTranslation();
   const connection = extractConnectionSettings(app, value);
@@ -161,6 +169,35 @@ export function ConnectionConfigEditor({
             "仅编辑认证、端点和连接参数。模型与 Agent 行为请在 Profile 中配置。",
         })}
       </p>
+      {app === "codex" && showRemoteCompaction && (
+        <label
+          className="inline-flex cursor-pointer items-center gap-2 text-sm text-fg-2"
+          title={t("codexConfig.remoteCompactionHint")}
+        >
+          <input
+            type="checkbox"
+            className="ui-checkbox"
+            checked={isCodexRemoteCompactionEnabled(draft)}
+            disabled={Boolean(error)}
+            onChange={(event) => {
+              if (error) return;
+              const config = setCodexRemoteCompaction(
+                draft,
+                event.target.checked,
+                providerName,
+              );
+              setDraft(config);
+              onChange(
+                mergeConnectionSettings("codex", value, {
+                  ...connection,
+                  config,
+                }),
+              );
+            }}
+          />
+          {t("codexConfig.enableRemoteCompaction")}
+        </label>
+      )}
       <JsonEditor
         value={draft}
         rows={6}

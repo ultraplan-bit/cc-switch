@@ -419,15 +419,15 @@ async fn write_proxy(
     next_stack: Option<StackState>,
 ) -> Result<bool, String> {
     let applied_payload = if op_name == op::ATTACH {
+        // Only a Profile that still matches live configuration is projected again.
         state
             .db
-            .get_current_profile_id(app.as_str())
+            .get_applied_profile_id(app.as_str())
             .map_err(err)?
             .map(|id| state.db.get_profile(&id))
             .transpose()
             .map_err(err)?
             .flatten()
-            .filter(|profile| profile.project_path.is_none())
             .map(|profile| {
                 serde_json::from_str::<crate::services::profile::ProfilePayload>(&profile.payload)
             })

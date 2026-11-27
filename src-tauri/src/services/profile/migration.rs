@@ -17,34 +17,59 @@ impl ProfileService {
                 invalid.id
             ));
         }
-        for provider in providers.readable.values() {
-            let marker = format!(
-                "profile_migration_v1_provider_{}_{}",
-                scope.as_str(),
-                provider.id
-            );
-            if state.db.get_setting(&marker)?.is_some() {
-                continue;
-            }
-            let result = (|| -> Result<(), AppError> {
-                let payload = native_config::provider_payload(state, scope, provider)?;
-                let now = chrono::Utc::now().timestamp();
-                let profile = Profile {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    name: provider.name.clone(),
-                    payload: serde_json::to_string(&payload)
-                        .map_err(|error| AppError::Config(error.to_string()))?,
-                    sort_order: provider
-                        .sort_index
-                        .and_then(|value| i64::try_from(value).ok()),
-                    project_path: None,
-                    created_at: Some(now),
-                    updated_at: Some(now),
+        // Directory bindings of older versions become registered projects first,
+        // while the native backfill below can still tell which project a legacy
+        // Profile was captured from.
+        Self::seed_project_registry(state)?;
+        let legacy_projects: std::collections::HashMap<String, String> = state
+            .db
+            .legacy_profile_project_bindings()?
+            .into_iter()
+            .collect();
+        // v2: default Profiles created by v1 froze the resources that happened to be
+        // enabled at migration time. Untouched ones follow global resources instead.
+        let follow_marker = format!("profile_migration_v2_follow_resources_{}", scope.as_str());
+        if state.db.get_setting(&follow_marker)?.is_none() {
+            let mut complete = true;
+            for (_, profile_id) in state
+                .db
+                .get_settings_with_prefix(&default_profile_key(scope, ""))?
+            {
+                let Some(profile) = state.db.get_profile(&profile_id)? else {
+                    continue;
                 };
-                state.db.save_migrated_profile(&profile, &marker)?;
-                Ok(())
-            })();
-            if let Err(error) = result {
+                if profile.updated_at != profile.created_at {
+                    continue;
+                }
+                let Ok(mut payload) = serde_json::from_str::<ProfilePayload>(&profile.payload)
+                else {
+                    continue;
+                };
+                *payload.mcp.get_mut(app).unwrap() = None;
+                *payload.skills.get_mut(app).unwrap() = None;
+                *payload.prompts.get_mut(app).unwrap() = None;
+                let names = payload.resource_names.get_mut(app).unwrap();
+                names.mcp.clear();
+                names.skills.clear();
+                names.prompts.clear();
+                let text = serde_json::to_string(&payload)
+                    .map_err(|error| AppError::Config(error.to_string()))?;
+                if text != profile.payload
+                    && !state.db.replace_profile_payload_if_unchanged(
+                        &profile.id,
+                        &text,
+                        &profile.payload,
+                    )?
+                {
+                    complete = false;
+                }
+            }
+            if complete {
+                state.db.set_setting(&follow_marker, "1")?;
+            }
+        }
+        for provider in providers.readable.values() {
+            if let Err(error) = Self::ensure_default_profile(state, scope, provider) {
                 warnings.push(format!("迁移供应商 '{}' 失败：{error}", provider.name));
             }
         }
@@ -55,11 +80,10 @@ impl ProfileService {
                 let now = chrono::Utc::now().timestamp();
                 let profile = Profile {
                     id: uuid::Uuid::new_v4().to_string(),
-                    name: format!("{} · 当前全局配置", scope.as_str()),
+                    name: "迁移前的全局配置".to_string(),
                     payload: serde_json::to_string(&payload)
                         .map_err(|error| AppError::Config(error.to_string()))?,
                     sort_order: None,
-                    project_path: None,
                     created_at: Some(now),
                     updated_at: Some(now),
                 };
@@ -82,7 +106,7 @@ impl ProfileService {
                 {
                     return Ok(());
                 }
-                let text = if let Some(path) = profile.project_path.as_deref() {
+                let text = if let Some(path) = legacy_projects.get(&profile.id) {
                     crate::services::project_profile::capture_native_config(Path::new(path), app)?
                 } else if let Some(provider) = payload
                     .providers
@@ -148,7 +172,12 @@ mod tests {
         assert!(native.contains("providerBehavior"));
         assert!(!native.contains("globalOnly"));
         assert!(!native.contains("private"));
-        assert_eq!(payload.mcp.claude, Some(vec![]));
+        assert_eq!(payload.mcp.claude, None);
+        assert_eq!(payload.skills.claude, None);
+        assert_eq!(payload.prompts.claude, None);
+        assert!(first
+            .iter()
+            .any(|profile| profile.name == "迁移前的全局配置"));
         let mut edited = imported.clone();
         let mut payload: ProfilePayload = serde_json::from_str(&edited.payload).unwrap();
         payload.native_config.claude = Some(r#"{"userEdited":true}"#.into());
@@ -197,6 +226,131 @@ mod tests {
 
     #[test]
     #[serial]
+    fn v1_default_profiles_stop_freezing_resources_unless_edited_and_projects_are_registered() {
+        let _home = TempUserHome::new();
+        let state = AppState::new(std::sync::Arc::new(Database::memory().unwrap()));
+        let project = tempfile::tempdir().unwrap();
+        let payload = |provider: &str| {
+            let mut payload = ProfilePayload::default();
+            payload.providers.claude = Some(provider.into());
+            payload.models.claude = Some("kept".into());
+            payload.native_config.claude = Some("{}".into());
+            payload.mcp.claude = Some(vec!["frozen".into()]);
+            payload.skills.claude = Some(vec![]);
+            payload.prompts.claude = Some(String::new());
+            payload
+                .resource_names
+                .claude
+                .mcp
+                .insert("frozen".into(), "Frozen".into());
+            serde_json::to_string(&payload).unwrap()
+        };
+        for (id, updated_at) in [("untouched", 10), ("edited", 20)] {
+            state
+                .db
+                .save_provider(
+                    &AppType::Claude,
+                    &crate::provider::Provider::with_id(
+                        id.into(),
+                        id.into(),
+                        serde_json::json!({"env":{}}),
+                        None,
+                    ),
+                )
+                .unwrap();
+            state
+                .db
+                .save_migrated_profile(
+                    &Profile {
+                        id: format!("profile-{id}"),
+                        name: id.into(),
+                        payload: payload(id),
+                        sort_order: None,
+                        created_at: Some(10),
+                        updated_at: Some(updated_at),
+                    },
+                    &default_profile_key(ProfileScope::Claude, id),
+                )
+                .unwrap();
+        }
+        // A Codex default Profile is not touched by the Claude fix-up.
+        let mut codex = ProfilePayload::default();
+        codex.providers.codex = Some("codex-provider".into());
+        codex.mcp.codex = Some(vec!["frozen".into()]);
+        state
+            .db
+            .save_migrated_profile(
+                &Profile {
+                    id: "profile-codex".into(),
+                    name: "Codex".into(),
+                    payload: serde_json::to_string(&codex).unwrap(),
+                    sort_order: None,
+                    created_at: Some(10),
+                    updated_at: Some(10),
+                },
+                &default_profile_key(ProfileScope::Codex, "codex-provider"),
+            )
+            .unwrap();
+        state
+            .db
+            .conn
+            .lock()
+            .unwrap()
+            .execute(
+                "UPDATE profiles SET project_path = ?1 WHERE id = 'profile-edited'",
+                [project.path().to_string_lossy()],
+            )
+            .unwrap();
+
+        for _ in 0..2 {
+            let (_, warnings) =
+                ProfileService::migrate_legacy_agent_profiles(&state, ProfileScope::Claude)
+                    .unwrap();
+            assert!(warnings.is_empty(), "{warnings:?}");
+            let read = |id: &str| -> (ProfilePayload, Option<i64>) {
+                let profile = state.db.get_profile(id).unwrap().unwrap();
+                (
+                    serde_json::from_str(&profile.payload).unwrap(),
+                    profile.updated_at,
+                )
+            };
+            let (untouched, updated_at) = read("profile-untouched");
+            assert_eq!(untouched.mcp.claude, None);
+            assert_eq!(untouched.skills.claude, None);
+            assert_eq!(untouched.prompts.claude, None);
+            assert!(untouched.resource_names.claude.mcp.is_empty());
+            assert_eq!(untouched.models.claude.as_deref(), Some("kept"));
+            assert_eq!(updated_at, Some(10), "a fix-up is not a user edit");
+            let (edited, _) = read("profile-edited");
+            assert_eq!(edited.mcp.claude, Some(vec!["frozen".to_string()]));
+            let (codex, _) = read("profile-codex");
+            assert_eq!(codex.mcp.codex, Some(vec!["frozen".to_string()]));
+            assert_eq!(
+                state.db.get_profile_projects().unwrap(),
+                vec![project.path().to_string_lossy().into_owned()]
+            );
+        }
+        // Once fixed up, a later user choice to manage resources is left alone.
+        let mut profile = state.db.get_profile("profile-untouched").unwrap().unwrap();
+        let mut chosen: ProfilePayload = serde_json::from_str(&profile.payload).unwrap();
+        chosen.mcp.claude = Some(vec![]);
+        profile.payload = serde_json::to_string(&chosen).unwrap();
+        state.db.save_profile(&profile).unwrap();
+        ProfileService::migrate_legacy_agent_profiles(&state, ProfileScope::Claude).unwrap();
+        let kept: ProfilePayload = serde_json::from_str(
+            &state
+                .db
+                .get_profile("profile-untouched")
+                .unwrap()
+                .unwrap()
+                .payload,
+        )
+        .unwrap();
+        assert_eq!(kept.mcp.claude, Some(vec![]));
+    }
+
+    #[test]
+    #[serial]
     fn partial_migration_keeps_failed_sources_retryable() {
         let _home = TempUserHome::new();
         let state = AppState::new(std::sync::Arc::new(Database::memory().unwrap()));
@@ -234,7 +388,6 @@ mod tests {
             name: "Previous".into(),
             payload: serde_json::to_string(&ProfilePayload::default()).unwrap(),
             sort_order: None,
-            project_path: None,
             created_at: None,
             updated_at: None,
         };
@@ -255,7 +408,17 @@ mod tests {
         state.db.save_profile(&target).unwrap();
         let warnings = ProfileService::apply(&state, &target.id, ProfileScope::Claude).unwrap();
         assert!(!warnings.is_empty());
-        assert_eq!(state.db.get_current_profile_id("claude").unwrap(), None);
+        // It becomes the current Profile, flagged as not matching live configuration,
+        // and is never projected as if it had been applied.
+        assert_eq!(
+            state
+                .db
+                .get_current_profile_id("claude")
+                .unwrap()
+                .as_deref(),
+            Some("target")
+        );
+        assert_eq!(state.db.get_applied_profile_id("claude").unwrap(), None);
         assert_eq!(
             state.db.get_profile(&previous.id).unwrap().unwrap().payload,
             previous.payload
@@ -294,7 +457,6 @@ mod tests {
             name: "Catalog applied".into(),
             payload: serde_json::to_string(&payload).unwrap(),
             sort_order: None,
-            project_path: None,
             created_at: None,
             updated_at: None,
         };
@@ -335,7 +497,6 @@ mod tests {
             name: "Private".into(),
             payload: serde_json::to_string(&payload).unwrap(),
             sort_order: None,
-            project_path: None,
             created_at: None,
             updated_at: None,
         };

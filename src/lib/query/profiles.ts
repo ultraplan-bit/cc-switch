@@ -4,6 +4,7 @@ import { toast } from "@/lib/toast";
 import { profilesApi, providersApi } from "@/lib/api";
 import type {
   ProfileConfig,
+  ProfileCreateSource,
   ProfileScope,
   ProjectDeployResolution,
 } from "@/lib/api/profiles";
@@ -48,63 +49,62 @@ export const useProfilesQuery = () => {
   });
 };
 
-export const useCreateProfileMutation = () => {
+/** Every profile write changes the list and the tray menu; the caller supplies the wording. */
+function useProfileWrite<Input, Output>(
+  mutationFn: (input: Input) => Promise<Output>,
+  failedKey: string,
+  successKey?: string,
+) {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
-
   return useMutation({
     networkMode: "always",
-    mutationFn: ({
+    mutationFn,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      await updateTrayMenuSafely();
+      if (successKey) toast.success(t(successKey), { closeButton: true });
+    },
+    onError: (error: Error) => {
+      toast.error(
+        t(failedKey, {
+          detail: extractErrorMessage(error) || t("common.unknown"),
+        }),
+        { closeButton: true },
+      );
+    },
+  });
+}
+
+export const useCreateProfileMutation = () =>
+  useProfileWrite(
+    ({
       name,
       scope,
-      projectPath,
+      source,
     }: {
       name: string;
       scope: ProfileScope;
-      projectPath?: string | null;
-    }) => profilesApi.create(name, scope, projectPath),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
-      await updateTrayMenuSafely();
-      toast.success(t("profiles.createSuccess"), { closeButton: true });
-    },
-    onError: (error: Error) => {
-      const detail = extractErrorMessage(error) || t("common.unknown");
-      toast.error(t("profiles.createFailed", { detail }), {
-        closeButton: true,
-      });
-    },
-  });
-};
+      source: ProfileCreateSource;
+    }) => profilesApi.create(name, scope, source),
+    "profiles.createFailed",
+    "profiles.createSuccess",
+  );
 
-export const useDuplicateProfileMutation = () => {
-  const queryClient = useQueryClient();
-  const { t } = useTranslation();
-
-  return useMutation({
-    networkMode: "always",
-    mutationFn: ({
+export const useDuplicateProfileMutation = () =>
+  useProfileWrite(
+    ({
       sourceId,
       name,
-      projectPath,
+      scope,
     }: {
       sourceId: string;
       name: string;
-      projectPath: string;
-    }) => profilesApi.duplicate(sourceId, name, projectPath),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
-      await updateTrayMenuSafely();
-      toast.success(t("profiles.createSuccess"), { closeButton: true });
-    },
-    onError: (error: Error) => {
-      const detail = extractErrorMessage(error) || t("common.unknown");
-      toast.error(t("profiles.createFailed", { detail }), {
-        closeButton: true,
-      });
-    },
-  });
-};
+      scope: ProfileScope;
+    }) => profilesApi.duplicate(sourceId, name, scope),
+    "profiles.createFailed",
+    "profiles.createSuccess",
+  );
 
 export const useImportProjectProfileMutation = () => {
   const queryClient = useQueryClient();
@@ -149,13 +149,9 @@ export const useImportProjectProfileMutation = () => {
   });
 };
 
-export const useUpdateProfileMutation = () => {
-  const queryClient = useQueryClient();
-  const { t } = useTranslation();
-
-  return useMutation({
-    networkMode: "always",
-    mutationFn: ({
+export const useUpdateProfileMutation = () =>
+  useProfileWrite(
+    ({
       id,
       name,
       resnapshot,
@@ -166,54 +162,13 @@ export const useUpdateProfileMutation = () => {
       resnapshot?: boolean;
       scope?: ProfileScope;
     }) => profilesApi.update(id, { name, resnapshot, scope }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
-      await updateTrayMenuSafely();
-      toast.success(t("profiles.updateSuccess"), { closeButton: true });
-    },
-    onError: (error: Error) => {
-      const detail = extractErrorMessage(error) || t("common.unknown");
-      toast.error(t("profiles.updateFailed", { detail }), {
-        closeButton: true,
-      });
-    },
-  });
-};
+    "profiles.updateFailed",
+    "profiles.updateSuccess",
+  );
 
-export const useSetProfileProjectPathMutation = () => {
-  const queryClient = useQueryClient();
-  const { t } = useTranslation();
-
-  return useMutation({
-    networkMode: "always",
-    mutationFn: ({
-      id,
-      projectPath,
-    }: {
-      id: string;
-      projectPath: string | null;
-    }) => profilesApi.setProjectPath(id, projectPath),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
-      await updateTrayMenuSafely();
-      toast.success(t("profiles.projectPath.saveSuccess"));
-    },
-    onError: (error: Error) => {
-      toast.error(
-        t("profiles.projectPath.saveFailed", {
-          detail: extractErrorMessage(error) || t("common.unknown"),
-        }),
-      );
-    },
-  });
-};
-
-export const useSaveProfileConfigMutation = () => {
-  const queryClient = useQueryClient();
-  const { t } = useTranslation();
-  return useMutation({
-    networkMode: "always",
-    mutationFn: ({
+export const useSaveProfileConfigMutation = () =>
+  useProfileWrite(
+    ({
       id,
       scope,
       config,
@@ -224,21 +179,30 @@ export const useSaveProfileConfigMutation = () => {
       config: ProfileConfig;
       name?: string;
     }) => profilesApi.saveConfig(id, scope, config, name),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
-      await updateTrayMenuSafely();
-      toast.success(t("profiles.updateSuccess"), { closeButton: true });
-    },
-    onError: (error: Error) => {
-      toast.error(
-        t("profiles.updateFailed", {
-          detail: extractErrorMessage(error) || t("common.unknown"),
-        }),
-        { closeButton: true },
-      );
-    },
-  });
-};
+    "profiles.updateFailed",
+    "profiles.updateSuccess",
+  );
+
+export const useDeleteProfileMutation = () =>
+  useProfileWrite(
+    ({ id, scope }: { id: string; scope: ProfileScope }) =>
+      profilesApi.delete(id, scope),
+    "profiles.deleteFailed",
+    "profiles.deleteSuccess",
+  );
+
+export const useAddProfileProjectMutation = () =>
+  useProfileWrite(
+    (path: string) => profilesApi.addProject(path),
+    "profiles.projects.addFailed",
+  );
+
+export const useRemoveProfileProjectMutation = () =>
+  useProfileWrite(
+    (path: string) => profilesApi.removeProject(path),
+    "profiles.projects.removeFailed",
+    "profiles.projects.removed",
+  );
 
 export const useDeployProfileToProjectMutation = () => {
   const queryClient = useQueryClient();
@@ -247,58 +211,18 @@ export const useDeployProfileToProjectMutation = () => {
     mutationFn: ({
       id,
       scope,
+      projectPath,
       resolution,
     }: {
       id: string;
       scope: ProfileScope;
+      projectPath: string;
       resolution?: ProjectDeployResolution | null;
-    }) => profilesApi.deployToProject(id, scope, resolution),
+    }) => profilesApi.deployToProject(id, scope, projectPath, resolution),
     onSuccess: async (result) => {
       if (result.status === "applied") {
         await queryClient.invalidateQueries({ queryKey: ["profiles"] });
       }
-    },
-  });
-};
-
-export const useDeleteProfileMutation = () => {
-  const queryClient = useQueryClient();
-  const { t } = useTranslation();
-
-  return useMutation({
-    networkMode: "always",
-    mutationFn: (id: string) => profilesApi.delete(id),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
-      await updateTrayMenuSafely();
-      toast.success(t("profiles.deleteSuccess"), { closeButton: true });
-    },
-    onError: (error: Error) => {
-      const detail = extractErrorMessage(error) || t("common.unknown");
-      toast.error(t("profiles.deleteFailed", { detail }), {
-        closeButton: true,
-      });
-    },
-  });
-};
-
-export const useClearProfileMutation = () => {
-  const queryClient = useQueryClient();
-  const { t } = useTranslation();
-
-  return useMutation({
-    networkMode: "always",
-    mutationFn: (scope: ProfileScope) => profilesApi.clearCurrent(scope),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
-      await updateTrayMenuSafely();
-      toast.success(t("profiles.clearSuccess"), { closeButton: true });
-    },
-    onError: (error: Error) => {
-      const detail = extractErrorMessage(error) || t("common.unknown");
-      toast.error(t("profiles.applyFailed", { detail }), {
-        closeButton: true,
-      });
     },
   });
 };
@@ -337,6 +261,8 @@ export const useApplyProfileMutation = () => {
       }
     },
     onError: (error: Error) => {
+      // A failed application can still have switched the connection.
+      void queryClient.invalidateQueries({ queryKey: ["profiles"] });
       const detail = extractErrorMessage(error) || t("common.unknown");
       toast.error(t("profiles.applyFailed", { detail }), {
         closeButton: true,

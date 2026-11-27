@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { PageTabs } from "@/components/ui/page-tabs";
+import { Switch } from "@/components/ui/switch";
 import { providersApi, promptsApi } from "@/lib/api";
 import { promptKeys } from "@/lib/query/prompts";
 import { useAllMcpServers } from "@/hooks/useMcp";
@@ -24,6 +25,7 @@ import {
   ProfileModelFields,
   providerModelDefaults,
 } from "./ProfileModelFields";
+import { followsGlobalResources } from "./scope";
 
 interface ProfileEditPanelProps {
   profile: Profile;
@@ -144,6 +146,8 @@ function ProfileEditForm({
       modelCatalog:
         profile.payload.modelCatalog?.[scope] ?? defaults.modelCatalog,
       nativeConfig: profile.payload.nativeConfig?.[scope],
+      followGlobalResources:
+        scope === "claude-desktop" || followsGlobalResources(profile, scope),
       mcpIds: [...(profile.payload.mcp[scope] ?? [])],
       skillIds: [...(profile.payload.skills[scope] ?? [])],
       promptId: profile.payload.prompts[scope] || null,
@@ -272,11 +276,7 @@ function ProfileEditForm({
       footer={
         <>
           <span className="mr-auto hidden text-xs text-fg-2 sm:block">
-            {t(
-              profile.projectPath
-                ? "profiles.editor.saveHint"
-                : "profiles.editor.globalSaveHint",
-            )}
+            {t("profiles.editor.saveHint")}
           </span>
           <Button
             type="button"
@@ -313,26 +313,16 @@ function ProfileEditForm({
         }}
         onCancel={() => setConfirmDiscard(false)}
       />
-      <div className="space-y-2">
-        <p className="text-sm text-fg-2">
-          {t("profiles.editor.scopeSummary", {
-            agent:
-              scope === "claude"
-                ? "Claude Code"
-                : scope === "codex"
-                  ? "Codex"
-                  : "Claude Desktop",
-          })}
-        </p>
-        {profile.projectPath && (
-          <p
-            className="truncate font-mono text-xs text-fg-2"
-            title={profile.projectPath}
-          >
-            {profile.projectPath}
-          </p>
-        )}
-      </div>
+      <p className="text-sm text-fg-2">
+        {t("profiles.editor.scopeSummary", {
+          agent:
+            scope === "claude"
+              ? "Claude Code"
+              : scope === "codex"
+                ? "Codex"
+                : "Claude Desktop",
+        })}
+      </p>
       <div data-unsaved-ignore>
         <PageTabs
           value={tab}
@@ -348,7 +338,9 @@ function ProfileEditForm({
               : [
                   {
                     value: "resources" as const,
-                    label: `${t("profiles.editor.resourcesTab")} (${config.mcpIds.length + config.skillIds.length})`,
+                    label: config.followGlobalResources
+                      ? t("profiles.editor.resourcesTab")
+                      : `${t("profiles.editor.resourcesTab")} (${config.mcpIds.length + config.skillIds.length})`,
                   },
                   {
                     value: "instructions" as const,
@@ -490,7 +482,32 @@ function ProfileEditForm({
             </div>
             {scope !== "claude-desktop" && (
               <div hidden={tab !== "resources"} className="space-y-5">
-                <div data-unsaved-ignore>
+                <label className="flex cursor-pointer items-start gap-3 rounded-panel border border-border bg-surface p-4 text-sm">
+                  <Switch
+                    className="mt-0.5"
+                    checked={!config.followGlobalResources}
+                    onCheckedChange={(managed) =>
+                      setConfig((current) => ({
+                        ...current,
+                        followGlobalResources: !managed,
+                      }))
+                    }
+                    aria-label={t("profiles.editor.manageResources")}
+                  />
+                  <span className="min-w-0 space-y-1">
+                    <span className="block font-medium">
+                      {t("profiles.editor.manageResources")}
+                    </span>
+                    <span className="block text-xs leading-relaxed text-fg-2">
+                      {t(
+                        config.followGlobalResources
+                          ? "profiles.editor.resourcesFollowHint"
+                          : "profiles.editor.resourcesManagedHint",
+                      )}
+                    </span>
+                  </span>
+                </label>
+                <div data-unsaved-ignore hidden={config.followGlobalResources}>
                   <Input
                     aria-label={t("profiles.editor.searchResources")}
                     placeholder={t("profiles.editor.searchResources")}
@@ -498,7 +515,10 @@ function ProfileEditForm({
                     onChange={(event) => setResourceSearch(event.target.value)}
                   />
                 </div>
-                <div className="grid gap-5 lg:grid-cols-2">
+                <div
+                  className="grid gap-5 lg:grid-cols-2"
+                  hidden={config.followGlobalResources}
+                >
                   {resources.map(({ key, kind, label, available }) => {
                     const selected = config[key];
                     const availableIds = new Set(
@@ -605,7 +625,23 @@ function ProfileEditForm({
             )}
             {scope !== "claude-desktop" && (
               <div hidden={tab !== "instructions"} className="space-y-4">
-                <label className="block space-y-2 text-sm">
+                {config.followGlobalResources && (
+                  <p className="flex flex-wrap items-center gap-2 text-sm text-fg-2">
+                    <span>{t("profiles.editor.instructionsFollowHint")}</span>
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      onClick={() => setTab("resources")}
+                    >
+                      {t("profiles.editor.resourcesTab")}
+                    </Button>
+                  </p>
+                )}
+                <label
+                  className="block space-y-2 text-sm"
+                  hidden={config.followGlobalResources}
+                >
                   <span>{t("profiles.editor.prompt")}</span>
                   <select
                     className={selectClass}
@@ -634,10 +670,13 @@ function ProfileEditForm({
                     ))}
                   </select>
                 </label>
-                <p className="text-sm text-fg-2">
+                <p
+                  className="text-sm text-fg-2"
+                  hidden={config.followGlobalResources}
+                >
                   {t("profiles.editor.instructionHint")}
                 </p>
-                {selectedPrompt && (
+                {selectedPrompt && !config.followGlobalResources && (
                   <pre className="max-h-[50vh] overflow-auto whitespace-pre-wrap break-words rounded-panel border border-border bg-surface p-4 font-mono text-xs leading-relaxed">
                     {selectedPrompt.content}
                   </pre>

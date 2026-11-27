@@ -33,6 +33,7 @@ fn read_project_input(root: &Path, scope: ProfileScope) -> Result<ProjectInput, 
     let app = &scope.apps()[0];
     let mut input = ProjectInput {
         config: ProfileConfig {
+            follow_global_resources: false,
             native_config: None,
             provider_id: None,
             model: String::new(),
@@ -356,7 +357,6 @@ impl ProjectProfileService {
             name: name.into(),
             payload: String::new(),
             sort_order: None,
-            project_path: Some(project_path),
             created_at: Some(now),
             updated_at: Some(now),
         };
@@ -445,7 +445,16 @@ impl ProjectProfileService {
             ProfileService::update_config(state, &profile.id, scope, input.config, None)
         })();
         match result {
-            Ok(profile) => Ok((profile, input.warnings)),
+            Ok(profile) => {
+                // The Profile is independent of the directory it was read from; the
+                // directory is only remembered as a deployment target.
+                if let Err(error) = state.db.add_profile_project(&project_path) {
+                    input
+                        .warnings
+                        .push(format!("配置已导入，但未能记住此项目目录: {error}"));
+                }
+                Ok((profile, input.warnings))
+            }
             Err(error) => {
                 // Roll back only rows/files created here; never touch reused or concurrently edited resources.
                 let mut failures = Vec::new();
@@ -604,11 +613,16 @@ mod tests {
             [payload.prompts.claude.as_ref().unwrap()];
         assert!(!prompt.enabled);
         assert_eq!(prompt.content, "Project instructions");
-        assert!(ProjectProfileService::deployed_scopes(&profile).is_empty());
+        let registered = state.db.get_profile_projects().unwrap();
+        assert_eq!(registered.len(), 1, "{registered:?}");
+        let status = ProjectProfileService::project_status(&state, &registered[0]);
+        assert!(status.available);
+        assert!(status.deployed.is_empty());
         let result = ProjectProfileService::deploy(
             &state,
             &profile.id,
             ProfileScope::Claude,
+            &registered[0],
             Some(ConflictResolution::Overwrite),
         )
         .unwrap();

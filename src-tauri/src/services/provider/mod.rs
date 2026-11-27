@@ -7441,16 +7441,45 @@ impl ProviderService {
     /// - 代理模式：只换代理路由，直连指针不变；契约没变时客户端文件不读也不写。
     /// - 直连模式：切换式应用只替换客户端文件里的关键字段（不回填），文件和指针在同一个
     ///   操作里提交；累加式应用按各自的规则写入。
+    ///
+    /// Claude Code / Codex 的模型与行为归配置方案管：切到一个连接后接着应用
+    /// 它的默认方案（聚合模式除外），没有可跟随的方案时清除当前方案标记。
     pub fn switch(state: &AppState, app_type: AppType, id: &str) -> Result<SwitchResult, AppError> {
+        // A connection switch and its default Profile are one operation with respect to
+        // other switches, Profile edits and explicit applications.
+        let _profile_guard = crate::services::profile::ProfileScope::for_app(&app_type)
+            .map(|_| futures::executor::block_on(crate::commands::PROFILE_LOCK.lock()));
+        Self::switch_with(state, app_type, id, true)
+    }
+
+    /// 只切换连接，不处理当前方案标记：由正在应用方案的调用方自己收尾。
+    pub(crate) fn switch_connection_only(
+        state: &AppState,
+        app_type: AppType,
+        id: &str,
+    ) -> Result<SwitchResult, AppError> {
+        Self::switch_with(state, app_type, id, false)
+    }
+
+    fn switch_with(
+        state: &AppState,
+        app_type: AppType,
+        id: &str,
+        follow_profile: bool,
+    ) -> Result<SwitchResult, AppError> {
         let app = app_type.as_str().to_string();
-        let mut result = Self::switch_inner(state, app_type, id);
-        if let Ok(result) = &mut result {
-            if matches!(app.as_str(), "claude" | "codex" | "claude-desktop") {
-                if let Err(error) = state.db.set_current_profile_id(&app, None) {
-                    result
-                        .warnings
-                        .push(format!("无法清除旧 Profile 应用标记: {error}"));
-                }
+        let mut result = Self::switch_inner(state, app_type.clone(), id);
+        if let (true, Ok(result)) = (follow_profile, &mut result) {
+            if let Err(error) = crate::services::profile::ProfileService::follow_connection_switch(
+                state,
+                &app_type,
+                id,
+                &mut result.warnings,
+            ) {
+                result.warnings.push(format!(
+                    "{}无法更新当前配置方案标记: {error}",
+                    crate::services::profile::PROFILE_FOLLOW_WARNING_PREFIX
+                ));
             }
         }
         match &result {

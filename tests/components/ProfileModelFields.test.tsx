@@ -42,6 +42,7 @@ function Harness({
   const [config, setConfig] = useState<ProfileConfig>({
     providerId: provider.id,
     ...providerModelDefaults(provider, scope),
+    followGlobalResources: false,
     mcpIds: ["kept-mcp"],
     skillIds: ["kept-skill"],
     promptId: "kept-prompt",
@@ -232,7 +233,6 @@ describe("Profile models reuse provider editing", () => {
         inputModalities: ["text", "image"],
       }),
     );
-    fireEvent.click(screen.getByText("profiles.editor.runtimeSettings"));
     const effort = screen.getByLabelText("profiles.editor.mainReasoningEffort");
     expect(
       within(effort)
@@ -248,6 +248,36 @@ describe("Profile models reuse provider editing", () => {
         model_auto_compact_token_limit: "900000",
       }),
     );
+  });
+
+  it("shows context and compaction controls immediately when no runtime settings were saved", () => {
+    renderWithQueryClient(
+      <Harness
+        scope="codex"
+        provider={{ id: "empty", name: "Empty", settingsConfig: {} }}
+        initial={{ modelSettings: {} }}
+      />,
+    );
+    const toggle = screen.getByRole("checkbox", {
+      name: "codexConfig.contextWindow1M",
+    });
+    const threshold = screen.getByRole("spinbutton", {
+      name: "codexConfig.autoCompactLimit",
+    });
+    expect(toggle).toBeVisible();
+    expect(toggle).not.toBeChecked();
+    expect(threshold).toBeVisible();
+    expect(threshold).toHaveValue(null);
+    expect(
+      screen.getByText("profiles.editor.runtimeSettings").closest("details"),
+    ).toHaveAttribute("open");
+    fireEvent.click(toggle);
+    expect(threshold).toHaveValue(900000);
+    fireEvent.change(threshold, { target: { value: "800000" } });
+    expect(draft().modelSettings).toMatchObject({
+      model_context_window: "1000000",
+      model_auto_compact_token_limit: "800000",
+    });
   });
 
   it("shows models for official providers and resolves the bound OAuth account for fetching", async () => {

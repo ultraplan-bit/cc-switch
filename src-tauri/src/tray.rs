@@ -97,7 +97,6 @@ pub struct TrayTexts {
     /// 自动更新已下好新版本时的菜单项：`{version}`
     pub install_update: &'static str,
     pub projects_label: &'static str,
-    pub no_project_label: &'static str,
     pub header_direct: &'static str,
     pub header_route: &'static str,
     pub header_failover: &'static str,
@@ -210,8 +209,7 @@ impl TrayTexts {
                 quit: "Quit CC Switch",
                 quit_stops_routing: "Quit CC Switch (stops the routing service)",
                 install_update: "Restart to update to v{version}",
-                projects_label: "Projects",
-                no_project_label: "No project",
+                projects_label: "Profiles",
                 header_direct: "Direct",
                 header_route: "Routing",
                 header_failover: "Routing · Failover on",
@@ -235,7 +233,7 @@ impl TrayTexts {
                 feedback_switched: "{app} switched to {name}. Restart {app} to apply",
                 feedback_stack_default:
                     "{app}'s default provider is now {name}. Restart {app} to apply",
-                feedback_profile: "Applied project \u{201c}{name}\u{201d} to {app}",
+                feedback_profile: "Applied profile \u{201c}{name}\u{201d} to {app}",
                 tier_five_hour: "5-hour",
                 tier_weekly: "Weekly",
                 tier_fable: "Fable",
@@ -267,8 +265,7 @@ impl TrayTexts {
                 quit: "CC Switch 종료",
                 quit_stops_routing: "CC Switch 종료 (라우팅 서비스 중지)",
                 install_update: "재시작하여 v{version}(으)로 업데이트",
-                projects_label: "프로젝트",
-                no_project_label: "프로젝트 없음",
+                projects_label: "프로필",
                 header_direct: "직접 연결",
                 header_route: "라우팅",
                 header_failover: "라우팅 · 장애 조치 켜짐",
@@ -290,7 +287,7 @@ impl TrayTexts {
                 tooltip_problem: "CC Switch · 확인 필요: {problem}",
                 feedback_switched: "{app}의 공급자가 {name}(으)로 전환되었습니다. 적용하려면 {app}을(를) 다시 시작하세요",
                 feedback_stack_default: "{app}의 기본 공급자가 {name}(으)로 변경되었습니다. 적용하려면 {app}을(를) 다시 시작하세요",
-                feedback_profile: "{app}에 {name} 프로젝트를 적용했습니다",
+                feedback_profile: "{app}에 {name} 프로필을 적용했습니다",
                 tier_five_hour: "5시간",
                 tier_weekly: "주간",
                 tier_fable: "Fable",
@@ -322,8 +319,7 @@ impl TrayTexts {
                 quit: "CC Switch beenden",
                 quit_stops_routing: "CC Switch beenden (Routing-Dienst wird gestoppt)",
                 install_update: "Neu starten und auf v{version} aktualisieren",
-                projects_label: "Projekte",
-                no_project_label: "Kein Projekt",
+                projects_label: "Profile",
                 header_direct: "Direkt",
                 header_route: "Routing",
                 header_failover: "Routing · Failover aktiv",
@@ -347,7 +343,7 @@ impl TrayTexts {
                 feedback_switched: "{app} auf {name} umgeschaltet. {app} neu starten, um es zu übernehmen",
                 feedback_stack_default:
                     "Standardanbieter von {app} ist jetzt {name}. {app} neu starten, um es zu übernehmen",
-                feedback_profile: "Projekt \u{201e}{name}\u{201c} auf {app} angewendet",
+                feedback_profile: "Profil \u{201e}{name}\u{201c} auf {app} angewendet",
                 tier_five_hour: "5 Stunden",
                 tier_weekly: "Woche",
                 tier_fable: "Fable",
@@ -379,8 +375,7 @@ impl TrayTexts {
                 quit: "Выйти из CC Switch",
                 quit_stops_routing: "Выйти из CC Switch (служба маршрутизации остановится)",
                 install_update: "Перезапустить и обновить до v{version}",
-                projects_label: "Проекты",
-                no_project_label: "Без проекта",
+                projects_label: "Профили",
                 header_direct: "Напрямую",
                 header_route: "Маршрутизация",
                 header_failover: "Маршрутизация · резервное переключение включено",
@@ -402,7 +397,7 @@ impl TrayTexts {
                 tooltip_problem: "CC Switch · Требует внимания: {problem}",
                 feedback_switched: "{app} переключён на {name}. Перезапустите {app}, чтобы применить",
                 feedback_stack_default: "Провайдер по умолчанию для {app} теперь {name}. Перезапустите {app}, чтобы применить",
-                feedback_profile: "Проект \u{00ab}{name}\u{00bb} применён к {app}",
+                feedback_profile: "Профиль \u{00ab}{name}\u{00bb} применён к {app}",
                 tier_five_hour: "5 часов",
                 tier_weekly: "Неделя",
                 tier_fable: "Fable",
@@ -434,8 +429,7 @@ impl TrayTexts {
                 quit: "CC Switch'ten çık",
                 quit_stops_routing: "CC Switch'ten çık (yönlendirme hizmeti durur)",
                 install_update: "Yeniden başlat ve v{version} sürümüne güncelle",
-                projects_label: "Projeler",
-                no_project_label: "Proje yok",
+                projects_label: "Profiller",
                 header_direct: "Doğrudan",
                 header_route: "Yönlendirme",
                 header_failover: "Yönlendirme · Yedek sağlayıcıya geçiş açık",
@@ -457,7 +451,7 @@ impl TrayTexts {
                 tooltip_problem: "CC Switch · İlgilenilmesi gerekiyor: {problem}",
                 feedback_switched: "{app}, {name} sağlayıcısına geçti. Uygulamak için {app} uygulamasını yeniden başlatın",
                 feedback_stack_default: "{app} için varsayılan sağlayıcı artık {name}. Uygulamak için {app} uygulamasını yeniden başlatın",
-                feedback_profile: "{name} projesi {app} uygulamasına uygulandı",
+                feedback_profile: "{name} profili {app} uygulamasına uygulandı",
                 tier_five_hour: "5 saatlik",
                 tier_weekly: "Haftalık",
                 tier_fable: "Fable",
@@ -489,8 +483,7 @@ impl TrayTexts {
                 quit: "CC Switch を終了",
                 quit_stops_routing: "CC Switch を終了（ルーティングサービスが停止します）",
                 install_update: "再起動して v{version} に更新",
-                projects_label: "プロジェクト",
-                no_project_label: "プロジェクトを使用しない",
+                projects_label: "プロファイル",
                 header_direct: "直接接続",
                 header_route: "ルーティング",
                 header_failover: "ルーティング · フェイルオーバー有効",
@@ -514,7 +507,7 @@ impl TrayTexts {
                 feedback_switched:
                     "{app} を {name} に切り替えました。反映するには {app} を再起動してください",
                 feedback_stack_default: "{app} のデフォルトのプロバイダーを {name} に変更しました。反映するには {app} を再起動してください",
-                feedback_profile: "プロジェクト「{name}」を {app} に適用しました",
+                feedback_profile: "プロファイル「{name}」を {app} に適用しました",
                 tier_five_hour: "5時間",
                 tier_weekly: "週間",
                 tier_fable: "Fable",
@@ -546,8 +539,7 @@ impl TrayTexts {
                 quit: "退出 CC Switch",
                 quit_stops_routing: "退出 CC Switch（路由服務會停止）",
                 install_update: "重新啟動並更新到 v{version}",
-                projects_label: "專案",
-                no_project_label: "不使用專案",
+                projects_label: "設定方案",
                 header_direct: "直連",
                 header_route: "路由",
                 header_failover: "路由 · 故障轉移開啟中",
@@ -569,7 +561,7 @@ impl TrayTexts {
                 tooltip_problem: "CC Switch · 需要處理：{problem}",
                 feedback_switched: "{app} 已切換到 {name}，重新啟動 {app} 後生效",
                 feedback_stack_default: "{app} 的預設供應商改為 {name}，重新啟動 {app} 後生效",
-                feedback_profile: "已把專案「{name}」套用到 {app}",
+                feedback_profile: "已把設定方案「{name}」套用到 {app}",
                 tier_five_hour: "5 小時",
                 tier_weekly: "每週",
                 tier_fable: "Fable",
@@ -601,8 +593,7 @@ impl TrayTexts {
                 quit: "退出 CC Switch",
                 quit_stops_routing: "退出 CC Switch（路由服务会停止）",
                 install_update: "重启并更新到 v{version}",
-                projects_label: "项目",
-                no_project_label: "不使用项目",
+                projects_label: "配置方案",
                 header_direct: "直连",
                 header_route: "路由",
                 header_failover: "路由 · 故障转移开启中",
@@ -624,7 +615,7 @@ impl TrayTexts {
                 tooltip_problem: "CC Switch · 需要处理：{problem}",
                 feedback_switched: "{app} 已切换到 {name}，重启 {app} 后生效",
                 feedback_stack_default: "{app} 的默认供应商改为 {name}，重启 {app} 后生效",
-                feedback_profile: "已把项目「{name}」用到 {app}",
+                feedback_profile: "已把配置方案「{name}」用到 {app}",
                 tier_five_hour: "5 小时",
                 tier_weekly: "每周",
                 tier_fable: "Fable",
@@ -1611,26 +1602,36 @@ fn collect_app_snapshot(
         usage_view(&app_state.usage_cache, texts, app, provider, id)
     });
 
-    let global_profiles: Vec<_> = profiles
-        .iter()
-        .filter(|profile| profile.project_path.is_none())
-        .collect();
+    // 只列出为这个 Agent 配置过的方案；任意方案都可以应用到全局。
     let profiles = crate::services::profile::ProfileScope::for_app(app)
-        .filter(|_| settings.show_profile_switcher && !global_profiles.is_empty())
-        .map(|scope| -> Result<ProfileSection, AppError> {
-            Ok(ProfileSection {
+        .filter(|_| settings.show_profile_switcher)
+        .map(|scope| -> Result<Option<ProfileSection>, AppError> {
+            let items: Vec<(String, String)> = profiles
+                .iter()
+                .filter(|profile| {
+                    serde_json::from_str::<crate::services::profile::ProfilePayload>(
+                        &profile.payload,
+                    )
+                    .is_ok_and(|payload| payload.scope_captured(scope))
+                })
+                .map(|profile| (profile.id.clone(), profile.name.clone()))
+                .collect();
+            if items.is_empty() {
+                return Ok(None);
+            }
+            // 修改后待重新应用的方案仍然是当前方案，照常勾选。
+            let current = app_state
+                .db
+                .get_current_profile_id(scope.as_str())?
+                .filter(|id| items.iter().any(|(item, _)| item == id));
+            Ok(Some(ProfileSection {
                 scope: scope.as_str(),
-                items: global_profiles
-                    .iter()
-                    .map(|profile| (profile.id.clone(), profile.name.clone()))
-                    .collect(),
-                current: app_state
-                    .db
-                    .get_current_profile_id(scope.as_str())?
-                    .filter(|id| global_profiles.iter().any(|profile| profile.id == *id)),
-            })
+                items,
+                current,
+            }))
         })
-        .transpose()?;
+        .transpose()?
+        .flatten();
 
     let mut snapshot = AppSnapshot {
         app: app.clone(),
@@ -2175,12 +2176,6 @@ fn app_children(
         children.push(TrayEntry::label(
             format!("info:{app}:projects"),
             texts.projects_label,
-        ));
-        children.push(TrayEntry::check(
-            format!("profile_none_{}", profiles.scope),
-            texts.no_project_label,
-            true,
-            profiles.current.is_none(),
         ));
         for (id, name) in &profiles.items {
             children.push(TrayEntry::check(
@@ -3233,39 +3228,11 @@ pub fn show_main_window(app: &tauri::AppHandle) {
 
 /// 处理项目 Profile 托盘事件，返回是否已处理
 ///
-/// 事件 id 形如 `profile_<scope>_<uuid>`（同一项目在各应用子菜单里各有一项，
-/// 应用时只作用于该分组）；`profile_none_<scope>` 表示某分组"不使用项目"
-/// （只清该分组标记，不动配置）。
+/// 事件 id 为 profile_<scope>_<id>，只应用所选 Agent 的配置方案。
 pub fn handle_profile_tray_event(app: &tauri::AppHandle, event_id: &str) -> bool {
     let Some(suffix) = event_id.strip_prefix("profile_") else {
         return false;
     };
-
-    if let Some(scope_str) = suffix.strip_prefix("none_") {
-        let Ok(scope) = crate::services::profile::ProfileScope::parse(scope_str) else {
-            log::error!("未知的项目分组托盘事件: {event_id}");
-            return true;
-        };
-        // 与窗口里的项目命令同一把锁，否则窗口里 apply 收尾写指针会把这里的清除盖掉。
-        let app_handle = app.clone();
-        tauri::async_runtime::spawn_blocking(move || {
-            let _serial = crate::commands::PROFILE_LOCK.blocking_lock();
-            if let Some(app_state) = app_handle.try_state::<AppState>() {
-                if let Err(e) = app_state.db.set_current_profile_id(scope.as_str(), None) {
-                    log::error!("清除当前项目失败: {e}");
-                }
-            }
-            // 通知主窗口刷新（profileId=null 表示该分组已清除当前项目）
-            if let Err(e) = app_handle.emit(
-                "profile-applied",
-                serde_json::json!({ "profileId": null, "scope": scope.as_str() }),
-            ) {
-                log::error!("发射 profile-applied 事件失败: {e}");
-            }
-            refresh_tray_menu(&app_handle);
-        });
-        return true;
-    }
 
     // scope 是固定枚举字符串（不含下划线），uuid 只含连字符，首个下划线即分界
     let Some((scope_str, profile_id)) = suffix.split_once('_') else {

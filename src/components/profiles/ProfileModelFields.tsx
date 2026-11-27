@@ -394,20 +394,7 @@ function ProfileModelEditor({
           updateCatalog({ officialSpeedTiers })
         }
       />
-      <details
-        className="rounded-panel border border-border p-4"
-        open={
-          Object.entries(settings).some(
-            ([key, value]) =>
-              [
-                "model_reasoning_effort",
-                "plan_mode_reasoning_effort",
-                "model_context_window",
-                "model_auto_compact_token_limit",
-              ].includes(key) && Boolean(value),
-          ) || undefined
-        }
-      >
+      <details className="rounded-panel border border-border p-4" open>
         <summary className="cursor-pointer text-sm font-medium">
           {t("profiles.editor.runtimeSettings")}
         </summary>

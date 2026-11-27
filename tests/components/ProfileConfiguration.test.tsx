@@ -55,7 +55,6 @@ function profile(scope: ProfileScope, nativeConfig: string): Profile {
   return {
     id: "profile",
     name: "My configuration",
-    projectPath: scope === "claude-desktop" ? null : "/project",
     payload: {
       providers: { ...empty, [scope]: "first" },
       models: {

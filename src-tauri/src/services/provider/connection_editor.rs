@@ -99,6 +99,7 @@ pub(super) fn save(
             "此 Agent 尚未支持独立供应商连接".into(),
         ));
     }
+    let _profile_guard = futures::executor::block_on(crate::commands::PROFILE_LOCK.lock());
     let _guard = crate::mode::controller::lock_settled_blocking(state, &app)?;
     let stored = state.db.get_provider_by_id(&provider.id, &app)?;
     if adding {
@@ -123,20 +124,43 @@ pub(super) fn save(
     if !adding {
         if let Some(current) = state.db.get_current_profile_id(app.as_str())? {
             if let Some(profile) = state.db.get_profile(&current)? {
-                let payload: Value = serde_json::from_str(&profile.payload)
-                    .map_err(|error| AppError::Config(error.to_string()))?;
-                if payload
-                    .get("providers")
-                    .and_then(|providers| providers.get(app.as_str()))
-                    .and_then(Value::as_str)
-                    == Some(provider.id.as_str())
-                {
-                    state.db.set_current_profile_id(app.as_str(), None)?;
+                let payload: crate::services::profile::ProfilePayload =
+                    serde_json::from_str(&profile.payload)
+                        .map_err(|error| AppError::Config(error.to_string()))?;
+                let used = match payload.providers.get(&app).and_then(Option::as_ref) {
+                    Some(id) => id == &provider.id,
+                    None => {
+                        crate::mode::current::provider_for(
+                            &state.db,
+                            &app,
+                            crate::mode::current::Purpose::InUse,
+                        )?
+                        .as_deref()
+                            == Some(&provider.id)
+                    }
+                };
+                if used {
+                    // The connection it was applied with changed; it stays current
+                    // but has to be applied again to take effect.
+                    state
+                        .db
+                        .mark_current_profile_stale(app.as_str(), &current)?;
                 }
             }
         }
     }
     state.db.save_provider(&app, &provider)?;
+    if adding {
+        // A connection is usable right away through its own default Profile.
+        if let Some(scope) = crate::services::profile::ProfileScope::for_app(&app) {
+            if let Err(error) = crate::services::profile::ProfileService::ensure_default_profile(
+                state, scope, &provider,
+            ) {
+                state.db.delete_provider(&app, &provider.id)?;
+                return Err(error);
+            }
+        }
+    }
     Ok(true)
 }
 
@@ -207,8 +231,177 @@ mod tests {
                 .as_deref(),
             Some("previous-profile")
         );
+        // Switching follows the default Profile created together with the connection.
         ProviderService::switch(&state, AppType::Claude, "connection").unwrap();
-        assert!(state.db.get_current_profile_id("claude").unwrap().is_none());
+        let default_profile = state
+            .db
+            .get_setting(&crate::services::profile::default_profile_key(
+                crate::services::profile::ProfileScope::Claude,
+                "connection",
+            ))
+            .unwrap()
+            .expect("a new connection records its default Profile");
+        assert_eq!(
+            state.db.get_current_profile_id("claude").unwrap(),
+            Some(default_profile)
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn a_new_connection_gets_a_default_profile_that_switching_follows() {
+        use crate::services::profile::{
+            default_profile_key, ProfileConfig, ProfilePayload, ProfileScope, ProfileService,
+        };
+        let _home = crate::test_support::TestHome::new();
+        let state = AppState::new(std::sync::Arc::new(
+            crate::database::Database::memory().unwrap(),
+        ));
+        let path = crate::config::get_claude_settings_path();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, r#"{"env":{"KEEP":"1"}}"#).unwrap();
+        let mut server = crate::app_config::McpServer {
+            id: "enabled".into(),
+            name: "Enabled".into(),
+            server: json!({"command":"echo"}),
+            apps: crate::app_config::McpApps::default(),
+            description: None,
+            homepage: None,
+            docs: None,
+            tags: Vec::new(),
+        };
+        server.apps.claude = true;
+        state.db.save_mcp_server(&server).unwrap();
+        let editor = || serde_json::from_value(json!({"base":{}, "connectionOnly":true})).unwrap();
+        let config = |provider: &str, model: &str| ProfileConfig {
+            native_config: None,
+            provider_id: Some(provider.into()),
+            model: model.into(),
+            model_settings: Some(Default::default()),
+            model_catalog: None,
+            mcp_ids: vec![],
+            skill_ids: vec![],
+            prompt_id: None,
+            follow_global_resources: true,
+        };
+        let default_of = |id: &str| {
+            state
+                .db
+                .get_setting(&default_profile_key(ProfileScope::Claude, id))
+                .unwrap()
+                .expect("default Profile is recorded for the new connection")
+        };
+        for (id, model) in [("first", "first-model"), ("second", "second-model")] {
+            let provider = Provider::with_id(
+                id.into(),
+                id.into(),
+                json!({"env":{"ANTHROPIC_BASE_URL":format!("https://{id}.example"),"ANTHROPIC_AUTH_TOKEN":"key"}}),
+                None,
+            );
+            ProviderService::add_from_editor(
+                &state,
+                AppType::Claude,
+                provider,
+                true,
+                Some(editor()),
+            )
+            .unwrap();
+            let profile = state.db.get_profile(&default_of(id)).unwrap().unwrap();
+            assert_eq!(profile.name, id);
+            let payload: ProfilePayload = serde_json::from_str(&profile.payload).unwrap();
+            assert_eq!(payload.providers.claude.as_deref(), Some(id));
+            // Default Profiles follow global resources instead of freezing them.
+            assert_eq!(payload.mcp.claude, None);
+            assert_eq!(payload.skills.claude, None);
+            assert_eq!(payload.prompts.claude, None);
+            ProfileService::update_config(
+                &state,
+                &profile.id,
+                ProfileScope::Claude,
+                config(id, model),
+                None,
+            )
+            .unwrap();
+        }
+
+        let result = ProviderService::switch(&state, AppType::Claude, "first").unwrap();
+        assert!(result.warnings.is_empty(), "{:?}", result.warnings);
+        assert_eq!(
+            state.db.get_applied_profile_id("claude").unwrap(),
+            Some(default_of("first"))
+        );
+        let live: Value = crate::config::read_json_file(&path).unwrap();
+        assert_eq!(live["env"]["ANTHROPIC_BASE_URL"], "https://first.example");
+        assert_eq!(live["env"]["ANTHROPIC_MODEL"], "first-model");
+        assert_eq!(live["env"]["KEEP"], "1");
+
+        ProviderService::switch(&state, AppType::Claude, "second").unwrap();
+        assert_eq!(
+            state.db.get_applied_profile_id("claude").unwrap(),
+            Some(default_of("second"))
+        );
+        let live: Value = crate::config::read_json_file(&path).unwrap();
+        assert_eq!(live["env"]["ANTHROPIC_BASE_URL"], "https://second.example");
+        assert_eq!(live["env"]["ANTHROPIC_MODEL"], "second-model");
+        assert!(
+            state.db.get_all_mcp_servers().unwrap()["enabled"]
+                .apps
+                .claude,
+            "following a connection never touches global resource enablement"
+        );
+
+        // Editing the connection of the current Profile keeps it current but pending.
+        let mut edited = state
+            .db
+            .get_provider_by_id("second", &AppType::Claude)
+            .unwrap()
+            .unwrap();
+        edited.settings_config["env"]["ANTHROPIC_BASE_URL"] = json!("https://moved.example");
+        ProviderService::update_from_editor(&state, AppType::Claude, None, edited, Some(editor()))
+            .unwrap();
+        assert_eq!(
+            state.db.get_current_profile_id("claude").unwrap(),
+            Some(default_of("second"))
+        );
+        assert_eq!(state.db.get_applied_profile_id("claude").unwrap(), None);
+
+        // A default Profile repointed at another connection is no longer followed.
+        ProfileService::update_config(
+            &state,
+            &default_of("first"),
+            ProfileScope::Claude,
+            config("second", "elsewhere"),
+            None,
+        )
+        .unwrap();
+        ProviderService::switch(&state, AppType::Claude, "first").unwrap();
+        assert_eq!(state.db.get_current_profile_id("claude").unwrap(), None);
+
+        // Explicitly applying a Profile switches its connection without the follow-up.
+        let custom = ProfileService::duplicate(
+            &state,
+            &default_of("second"),
+            "Custom",
+            ProfileScope::Claude,
+        )
+        .unwrap();
+        ProfileService::update_config(
+            &state,
+            &custom.id,
+            ProfileScope::Claude,
+            config("second", "custom-model"),
+            None,
+        )
+        .unwrap();
+        let warnings = ProfileService::apply(&state, &custom.id, ProfileScope::Claude).unwrap();
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(
+            state.db.get_applied_profile_id("claude").unwrap(),
+            Some(custom.id.clone())
+        );
+        let live: Value = crate::config::read_json_file(&path).unwrap();
+        assert_eq!(live["env"]["ANTHROPIC_BASE_URL"], "https://moved.example");
+        assert_eq!(live["env"]["ANTHROPIC_MODEL"], "custom-model");
     }
 
     #[test]

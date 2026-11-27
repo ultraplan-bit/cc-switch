@@ -92,7 +92,7 @@ import {
 } from "@/components/shell/AppPageHeader";
 import { WindowControls } from "@/components/shell/WindowControls";
 import { APP_DISPLAY_NAME, AppGlyph } from "@/components/shell/AppGlyph";
-import { ProfileSwitcher } from "@/components/profiles/ProfileSwitcher";
+import { ProfilesPage } from "@/components/profiles/ProfilesPage";
 import { ProviderList } from "@/components/providers/ProviderList";
 import {
   hasOpencodeDefinition,
@@ -1665,6 +1665,30 @@ function App() {
   // OpenClaw / Hermes 没有模式 tab，那一行放它们自己的页面导航。
   // 换整块内容的是页面导航，用下划线页签；分段控件只留给模式和页内筛选。
   const renderAppSegments = () => {
+    if (appPageBelongsTo("profiles", activeApp)) {
+      return (
+        <div className="shrink-0 px-6 pt-2">
+          <PageTabs<"providers" | "profiles">
+            aria-label={APP_DISPLAY_NAME[activeApp]}
+            idPrefix="agent-configuration"
+            controls="main-content"
+            value={currentView === "profiles" ? "profiles" : "providers"}
+            onValueChange={(view) => {
+              if (view === currentView) return;
+              const navigate = () => {
+                closeProviderPanels();
+                setCurrentView(view);
+              };
+              if (!confirmLeave(navigate)) navigate();
+            }}
+            items={[
+              { value: "providers", label: t("appPage.providers") },
+              { value: "profiles", label: t("profiles.title") },
+            ]}
+          />
+        </div>
+      );
+    }
     if (activeApp === "openclaw") {
       return (
         <div className="shrink-0 px-6 pt-2">
@@ -1802,6 +1826,17 @@ function App() {
   const renderAppPage = () => {
     const body = (() => {
       switch (currentView) {
+        case "profiles":
+          return (
+            <div
+              id="main-content"
+              role="tabpanel"
+              aria-labelledby="agent-configuration-profiles"
+              className="min-h-0 flex-1 overflow-y-auto scroll-stable"
+            >
+              <ProfilesPage activeApp={activeApp} />
+            </div>
+          );
         case "workspace":
           return <WorkspaceFilesPanel />;
         case "openclawConfig":
@@ -1856,25 +1891,6 @@ function App() {
     return (
       <>
         {renderAppPageHeader()}
-        {currentView === "providers" &&
-          (activeApp === "claude" ||
-            activeApp === "codex" ||
-            activeApp === "claude-desktop") && (
-            <>
-              <ProfileSwitcher activeApp={activeApp} />
-              <div
-                className="shrink-0 space-y-1 px-6 pt-3"
-                data-provider-connection-library
-              >
-                <h2 className="text-sm font-medium text-fg-1">
-                  {t("profiles.connections.title")}
-                </h2>
-                <p className="text-caption text-fg-3">
-                  {t("profiles.connections.description")}
-                </p>
-              </div>
-            </>
-          )}
         {renderAppSegments()}
         {isOpenClawView && openclawHealthWarnings.length > 0 && (
           <OpenClawHealthBanner warnings={openclawHealthWarnings} />

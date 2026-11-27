@@ -113,7 +113,6 @@ fn seed_applied_profile(state: &AppState, provider_id: &str) {
         name: "Applied".into(),
         payload: serde_json::to_string(&payload).unwrap(),
         sort_order: None,
-        project_path: None,
         created_at: None,
         updated_at: None,
     };
@@ -213,6 +212,47 @@ async fn startup_attach_restores_applied_profile_projection_without_modifying_pr
             .settings_config,
         row.settings_config
     );
+    exit(&state, &AppType::Claude).await.unwrap();
+}
+
+#[tokio::test]
+#[serial]
+async fn startup_attach_does_not_project_a_profile_edited_after_it_was_applied() {
+    let _home = Home::new();
+    seed_settings(USER_SETTINGS);
+    let row = claude(
+        "a",
+        "https://a.example",
+        json!({"CLAUDE_CODE_MAX_OUTPUT_TOKENS":"1024"}),
+    );
+    let state = state_with(AppType::Claude, std::slice::from_ref(&row), "a").await;
+    enter(&state, &AppType::Claude, false).await.unwrap();
+    let before = settings();
+    seed_applied_profile(&state, "a");
+    state
+        .db
+        .mark_current_profile_stale("claude", "applied-profile")
+        .unwrap();
+    detach_all(&state).await;
+    startup(&state).await;
+    assert!(mode(&AppType::Claude).attached);
+    let live = settings();
+    for key in [
+        "ANTHROPIC_DEFAULT_SONNET_MODEL",
+        "CLAUDE_CODE_MAX_OUTPUT_TOKENS",
+    ] {
+        assert_eq!(live["env"].get(key), before["env"].get(key), "{key}");
+    }
+    // It stays the current Profile, still pending re-application.
+    assert_eq!(
+        state
+            .db
+            .get_current_profile_id("claude")
+            .unwrap()
+            .as_deref(),
+        Some("applied-profile")
+    );
+    assert!(state.db.is_current_profile_stale("claude").unwrap());
     exit(&state, &AppType::Claude).await.unwrap();
 }
 

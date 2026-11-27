@@ -10,6 +10,7 @@ import type { AppId } from "@/lib/api";
 
 export type AppPage =
   | "providers"
+  | "profiles"
   | "workspace"
   | "openclawConfig"
   | "hermesMemory";
@@ -46,6 +47,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
 
 const APP_PAGES: AppPage[] = [
   "providers",
+  "profiles",
   "workspace",
   "openclawConfig",
   "hermesMemory",
@@ -91,6 +93,8 @@ export function appPageBelongsTo(page: AppPage, app: AppId): boolean {
   switch (page) {
     case "providers":
       return true;
+    case "profiles":
+      return app === "claude" || app === "codex" || app === "claude-desktop";
     case "workspace":
     case "openclawConfig":
       return app === "openclaw";

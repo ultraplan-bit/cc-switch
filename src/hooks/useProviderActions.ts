@@ -35,6 +35,9 @@ import { logFrontendInfo } from "@/lib/frontendLogger";
 import { codexHistorySplitToastExtras } from "@/utils/codexHistorySplitHint";
 import { appHas } from "@/config/appSpecs";
 
+/** Prefix the backend puts on notes from applying a connection's profile after a switch. */
+const PROFILE_FOLLOW_CODE = "profile_follow:";
+
 /**
  * Hook for managing provider actions (add, update, delete, switch)
  * Extracts business logic from App.tsx
@@ -251,8 +254,23 @@ export function useProviderActions(
               toast.warning(message, { duration: 6000 });
             }
           }
+          // Switching a connection also applies its profile; these notes are
+          // about that profile, not about the provider that was left.
+          const profileNotes = result.warnings
+            .filter((warning) => warning.startsWith(PROFILE_FOLLOW_CODE))
+            .map((warning) => warning.slice(PROFILE_FOLLOW_CODE.length));
+          if (profileNotes.length) {
+            toast.warning(
+              t("profiles.switchFollowWarning", {
+                details: profileNotes.join("\n"),
+              }),
+              { duration: 10000, closeButton: true },
+            );
+          }
           const hasOtherWarnings = result.warnings.some(
-            (warning) => !coded.some(({ code }) => warning.startsWith(code)),
+            (warning) =>
+              !warning.startsWith(PROFILE_FOLLOW_CODE) &&
+              !coded.some(({ code }) => warning.startsWith(code)),
           );
           if (hasOtherWarnings) {
             toast.warning(

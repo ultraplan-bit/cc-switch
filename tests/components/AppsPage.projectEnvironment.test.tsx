@@ -61,7 +61,7 @@ let broken: boolean;
 let profile: Profile;
 
 beforeEach(() => {
-  localStorage.removeItem("cc-switch:profiles:project-selection:v1");
+  localStorage.removeItem("cc-switch:profiles:location:v2");
   vi.resetModules();
   vi.clearAllMocks();
   installed = true;
@@ -69,7 +69,6 @@ beforeEach(() => {
   profile = {
     id: "project-profile",
     name: "Project profile",
-    projectPath: "/projects/demo",
     payload: {
       providers: { claude: null, codex: null, "claude-desktop": null },
       mcp: { claude: [], codex: [], "claude-desktop": null },
@@ -121,7 +120,12 @@ beforeEach(() => {
     if (command === "list_profiles")
       return {
         profiles: [profile],
-        currentIds: { claude: null, codex: null, claudeDesktop: null },
+        current: { claude: null, codex: null, claudeDesktop: null },
+        globalState: { claude: null, codex: null, claudeDesktop: null },
+        projects: [
+          { path: "/projects/other", available: true, deployed: {} },
+          { path: "/projects/demo", available: true, deployed: {} },
+        ],
       };
     if (command === "deploy_profile_to_project")
       return { status: "applied", changed: [], warnings: [] };
@@ -160,21 +164,15 @@ async function openEnvironment(tool: "claude" | "codex" = "claude") {
   };
   const panel = await showProject();
   fireEvent.click(
-    panel.getByRole("combobox", { name: "profiles.projectContext" }),
+    await panel.findByRole("combobox", { name: "profiles.projects.select" }),
   );
   fireEvent.click(
     await screen.findByRole("option", { name: "/projects/demo" }),
   );
   await waitFor(() =>
     expect(
-      panel.getByRole("combobox", { name: "profiles.projectContext" }),
+      panel.getByRole("combobox", { name: "profiles.projects.select" }),
     ).toHaveAttribute("data-project-path", "/projects/demo"),
-  );
-  fireEvent.click(
-    panel.getByRole("combobox", { name: "profiles.switcherAriaLabel" }),
-  );
-  fireEvent.click(
-    await screen.findByRole("option", { name: /^Project profile/ }),
   );
   await panel.findByText("Project profile");
   const installFromManagement = async () => {
@@ -200,10 +198,14 @@ describe("Agent management project environment", () => {
     expect(
       panel.queryByRole("button", { name: "settings.toolInstall" }),
     ).toBeNull();
-    expect(panel.getByLabelText("profiles.projectContext")).toHaveAttribute(
-      "data-project-path",
-      "/projects/demo",
-    );
+    expect(
+      panel.getByRole("combobox", { name: "profiles.projects.select" }),
+    ).toHaveAttribute("data-project-path", "/projects/demo");
+    // Agent management only deploys to projects; it never applies globally.
+    expect(panel.queryByRole("button", { name: "profiles.apply" })).toBeNull();
+    expect(
+      panel.queryByRole("group", { name: "profiles.scope.label" }),
+    ).toBeNull();
     fireEvent.click(
       panel.getByRole("button", { name: "profiles.projectDeploy.button" }),
     );
@@ -211,6 +213,7 @@ describe("Agent management project environment", () => {
       expect(mocks.invoke).toHaveBeenCalledWith("deploy_profile_to_project", {
         id: profile.id,
         scope: "claude",
+        projectPath: "/projects/demo",
         resolution: null,
       }),
     );
@@ -313,7 +316,7 @@ describe("Agent management project environment", () => {
       await screen.findByRole("region", { name: "profiles.environment.title" }),
     );
     fireEvent.click(
-      panel.getByRole("combobox", { name: "profiles.projectContext" }),
+      await panel.findByRole("combobox", { name: "profiles.projects.select" }),
     );
     fireEvent.click(
       await screen.findByRole("option", { name: "/projects/demo" }),

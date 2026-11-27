@@ -54,6 +54,25 @@ pub enum ProjectDeployResult {
     Skipped,
 }
 
+/// The Profile a project directory last received for one Agent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeployedProfile {
+    pub profile_id: String,
+    /// The Profile changed since, or no longer exists.
+    pub stale: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectStatus {
+    pub path: String,
+    /// The directory exists and can be resolved.
+    pub available: bool,
+    /// Keyed by Agent scope (`claude` / `codex`).
+    pub deployed: BTreeMap<&'static str, DeployedProfile>,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ProjectManifest {
@@ -656,82 +675,86 @@ impl ProjectMcpDocument {
 pub struct ProjectProfileService;
 
 impl ProjectProfileService {
+    /// What a registered project directory currently has deployed, per Agent.
     /// The last deployed Profile is shared by sessions in the same project and Agent.
-    pub fn deployed_scopes(profile: &crate::database::Profile) -> Vec<ProfileScope> {
-        let Some(path) = profile.project_path.as_deref() else {
-            return Vec::new();
+    #[cfg(test)]
+    pub fn project_status(state: &AppState, path: &str) -> ProjectStatus {
+        Self::project_status_with(path, |id| {
+            state
+                .db
+                .get_profile(id)
+                .ok()
+                .flatten()
+                .map(|profile| profile.payload)
+        })
+    }
+
+    /// `payload_of` returns the stored payload of a Profile id, or None when it is gone.
+    pub(crate) fn project_status_with(
+        path: &str,
+        payload_of: impl Fn(&str) -> Option<String>,
+    ) -> ProjectStatus {
+        let mut status = ProjectStatus {
+            path: path.to_string(),
+            available: false,
+            deployed: BTreeMap::new(),
         };
         let root = match Path::new(path).canonicalize() {
             Ok(root) if root.is_dir() => root,
             result => {
-                log::warn!(
-                    "读取 Profile '{}' 项目部署状态失败，目录不可用: {result:?}",
-                    profile.id
-                );
-                return Vec::new();
+                log::warn!("读取项目部署状态失败，目录不可用: {result:?}");
+                return status;
             }
         };
+        status.available = true;
         let Ok(_guard) = PROJECT_DEPLOY_LOCK.lock() else {
-            log::warn!(
-                "读取 Profile '{}' 项目部署状态失败，部署锁已损坏",
-                profile.id
-            );
-            return Vec::new();
+            log::warn!("读取项目部署状态失败，部署锁已损坏");
+            return status;
         };
-        [ProfileScope::Claude, ProfileScope::Codex]
-            .into_iter()
-            .filter(|scope| match load_manifest(&root, scope.as_str()) {
-                Ok(manifest) => {
-                    if *scope == ProfileScope::Claude
-                        && manifest.claude_settings_file.as_deref() != Some(CLAUDE_PROJECT_SETTINGS)
-                    {
-                        return false;
-                    }
-                    if manifest.profile_id.as_deref() != Some(profile.id.as_str()) {
-                        return false;
-                    }
-                    match serde_json::from_str::<ProfilePayload>(&profile.payload) {
-                        Ok(payload) => match &manifest.profile_scope_hash {
-                            Some(hash) => {
-                                hash == &profile_scope_hash(&payload, *scope)
-                                    || (payload
-                                        .model_settings
-                                        .get(&scope.apps()[0])
-                                        .is_some_and(Option::is_none)
-                                        && payload
-                                            .model_catalog
-                                            .get(&scope.apps()[0])
-                                            .is_some_and(Option::is_none)
-                                        && hash == &legacy_profile_scope_hash(&payload, *scope))
-                            }
-                            // Old deployments have no revision. An explicit model
-                            // marks an edited/new snapshot that must be applied.
-                            None => payload
-                                .models
-                                .get(&scope.apps()[0])
-                                .is_some_and(Option::is_none),
-                        },
-                        Err(_) => false,
-                    }
-                }
+        for scope in [ProfileScope::Claude, ProfileScope::Codex] {
+            let manifest = match load_manifest(&root, scope.as_str()) {
+                Ok(manifest) => manifest,
                 Err(error) => {
-                    log::warn!(
-                        "读取 Profile '{}' 的 {} 部署状态失败: {error}",
-                        profile.id,
-                        scope.as_str()
-                    );
-                    false
+                    log::warn!("读取项目的 {} 部署状态失败: {error}", scope.as_str());
+                    continue;
                 }
-            })
-            .collect()
+            };
+            if scope == ProfileScope::Claude
+                && manifest.claude_settings_file.as_deref() != Some(CLAUDE_PROJECT_SETTINGS)
+            {
+                continue;
+            }
+            let Some(profile_id) = manifest.profile_id.clone() else {
+                continue;
+            };
+            let current = payload_of(&profile_id)
+                .and_then(|payload| serde_json::from_str::<ProfilePayload>(&payload).ok())
+                .is_some_and(|payload| manifest_matches_payload(&manifest, &payload, scope));
+            status.deployed.insert(
+                scope.as_str(),
+                DeployedProfile {
+                    profile_id,
+                    stale: !current,
+                },
+            );
+        }
+        status
     }
 
+    /// Deploy a Profile to a registered project directory.
     pub fn deploy(
         state: &AppState,
         profile_id: &str,
         scope: ProfileScope,
+        project_path: &str,
         resolution: Option<ConflictResolution>,
     ) -> Result<ProjectDeployResult, AppError> {
+        let project_path = crate::services::profile::normalize_project_path(project_path)?
+            .ok_or_else(|| AppError::InvalidInput("请选择项目目录".to_string()))?;
+        state.db.seed_profile_projects_from_legacy()?;
+        if !state.db.is_profile_project(&project_path)? {
+            return Err(AppError::InvalidInput("请先登记项目目录".into()));
+        }
         let _guard = PROJECT_DEPLOY_LOCK
             .lock()
             .map_err(|_| AppError::Config("项目部署锁已损坏".to_string()))?;
@@ -749,13 +772,9 @@ impl ProjectProfileService {
             .db
             .get_profile(profile_id)?
             .ok_or_else(|| AppError::InvalidInput(format!("Profile not found: {profile_id}")))?;
-        let project_path = profile
-            .project_path
-            .as_deref()
-            .ok_or_else(|| AppError::InvalidInput("Profile 未绑定项目目录".to_string()))?;
-        let project_root = Path::new(project_path)
+        let project_root = Path::new(&project_path)
             .canonicalize()
-            .map_err(|err| AppError::io(Path::new(project_path), err))?;
+            .map_err(|err| AppError::io(Path::new(&project_path), err))?;
         if !project_root.is_dir() {
             return Err(AppError::InvalidInput("项目目录不可用".to_string()));
         }
@@ -1149,6 +1168,27 @@ impl ProjectProfileService {
         }
         cleanup_skill_backups(&skill_undo);
         Ok(ProjectDeployResult::Applied { changed, warnings })
+    }
+}
+
+/// Whether the deployment recorded in a manifest still equals the Profile's
+/// configuration for that Agent.
+fn manifest_matches_payload(
+    manifest: &ProjectManifest,
+    payload: &ProfilePayload,
+    scope: ProfileScope,
+) -> bool {
+    let app = &scope.apps()[0];
+    match &manifest.profile_scope_hash {
+        Some(hash) => {
+            hash == &profile_scope_hash(payload, scope)
+                || (payload.model_settings.get(app).is_some_and(Option::is_none)
+                    && payload.model_catalog.get(app).is_some_and(Option::is_none)
+                    && hash == &legacy_profile_scope_hash(payload, scope))
+        }
+        // Old deployments have no revision. An explicit model
+        // marks an edited/new snapshot that must be applied.
+        None => payload.models.get(app).is_some_and(Option::is_none),
     }
 }
 
@@ -3964,6 +4004,67 @@ fn manifest_path(root: &Path, app: &str) -> Result<PathBuf, AppError> {
     Ok(dir.join(format!("{digest}.json")))
 }
 
+/// Test fixture: Profiles are no longer bound to a directory, so tests name the
+/// project a seeded Profile is deployed to once instead of at every call.
+#[cfg(test)]
+pub(crate) mod test_projects {
+    use super::*;
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+
+    thread_local! {
+        static DEFAULT: RefCell<Option<String>> = const { RefCell::new(None) };
+        static BOUND: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
+    }
+
+    /// Project used by Profiles without their own binding.
+    pub(crate) fn use_project(root: &Path) {
+        DEFAULT.with(|default| *default.borrow_mut() = Some(root.to_string_lossy().into_owned()));
+    }
+
+    pub(crate) fn bind(profile_id: &str, root: &Path) {
+        BOUND.with(|bound| {
+            bound
+                .borrow_mut()
+                .insert(profile_id.to_string(), root.to_string_lossy().into_owned())
+        });
+    }
+
+    fn root_of(profile_id: &str) -> String {
+        BOUND
+            .with(|bound| bound.borrow().get(profile_id).cloned())
+            .or_else(|| DEFAULT.with(|default| default.borrow().clone()))
+            .expect("test Profile has a project")
+    }
+
+    pub(crate) fn deploy(
+        state: &AppState,
+        profile_id: &str,
+        scope: ProfileScope,
+        resolution: Option<ConflictResolution>,
+    ) -> Result<ProjectDeployResult, AppError> {
+        let path = root_of(profile_id);
+        crate::services::profile::ProfileService::add_project(state, &path)?;
+        ProjectProfileService::deploy(state, profile_id, scope, &path, resolution)
+    }
+
+    /// Agents whose project deployment is this exact Profile revision.
+    pub(crate) fn deployed_scopes(profile: &crate::database::Profile) -> Vec<ProfileScope> {
+        let status = ProjectProfileService::project_status_with(&root_of(&profile.id), |id| {
+            (id == profile.id).then(|| profile.payload.clone())
+        });
+        [ProfileScope::Claude, ProfileScope::Codex]
+            .into_iter()
+            .filter(|scope| {
+                status
+                    .deployed
+                    .get(scope.as_str())
+                    .is_some_and(|deployed| deployed.profile_id == profile.id && !deployed.stale)
+            })
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3990,9 +4091,10 @@ mod tests {
             sort_order: None,
             created_at: Some(1),
             updated_at: Some(1),
-            project_path: Some(root.to_string_lossy().into_owned()),
         };
         state.db.save_profile(&profile).unwrap();
+        test_projects::use_project(root);
+        test_projects::bind(&profile.id, root);
     }
 
     fn seed_mcp_and_skill(state: &AppState) {
@@ -4076,13 +4178,9 @@ mod tests {
                 },
             )
             .unwrap();
-        let mut profile = ProfileService::create_with_project_path(
-            &state,
-            "Named resources",
-            ProfileScope::Claude,
-            Some(project.path().to_string_lossy().into_owned()),
-        )
-        .unwrap();
+        let mut profile =
+            ProfileService::create(&state, "Named resources", ProfileScope::Claude).unwrap();
+        test_projects::use_project(project.path());
         let mut payload: ProfilePayload = serde_json::from_str(&profile.payload).unwrap();
         assert_eq!(
             payload.resource_names.claude.mcp["filesystem"],
@@ -4104,6 +4202,7 @@ mod tests {
         profile.payload = serde_json::to_string(&payload).unwrap();
         state.db.save_profile(&profile).unwrap();
         let config = ProfileConfig {
+            follow_global_resources: false,
             native_config: None,
             provider_id: None,
             model: String::new(),
@@ -4122,7 +4221,7 @@ mod tests {
         )
         .unwrap();
         payload = serde_json::from_str(&profile.payload).unwrap();
-        ProjectProfileService::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap();
+        test_projects::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap();
         let original_hash = profile_scope_hash(&payload, ProfileScope::Claude);
         let output_paths = [
             ".mcp.json",
@@ -4151,7 +4250,7 @@ mod tests {
             original_hash
         );
         assert_eq!(
-            ProjectProfileService::deployed_scopes(&edited),
+            test_projects::deployed_scopes(&edited),
             vec![ProfileScope::Claude]
         );
 
@@ -4159,7 +4258,7 @@ mod tests {
             "UPDATE mcp_servers SET name = 'Unreadable current name', server_config = '{broken' WHERE id = 'filesystem'", [],
         ).unwrap();
         let result =
-            ProjectProfileService::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap();
+            test_projects::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap();
         assert!(
             matches!(result, ProjectDeployResult::Applied { warnings, .. }
             if warnings.iter().any(|warning| warning.contains("Unreadable current name (filesystem)") && warning.contains("配置不可读")))
@@ -4195,7 +4294,7 @@ mod tests {
         let missing: ProfilePayload = serde_json::from_str(&edited.payload).unwrap();
         assert_eq!(missing.resource_names, saved.resource_names);
         let ProjectDeployResult::Applied { warnings, .. } =
-            ProjectProfileService::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap()
+            test_projects::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap()
         else {
             panic!("missing resources should preserve existing project files");
         };
@@ -4216,7 +4315,6 @@ mod tests {
         }
         let global = Profile {
             id: "global-copy".into(),
-            project_path: None,
             ..edited.clone()
         };
         state.db.save_profile(&global).unwrap();
@@ -4267,10 +4365,10 @@ mod tests {
         payload.mcp.codex = Some(vec![]);
         profile.payload = serde_json::to_string(&payload).unwrap();
         state.db.save_profile(&profile).unwrap();
-        ProjectProfileService::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap();
-        ProjectProfileService::deploy(&state, &profile.id, ProfileScope::Codex, None).unwrap();
+        test_projects::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap();
+        test_projects::deploy(&state, &profile.id, ProfileScope::Codex, None).unwrap();
         assert_eq!(
-            ProjectProfileService::deployed_scopes(&profile),
+            test_projects::deployed_scopes(&profile),
             vec![ProfileScope::Claude, ProfileScope::Codex]
         );
         let edited = crate::services::profile::ProfileService::update_config(
@@ -4278,6 +4376,7 @@ mod tests {
             &profile.id,
             ProfileScope::Claude,
             crate::services::profile::ProfileConfig {
+                follow_global_resources: false,
                 native_config: None,
                 provider_id: None,
                 model: "claude-sonnet-4-6".into(),
@@ -4291,12 +4390,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            ProjectProfileService::deployed_scopes(&edited),
+            test_projects::deployed_scopes(&edited),
             vec![ProfileScope::Codex]
         );
-        ProjectProfileService::deploy(&state, &edited.id, ProfileScope::Claude, None).unwrap();
+        test_projects::deploy(&state, &edited.id, ProfileScope::Claude, None).unwrap();
         assert_eq!(
-            ProjectProfileService::deployed_scopes(&edited),
+            test_projects::deployed_scopes(&edited),
             vec![ProfileScope::Claude, ProfileScope::Codex]
         );
         let settings: Value = serde_json::from_slice(
@@ -4334,8 +4433,18 @@ mod tests {
         state.db.save_profile(&b).unwrap();
         let mut c = a.clone();
         c.id = "other-project".into();
-        c.project_path = Some(second.path().to_string_lossy().into_owned());
+        test_projects::bind(&c.id, second.path());
         state.db.save_profile(&c).unwrap();
+        let error = ProjectProfileService::deploy(
+            &state,
+            &c.id,
+            ProfileScope::Claude,
+            second.path().to_str().unwrap(),
+            None,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("请先登记项目目录"));
+        assert!(second.path().read_dir().unwrap().next().is_none());
         // Existing manifests remain readable before a Profile ID has been recorded.
         fs::write(
             manifest_path(&root, "claude").unwrap(),
@@ -4346,38 +4455,38 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        assert!(ProjectProfileService::deployed_scopes(&a).is_empty());
-        ProjectProfileService::deploy(&state, &a.id, ProfileScope::Claude, None).unwrap();
-        ProjectProfileService::deploy(&state, &b.id, ProfileScope::Codex, None).unwrap();
+        assert!(test_projects::deployed_scopes(&a).is_empty());
+        test_projects::deploy(&state, &a.id, ProfileScope::Claude, None).unwrap();
+        test_projects::deploy(&state, &b.id, ProfileScope::Codex, None).unwrap();
         assert_eq!(
-            ProjectProfileService::deployed_scopes(&a),
+            test_projects::deployed_scopes(&a),
             vec![ProfileScope::Claude]
         );
         assert_eq!(
-            ProjectProfileService::deployed_scopes(&b),
+            test_projects::deployed_scopes(&b),
             vec![ProfileScope::Codex]
         );
-        ProjectProfileService::deploy(&state, &b.id, ProfileScope::Claude, None).unwrap();
-        assert!(ProjectProfileService::deployed_scopes(&a).is_empty());
+        test_projects::deploy(&state, &b.id, ProfileScope::Claude, None).unwrap();
+        assert!(test_projects::deployed_scopes(&a).is_empty());
         assert_eq!(
-            ProjectProfileService::deployed_scopes(&b),
+            test_projects::deployed_scopes(&b),
             vec![ProfileScope::Claude, ProfileScope::Codex]
         );
-        ProjectProfileService::deploy(&state, &c.id, ProfileScope::Claude, None).unwrap();
-        ProjectProfileService::deploy(&state, &a.id, ProfileScope::Codex, None).unwrap();
+        test_projects::deploy(&state, &c.id, ProfileScope::Claude, None).unwrap();
+        test_projects::deploy(&state, &a.id, ProfileScope::Codex, None).unwrap();
         assert_eq!(
-            ProjectProfileService::deployed_scopes(&a),
+            test_projects::deployed_scopes(&a),
             vec![ProfileScope::Codex]
         );
         assert_eq!(
-            ProjectProfileService::deployed_scopes(&b),
+            test_projects::deployed_scopes(&b),
             vec![ProfileScope::Claude]
         );
         assert_eq!(
-            ProjectProfileService::deployed_scopes(&c),
+            test_projects::deployed_scopes(&c),
             vec![ProfileScope::Claude]
         );
-        ProjectProfileService::deploy(
+        test_projects::deploy(
             &state,
             &a.id,
             ProfileScope::Claude,
@@ -4385,17 +4494,17 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            ProjectProfileService::deployed_scopes(&b),
+            test_projects::deployed_scopes(&b),
             vec![ProfileScope::Claude]
         );
         fs::write(root.join(".mcp.json"), "invalid JSON").unwrap();
-        assert!(ProjectProfileService::deploy(&state, &a.id, ProfileScope::Claude, None).is_err());
+        assert!(test_projects::deploy(&state, &a.id, ProfileScope::Claude, None).is_err());
         assert_eq!(
-            ProjectProfileService::deployed_scopes(&b),
+            test_projects::deployed_scopes(&b),
             vec![ProfileScope::Claude]
         );
         assert_eq!(
-            ProjectProfileService::deployed_scopes(&a),
+            test_projects::deployed_scopes(&a),
             vec![ProfileScope::Codex]
         );
         fs::write(
@@ -4403,9 +4512,50 @@ mod tests {
             "invalid manifest",
         )
         .unwrap();
-        assert!(ProjectProfileService::deployed_scopes(&c).is_empty());
-        c.project_path = Some(root.join("not-present").to_string_lossy().into_owned());
-        assert!(ProjectProfileService::deployed_scopes(&c).is_empty());
+        assert!(test_projects::deployed_scopes(&c).is_empty());
+        test_projects::bind(&c.id, &root.join("not-present"));
+        assert!(test_projects::deployed_scopes(&c).is_empty());
+        let missing = ProjectProfileService::project_status(
+            &state,
+            &root.join("not-present").to_string_lossy(),
+        );
+        assert!(!missing.available);
+        assert!(missing.deployed.is_empty());
+        // One directory reports each Agent's own Profile, and flags an edited or
+        // deleted Profile instead of hiding what the project still contains.
+        let status = ProjectProfileService::project_status(&state, &root.to_string_lossy());
+        assert!(status.available);
+        assert_eq!(
+            status.deployed["claude"],
+            DeployedProfile {
+                profile_id: b.id.clone(),
+                stale: false
+            }
+        );
+        assert_eq!(status.deployed["codex"].profile_id, a.id);
+        let mut edited: ProfilePayload = serde_json::from_str(&b.payload).unwrap();
+        edited.models.claude = Some("edited-after-deploy".into());
+        b.payload = serde_json::to_string(&edited).unwrap();
+        state.db.save_profile(&b).unwrap();
+        state.db.delete_profile(&a.id).unwrap();
+        let status = ProjectProfileService::project_status(&state, &root.to_string_lossy());
+        assert_eq!(
+            status.deployed["claude"],
+            DeployedProfile {
+                profile_id: b.id.clone(),
+                stale: true
+            }
+        );
+        assert_eq!(
+            status.deployed["codex"],
+            DeployedProfile {
+                profile_id: a.id.clone(),
+                stale: true
+            }
+        );
+        // The two project locations are shared by all of the Profiles.
+        let projects = state.db.get_profile_projects().unwrap();
+        assert_eq!(projects.len(), 2, "{projects:?}");
     }
 
     #[cfg(windows)]
@@ -4432,7 +4582,7 @@ mod tests {
         )]));
         a.payload = serde_json::to_string(&initial_payload).unwrap();
         state.db.save_profile(&a).unwrap();
-        ProjectProfileService::deploy(&state, &a.id, ProfileScope::Claude, None).unwrap();
+        test_projects::deploy(&state, &a.id, ProfileScope::Claude, None).unwrap();
         let mut b = a.clone();
         b.id = "alternative".into();
         let mut payload: ProfilePayload = serde_json::from_str(&b.payload).unwrap();
@@ -4455,20 +4605,20 @@ mod tests {
             .share_mode(1)
             .open(&mcp_path)
             .unwrap();
-        assert!(ProjectProfileService::deploy(&state, &b.id, ProfileScope::Claude, None).is_err());
+        assert!(test_projects::deploy(&state, &b.id, ProfileScope::Claude, None).is_err());
         assert_eq!(fs::read(&manifest_file).unwrap(), original_manifest);
         assert_eq!(fs::read(&mcp_path).unwrap(), original_mcp);
         assert_eq!(fs::read(&settings_path).unwrap(), original_settings);
         assert_eq!(
-            ProjectProfileService::deployed_scopes(&a),
+            test_projects::deployed_scopes(&a),
             vec![ProfileScope::Claude]
         );
-        assert!(ProjectProfileService::deployed_scopes(&b).is_empty());
+        assert!(test_projects::deployed_scopes(&b).is_empty());
         drop(locked);
-        ProjectProfileService::deploy(&state, &b.id, ProfileScope::Claude, None).unwrap();
-        assert!(ProjectProfileService::deployed_scopes(&a).is_empty());
+        test_projects::deploy(&state, &b.id, ProfileScope::Claude, None).unwrap();
+        assert!(test_projects::deployed_scopes(&a).is_empty());
         assert_eq!(
-            ProjectProfileService::deployed_scopes(&b),
+            test_projects::deployed_scopes(&b),
             vec![ProfileScope::Claude]
         );
     }
@@ -4553,7 +4703,7 @@ mod tests {
         };
         save_manifest(&root, "claude", &manifest).unwrap();
         assert_eq!(
-            ProjectProfileService::deployed_scopes(&profile),
+            test_projects::deployed_scopes(&profile),
             vec![ProfileScope::Claude]
         );
     }
@@ -4580,7 +4730,7 @@ mod tests {
             fs::create_dir_all(model_path.parent().unwrap()).unwrap();
             fs::write(&model_path, original).unwrap();
             assert!(matches!(
-                ProjectProfileService::deploy(&state, "profile", scope, None).unwrap(),
+                test_projects::deploy(&state, "profile", scope, None).unwrap(),
                 ProjectDeployResult::Applied { .. }
             ));
             let instruction_path = root.join(instruction_relative_path(&app).unwrap());
@@ -4594,7 +4744,7 @@ mod tests {
             };
             assert_eq!(model.as_deref(), Some("test-model"));
             assert!(
-                matches!(ProjectProfileService::deploy(&state, "profile", scope, None).unwrap(),
+                matches!(test_projects::deploy(&state, "profile", scope, None).unwrap(),
                 ProjectDeployResult::Applied { changed, .. } if changed.is_empty())
             );
 
@@ -4606,7 +4756,7 @@ mod tests {
             next.payload = serde_json::to_string(&payload).unwrap();
             state.db.save_profile(&next).unwrap();
             assert!(matches!(
-                ProjectProfileService::deploy(&state, "empty-profile", scope, None).unwrap(),
+                test_projects::deploy(&state, "empty-profile", scope, None).unwrap(),
                 ProjectDeployResult::Applied { .. }
             ));
             assert!(!instruction_path.exists());
@@ -4690,7 +4840,7 @@ mod tests {
         state.db.save_profile(&profile).unwrap();
 
         assert!(matches!(
-            ProjectProfileService::deploy(&state, &profile.id, ProfileScope::Codex, None).unwrap(),
+            test_projects::deploy(&state, &profile.id, ProfileScope::Codex, None).unwrap(),
             ProjectDeployResult::Applied { .. }
         ));
         let project_catalog_path = root.join(".codex/cc-switch-model-catalog.json");
@@ -4751,6 +4901,7 @@ mod tests {
                 "profile",
                 ProfileScope::Codex,
                 ProfileConfig {
+                    follow_global_resources: false,
                     native_config: None,
                     provider_id: None,
                     model: model.into(),
@@ -4767,8 +4918,7 @@ mod tests {
                 None,
             ).unwrap();
             assert!(matches!(
-                ProjectProfileService::deploy(&state, &saved.id, ProfileScope::Codex, None)
-                    .unwrap(),
+                test_projects::deploy(&state, &saved.id, ProfileScope::Codex, None).unwrap(),
                 ProjectDeployResult::Applied { .. }
             ));
             let config: toml_edit::DocumentMut =
@@ -4846,14 +4996,12 @@ mod tests {
         assert_eq!(settings["model_context_window"], "1000000");
         assert_eq!(settings["model_auto_compact_token_limit"], "900000");
         let target = tempfile::tempdir().unwrap();
-        let copied = ProfileService::duplicate(
-            &state,
-            &imported.id,
-            "Copy",
-            Some(target.path().to_str().unwrap().into()),
-        )
-        .unwrap();
+        assert_eq!(state.db.get_profile_projects().unwrap().len(), 1);
+        let copied =
+            ProfileService::duplicate(&state, &imported.id, "Copy", ProfileScope::Codex).unwrap();
+        test_projects::bind(&copied.id, target.path());
         let mut config = ProfileConfig {
+            follow_global_resources: false,
             native_config: None,
             provider_id: None,
             model: "custom-model".into(),
@@ -4874,7 +5022,7 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(
-            ProjectProfileService::deploy(&state, &copied.id, ProfileScope::Codex, None).unwrap(),
+            test_projects::deploy(&state, &copied.id, ProfileScope::Codex, None).unwrap(),
             ProjectDeployResult::Applied { .. }
         ));
         let path = target.path().join(".codex/config.toml");
@@ -4922,7 +5070,7 @@ mod tests {
             None,
         )
         .unwrap();
-        ProjectProfileService::deploy(&state, &copied.id, ProfileScope::Codex, None).unwrap();
+        test_projects::deploy(&state, &copied.id, ProfileScope::Codex, None).unwrap();
         let document: toml_edit::DocumentMut = fs::read_to_string(&path).unwrap().parse().unwrap();
         assert!(document.get("model_context_window").is_none());
         assert!(document.get("model_auto_compact_token_limit").is_none());
@@ -5038,7 +5186,7 @@ mod tests {
         )
         .unwrap();
         let ProjectDeployResult::NeedsResolution { conflicts, .. } =
-            ProjectProfileService::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap()
+            test_projects::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap()
         else {
             panic!("existing model settings must require explicit resolution")
         };
@@ -5049,7 +5197,7 @@ mod tests {
         );
 
         assert!(matches!(
-            ProjectProfileService::deploy(
+            test_projects::deploy(
                 &state,
                 &profile.id,
                 ProfileScope::Claude,
@@ -5088,14 +5236,14 @@ mod tests {
         )
         .unwrap();
         let ProjectDeployResult::NeedsResolution { conflicts, .. } =
-            ProjectProfileService::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap()
+            test_projects::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap()
         else {
             panic!("post-deploy edits must require resolution")
         };
         assert!(conflicts
             .iter()
             .any(|conflict| conflict.path == sonnet_path));
-        ProjectProfileService::deploy(
+        test_projects::deploy(
             &state,
             &profile.id,
             ProfileScope::Claude,
@@ -5137,7 +5285,7 @@ mod tests {
             let instruction_path = root.join(instruction_relative_path(&app).unwrap());
             fs::write(&instruction_path, "project instructions").unwrap();
             assert!(
-                matches!(ProjectProfileService::deploy(&state, "profile", scope, None).unwrap(),
+                matches!(test_projects::deploy(&state, "profile", scope, None).unwrap(),
                 ProjectDeployResult::Applied { changed, .. } if changed.is_empty())
             );
             let manifest = load_manifest(&root, app.as_str()).unwrap();
@@ -5149,7 +5297,7 @@ mod tests {
             *payload.prompts.get_mut(&app).unwrap() = Some(NO_ACTIVE_PROMPT.into());
             profile.payload = serde_json::to_string(&payload).unwrap();
             state.db.save_profile(&profile).unwrap();
-            ProjectProfileService::deploy(&state, "profile", scope, None).unwrap();
+            test_projects::deploy(&state, "profile", scope, None).unwrap();
             assert_eq!(fs::read_to_string(model_path).unwrap(), original);
             assert_eq!(
                 fs::read_to_string(instruction_path).unwrap(),
@@ -5303,7 +5451,7 @@ mod tests {
         let shared = "{\"model\":\"shared-model\",\"env\":{\"ANTHROPIC_MODEL\":\"shared-model\"}}";
         fs::write(&shared_path, shared).unwrap();
         let ProjectDeployResult::Applied { warnings, .. } =
-            ProjectProfileService::deploy(&state, "profile", ProfileScope::Claude, None).unwrap()
+            test_projects::deploy(&state, "profile", ProfileScope::Claude, None).unwrap()
         else {
             panic!("deploy should write personal project settings")
         };
@@ -5326,14 +5474,14 @@ mod tests {
         doc.set_env_model(Some("user-edited-model")).unwrap();
         doc.save(&root).unwrap();
         let ProjectDeployResult::NeedsResolution { conflicts, .. } =
-            ProjectProfileService::deploy(&state, "profile", ProfileScope::Claude, None).unwrap()
+            test_projects::deploy(&state, "profile", ProfileScope::Claude, None).unwrap()
         else {
             panic!("user-edited env model must need resolution")
         };
         assert!(conflicts
             .iter()
             .any(|conflict| conflict.path.ends_with("#env.ANTHROPIC_MODEL")));
-        ProjectProfileService::deploy(
+        test_projects::deploy(
             &state,
             "profile",
             ProfileScope::Claude,
@@ -5353,7 +5501,7 @@ mod tests {
                 .claude_env_model_hash,
             None
         );
-        ProjectProfileService::deploy(
+        test_projects::deploy(
             &state,
             "profile",
             ProfileScope::Claude,
@@ -5381,7 +5529,7 @@ mod tests {
         let path = root.join(".claude/settings.local.json");
         let original = "{\"model\":\"user-model\",\"env\":{\"USER_FLAG\":\"keep\"}}";
         fs::write(&path, original).unwrap();
-        ProjectProfileService::deploy(
+        test_projects::deploy(
             &state,
             "profile",
             ProfileScope::Claude,
@@ -5416,7 +5564,7 @@ mod tests {
             .remove("claudeEnvModelHash");
         let manifest_file = manifest_path(&root, "claude").unwrap();
         fs::write(&manifest_file, serde_json::to_vec(&legacy_json).unwrap()).unwrap();
-        ProjectProfileService::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
+        test_projects::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
         let mut manifest = load_manifest(&root, "claude").unwrap();
         assert_eq!(manifest.model_hash, Some(text_hash("test-model")));
         assert_eq!(
@@ -5536,11 +5684,10 @@ mod tests {
             assert_eq!(loaded.mcp_servers, old.mcp_servers);
             assert_eq!(loaded.skills[".claude/skills/managed"].hash, "skill-hash");
             assert_eq!(loaded.instruction_hash, old.instruction_hash);
-            assert!(ProjectProfileService::deployed_scopes(&profile).is_empty());
+            assert!(test_projects::deployed_scopes(&profile).is_empty());
 
             let ProjectDeployResult::NeedsResolution { conflicts, .. } =
-                ProjectProfileService::deploy(&state, "profile", ProfileScope::Claude, None)
-                    .unwrap()
+                test_projects::deploy(&state, "profile", ProfileScope::Claude, None).unwrap()
             else {
                 panic!("existing personal settings must require explicit resolution")
             };
@@ -5558,7 +5705,7 @@ mod tests {
             assert_eq!(fs::read(&shared_path).unwrap(), shared);
             assert_eq!(fs::read(&manifest_file).unwrap(), old_bytes);
 
-            ProjectProfileService::deploy(
+            test_projects::deploy(
                 &state,
                 "profile",
                 ProfileScope::Claude,
@@ -5576,14 +5723,14 @@ mod tests {
                 Some(text_hash("test-model"))
             );
             assert_eq!(
-                ProjectProfileService::deployed_scopes(&profile),
+                test_projects::deployed_scopes(&profile),
                 vec![ProfileScope::Claude]
             );
 
             payload.models.claude = Some(String::new());
             profile.payload = serde_json::to_string(&payload).unwrap();
             state.db.save_profile(&profile).unwrap();
-            ProjectProfileService::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
+            test_projects::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
             let personal_doc = ClaudeSettingsDocument::open(&root).unwrap();
             assert_eq!(personal_doc.model(), None);
             assert_eq!(personal_doc.env_model(), None);
@@ -5666,7 +5813,7 @@ mod tests {
             Some(vec!["alpha".into()]),
             Some(vec![]),
         );
-        ProjectProfileService::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
+        test_projects::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
         let settings = ClaudeSettingsDocument::open(&first_root).unwrap();
         let rules = claude_mcp_denial_rules(&settings.root).unwrap();
         assert!(claude_mcp_denial_group(&rules, "alpha").is_none());
@@ -5681,19 +5828,19 @@ mod tests {
         let second_root = second.path().canonicalize().unwrap();
         let mut other = state.db.get_profile("profile").unwrap().unwrap();
         other.id = "other-project".into();
-        other.project_path = Some(second_root.to_string_lossy().into_owned());
+        test_projects::bind(&other.id, &second_root);
         let mut other_payload: ProfilePayload = serde_json::from_str(&other.payload).unwrap();
         other_payload.mcp.claude = Some(vec!["alpha".into(), "beta".into()]);
         other.payload = serde_json::to_string(&other_payload).unwrap();
         state.db.save_profile(&other).unwrap();
-        ProjectProfileService::deploy(&state, &other.id, ProfileScope::Claude, None).unwrap();
+        test_projects::deploy(&state, &other.id, ProfileScope::Claude, None).unwrap();
         let second_mcp = fs::read(second_root.join(".mcp.json")).unwrap();
         let mut profile = state.db.get_profile("profile").unwrap().unwrap();
         let mut payload: ProfilePayload = serde_json::from_str(&profile.payload).unwrap();
         payload.mcp.claude = Some(vec!["beta".into()]);
         profile.payload = serde_json::to_string(&payload).unwrap();
         state.db.save_profile(&profile).unwrap();
-        ProjectProfileService::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap();
+        test_projects::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap();
         let rules =
             claude_mcp_denial_rules(&ClaudeSettingsDocument::open(&first_root).unwrap().root)
                 .unwrap();
@@ -5750,7 +5897,7 @@ mod tests {
         let ProjectDeployResult::NeedsResolution {
             conflicts,
             warnings,
-        } = ProjectProfileService::deploy(&state, "profile", ProfileScope::Claude, None).unwrap()
+        } = test_projects::deploy(&state, "profile", ProfileScope::Claude, None).unwrap()
         else {
             panic!("user-authored MCP denial must require a resolution")
         };
@@ -5761,7 +5908,7 @@ mod tests {
         assert!(warnings
             .iter()
             .any(|warning| warning.contains(".claude/settings.json")));
-        ProjectProfileService::deploy(
+        test_projects::deploy(
             &state,
             "profile",
             ProfileScope::Claude,
@@ -5775,7 +5922,7 @@ mod tests {
             .unwrap()
             .claude_mcp_denials
             .contains_key("filesystem"));
-        ProjectProfileService::deploy(
+        test_projects::deploy(
             &state,
             "profile",
             ProfileScope::Claude,
@@ -5800,7 +5947,7 @@ mod tests {
         payload.mcp.claude = Some(vec![]);
         profile.payload = serde_json::to_string(&payload).unwrap();
         state.db.save_profile(&profile).unwrap();
-        ProjectProfileService::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
+        test_projects::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
         let mut edited = ClaudeSettingsDocument::open(&root).unwrap();
         edited.root["deniedMcpServers"]
             .as_array_mut()
@@ -5808,10 +5955,10 @@ mod tests {
             .push(serde_json::json!({"serverName":"filesystem"}));
         fs::write(&path, serde_json::to_vec(&edited.root).unwrap()).unwrap();
         assert!(matches!(
-            ProjectProfileService::deploy(&state, "profile", ProfileScope::Claude, None).unwrap(),
+            test_projects::deploy(&state, "profile", ProfileScope::Claude, None).unwrap(),
             ProjectDeployResult::NeedsResolution { .. }
         ));
-        ProjectProfileService::deploy(
+        test_projects::deploy(
             &state,
             "profile",
             ProfileScope::Claude,
@@ -5844,7 +5991,7 @@ mod tests {
             Some(vec![]),
             Some(vec![]),
         );
-        ProjectProfileService::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
+        test_projects::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
         assert!(load_manifest(&unowned_root, "claude")
             .unwrap()
             .claude_mcp_denials
@@ -6228,8 +6375,7 @@ mod tests {
             Some(vec!["skill-id".to_string()]),
         );
 
-        let result =
-            ProjectProfileService::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
+        let result = test_projects::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
         assert!(matches!(result, ProjectDeployResult::Applied { .. }));
         let config: Value =
             serde_json::from_slice(&fs::read(project.path().join(".mcp.json")).unwrap()).unwrap();
@@ -6240,7 +6386,7 @@ mod tests {
             "---\nname: project-skill\ndescription: test\n---\n"
         );
         let repeated =
-            ProjectProfileService::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
+            test_projects::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
         assert!(matches!(
             repeated,
             ProjectDeployResult::Applied { changed, .. } if changed.is_empty()
@@ -6286,8 +6432,7 @@ mod tests {
             Some(vec!["skill-id".to_string()]),
         );
 
-        let result =
-            ProjectProfileService::deploy(&state, "profile", ProfileScope::Codex, None).unwrap();
+        let result = test_projects::deploy(&state, "profile", ProfileScope::Codex, None).unwrap();
         assert!(matches!(result, ProjectDeployResult::Applied { .. }));
         let document: toml_edit::DocumentMut =
             fs::read_to_string(project.path().join(".codex/config.toml"))
@@ -6308,8 +6453,7 @@ mod tests {
             .path()
             .join(".agents/skills/project-skill/SKILL.md")
             .is_file());
-        let repeated =
-            ProjectProfileService::deploy(&state, "profile", ProfileScope::Codex, None).unwrap();
+        let repeated = test_projects::deploy(&state, "profile", ProfileScope::Codex, None).unwrap();
         assert!(matches!(
             repeated,
             ProjectDeployResult::Applied { changed, .. } if changed.is_empty()
@@ -6371,12 +6515,12 @@ mod tests {
         payload.skills.claude = Some(vec![beta.id.clone()]);
         b.payload = serde_json::to_string(&payload).unwrap();
         state.db.save_profile(&b).unwrap();
-        ProjectProfileService::deploy(&state, &a.id, ProfileScope::Claude, None).unwrap();
+        test_projects::deploy(&state, &a.id, ProfileScope::Claude, None).unwrap();
         let settings: Value = serde_json::from_slice(&fs::read(&settings_path).unwrap()).unwrap();
         assert_eq!(settings["skillOverrides"]["project-skill"], "on");
         assert_eq!(settings["skillOverrides"]["beta-directory"], "off");
         assert!(settings["skillOverrides"].get("alpha-native").is_none());
-        ProjectProfileService::deploy(&state, &b.id, ProfileScope::Claude, None).unwrap();
+        test_projects::deploy(&state, &b.id, ProfileScope::Claude, None).unwrap();
         let settings: Value = serde_json::from_slice(&fs::read(&settings_path).unwrap()).unwrap();
         assert_eq!(settings["skillOverrides"]["project-skill"], "off");
         assert_eq!(settings["skillOverrides"]["beta-directory"], "on");
@@ -6438,7 +6582,7 @@ mod tests {
                 .apps
                 .claude
         );
-        ProjectProfileService::deploy(&state, &b.id, ProfileScope::Claude, None).unwrap();
+        test_projects::deploy(&state, &b.id, ProfileScope::Claude, None).unwrap();
         let settings: Value = serde_json::from_slice(&fs::read(&settings_path).unwrap()).unwrap();
         assert!(settings["skillOverrides"].get("project-skill").is_none());
         let manifest = load_manifest(&root, "claude").unwrap();
@@ -6460,8 +6604,7 @@ mod tests {
             serde_json::from_slice(&fs::read(&settings_path).unwrap()).unwrap();
         settings["skillOverrides"]["project-skill"] = Value::String("on".into());
         fs::write(&settings_path, serde_json::to_vec(&settings).unwrap()).unwrap();
-        let result =
-            ProjectProfileService::deploy(&state, &b.id, ProfileScope::Claude, None).unwrap();
+        let result = test_projects::deploy(&state, &b.id, ProfileScope::Claude, None).unwrap();
         assert!(
             matches!(result, ProjectDeployResult::Applied { warnings, .. } if warnings.iter().any(|warning| warning.contains("未登记手写技能同名")))
         );
@@ -6496,11 +6639,11 @@ mod tests {
         fs::write(&settings_path, user).unwrap();
         fs::write(&shared_path, shared).unwrap();
         assert!(
-            matches!(ProjectProfileService::deploy(&state, "profile", ProfileScope::Claude, None).unwrap(), ProjectDeployResult::NeedsResolution { conflicts, .. } if conflicts.iter().any(|conflict| conflict.path.ends_with("#skillOverrides.project-skill")))
+            matches!(test_projects::deploy(&state, "profile", ProfileScope::Claude, None).unwrap(), ProjectDeployResult::NeedsResolution { conflicts, .. } if conflicts.iter().any(|conflict| conflict.path.ends_with("#skillOverrides.project-skill")))
         );
         assert_eq!(fs::read_to_string(&settings_path).unwrap(), user);
         assert!(!root.join(".claude/skills/project-skill").exists());
-        ProjectProfileService::deploy(
+        test_projects::deploy(
             &state,
             "profile",
             ProfileScope::Claude,
@@ -6512,7 +6655,7 @@ mod tests {
             .unwrap()
             .claude_skill_overrides
             .is_empty());
-        let result = ProjectProfileService::deploy(
+        let result = test_projects::deploy(
             &state,
             "profile",
             ProfileScope::Claude,
@@ -6531,7 +6674,7 @@ mod tests {
         let source = SkillService::get_installed_skill_dir("project-skill").unwrap();
         fs::rename(source.join("SKILL.md"), source.join("SKILL.backup")).unwrap();
         let manifest_before = fs::read(manifest_path(&root, "claude").unwrap()).unwrap();
-        ProjectProfileService::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
+        test_projects::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
         assert_eq!(fs::read(&settings_path).unwrap(), saved);
         assert_eq!(
             fs::read(manifest_path(&root, "claude").unwrap()).unwrap(),
@@ -6556,10 +6699,7 @@ mod tests {
                 .share_mode(1)
                 .open(&mcp_path)
                 .unwrap();
-            assert!(
-                ProjectProfileService::deploy(&state, &empty.id, ProfileScope::Claude, None)
-                    .is_err()
-            );
+            assert!(test_projects::deploy(&state, &empty.id, ProfileScope::Claude, None).is_err());
             assert_eq!(fs::read(&settings_path).unwrap(), saved);
             assert_eq!(fs::read(&mcp_path).unwrap(), mcp_before);
             assert_eq!(
@@ -6598,7 +6738,7 @@ mod tests {
         state.db.save_profile(&cancelled).unwrap();
         let path = root.join(".codex/config.toml");
 
-        ProjectProfileService::deploy(&state, &selected.id, ProfileScope::Codex, None).unwrap();
+        test_projects::deploy(&state, &selected.id, ProfileScope::Codex, None).unwrap();
         let document: toml_edit::DocumentMut = fs::read_to_string(&path).unwrap().parse().unwrap();
         assert_eq!(
             document["mcp_servers"]["filesystem"]["enabled"].as_bool(),
@@ -6606,7 +6746,7 @@ mod tests {
         );
         assert!(document["mcp_servers"].get("extra").is_none());
 
-        ProjectProfileService::deploy(&state, &cancelled.id, ProfileScope::Codex, None).unwrap();
+        test_projects::deploy(&state, &cancelled.id, ProfileScope::Codex, None).unwrap();
         let document: toml_edit::DocumentMut = fs::read_to_string(&path).unwrap().parse().unwrap();
         assert_eq!(
             document["mcp_servers"]["filesystem"]["enabled"].as_bool(),
@@ -6631,13 +6771,13 @@ mod tests {
             codex_entry_hash(&document, "filesystem").unwrap().as_ref()
         );
         assert!(
-            matches!(ProjectProfileService::deploy(&state, &cancelled.id, ProfileScope::Codex, None).unwrap(), ProjectDeployResult::Applied { changed, .. } if changed.is_empty())
+            matches!(test_projects::deploy(&state, &cancelled.id, ProfileScope::Codex, None).unwrap(), ProjectDeployResult::Applied { changed, .. } if changed.is_empty())
         );
 
-        ProjectProfileService::deploy(&state, &selected.id, ProfileScope::Codex, None).unwrap();
+        test_projects::deploy(&state, &selected.id, ProfileScope::Codex, None).unwrap();
         // Recover enough transport configuration to disable a removed managed table.
         fs::write(&path, "").unwrap();
-        ProjectProfileService::deploy(&state, &cancelled.id, ProfileScope::Codex, None).unwrap();
+        test_projects::deploy(&state, &cancelled.id, ProfileScope::Codex, None).unwrap();
         let document: toml_edit::DocumentMut = fs::read_to_string(&path).unwrap().parse().unwrap();
         assert_eq!(
             document["mcp_servers"]["filesystem"]["enabled"].as_bool(),
@@ -6676,7 +6816,7 @@ mod tests {
         payload.mcp.codex = Some(vec![]);
         cancelled.payload = serde_json::to_string(&payload).unwrap();
         state.db.save_profile(&cancelled).unwrap();
-        ProjectProfileService::deploy(&state, &selected.id, ProfileScope::Codex, None).unwrap();
+        test_projects::deploy(&state, &selected.id, ProfileScope::Codex, None).unwrap();
         let path = root.join(".codex/config.toml");
         let mut document: toml_edit::DocumentMut =
             fs::read_to_string(&path).unwrap().parse().unwrap();
@@ -6684,12 +6824,11 @@ mod tests {
         let edited = document.to_string();
         fs::write(&path, &edited).unwrap();
         assert!(matches!(
-            ProjectProfileService::deploy(&state, &cancelled.id, ProfileScope::Codex, None)
-                .unwrap(),
+            test_projects::deploy(&state, &cancelled.id, ProfileScope::Codex, None).unwrap(),
             ProjectDeployResult::NeedsResolution { .. }
         ));
         assert_eq!(fs::read_to_string(&path).unwrap(), edited);
-        ProjectProfileService::deploy(
+        test_projects::deploy(
             &state,
             &cancelled.id,
             ProfileScope::Codex,
@@ -6701,10 +6840,10 @@ mod tests {
             .unwrap()
             .mcp_servers
             .contains_key("filesystem"));
-        ProjectProfileService::deploy(&state, &cancelled.id, ProfileScope::Codex, None).unwrap();
+        test_projects::deploy(&state, &cancelled.id, ProfileScope::Codex, None).unwrap();
         assert_eq!(fs::read_to_string(&path).unwrap(), edited);
 
-        ProjectProfileService::deploy(
+        test_projects::deploy(
             &state,
             &selected.id,
             ProfileScope::Codex,
@@ -6715,7 +6854,7 @@ mod tests {
             fs::read_to_string(&path).unwrap().parse().unwrap();
         document["mcp_servers"]["filesystem"]["command"] = toml_edit::value("user-command");
         fs::write(&path, document.to_string()).unwrap();
-        ProjectProfileService::deploy(
+        test_projects::deploy(
             &state,
             &cancelled.id,
             ProfileScope::Codex,
@@ -6762,8 +6901,7 @@ mod tests {
         state.db.save_profile(&profile).unwrap();
         let override_path = root.join("AGENTS.override.md");
         fs::write(&override_path, "user override").unwrap();
-        let result =
-            ProjectProfileService::deploy(&state, &profile.id, ProfileScope::Codex, None).unwrap();
+        let result = test_projects::deploy(&state, &profile.id, ProfileScope::Codex, None).unwrap();
         assert!(
             matches!(result, ProjectDeployResult::Applied { warnings, .. } if warnings.iter().any(|warning| warning.contains("AGENTS.override.md") && warning.contains("忽略")))
         );
@@ -6773,8 +6911,7 @@ mod tests {
             "profile instructions"
         );
         fs::write(&override_path, "").unwrap();
-        let result =
-            ProjectProfileService::deploy(&state, &profile.id, ProfileScope::Codex, None).unwrap();
+        let result = test_projects::deploy(&state, &profile.id, ProfileScope::Codex, None).unwrap();
         assert!(
             matches!(result, ProjectDeployResult::Applied { warnings, .. } if !warnings.iter().any(|warning| warning.contains("AGENTS.override.md")))
         );
@@ -6793,7 +6930,7 @@ mod tests {
             Some(vec!["filesystem".to_string()]),
             Some(vec!["skill-id".to_string()]),
         );
-        ProjectProfileService::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
+        test_projects::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
 
         let config_path = project.path().join(".mcp.json");
         let mut config: Value = serde_json::from_slice(&fs::read(&config_path).unwrap()).unwrap();
@@ -6802,14 +6939,13 @@ mod tests {
         let skill_path = project.path().join(".claude/skills/project-skill/SKILL.md");
         fs::write(&skill_path, "user-edited skill").unwrap();
 
-        let preview =
-            ProjectProfileService::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
+        let preview = test_projects::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
         let ProjectDeployResult::NeedsResolution { conflicts, .. } = preview else {
             panic!("expected file ownership conflicts");
         };
         assert_eq!(conflicts.len(), 2);
 
-        let result = ProjectProfileService::deploy(
+        let result = test_projects::deploy(
             &state,
             "profile",
             ProfileScope::Claude,
@@ -6838,7 +6974,7 @@ mod tests {
             Some(vec!["filesystem".to_string()]),
             Some(vec!["skill-id".to_string()]),
         );
-        ProjectProfileService::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
+        test_projects::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
 
         let config_path = project.path().join(".mcp.json");
         let mut config: Value = serde_json::from_slice(&fs::read(&config_path).unwrap()).unwrap();
@@ -6848,7 +6984,7 @@ mod tests {
         let skill_path = project.path().join(".claude/skills/project-skill/SKILL.md");
         fs::write(&skill_path, "user-edited skill").unwrap();
 
-        let result = ProjectProfileService::deploy(
+        let result = test_projects::deploy(
             &state,
             "profile",
             ProfileScope::Claude,

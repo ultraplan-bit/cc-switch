@@ -645,59 +645,8 @@ pub(crate) fn provider_payload(
         );
         payload.model_catalog.codex = super::provider_model_catalog(state, app, &provider.id)?;
     }
-    if app != &AppType::ClaudeDesktop {
-        let servers = state
-            .db
-            .get_mcp_server_rows()?
-            .into_readable("迁移 Profile 资源引用");
-        let skills = state.db.get_all_installed_skills()?;
-        let prompts = state.db.get_prompts(app)?;
-        *payload.mcp.get_mut(app).unwrap() = Some(
-            servers
-                .values()
-                .filter(|server| server.apps.is_enabled_for(app))
-                .map(|server| server.id.clone())
-                .collect(),
-        );
-        *payload.skills.get_mut(app).unwrap() = Some(
-            skills
-                .values()
-                .filter(|skill| skill.apps.is_enabled_for(app))
-                .map(|skill| skill.id.clone())
-                .collect(),
-        );
-        *payload.prompts.get_mut(app).unwrap() = Some(
-            prompts
-                .values()
-                .find(|prompt| prompt.enabled)
-                .map(|prompt| prompt.id.clone())
-                .unwrap_or_default(),
-        );
-        let names = payload.resource_names.get_mut(app).unwrap();
-        super::remember_resource_names(
-            &mut names.mcp,
-            payload
-                .mcp
-                .get(app)
-                .and_then(Option::as_deref)
-                .unwrap_or_default(),
-            servers.values().map(|server| (&server.id, &server.name)),
-        );
-        super::remember_resource_names(
-            &mut names.skills,
-            payload
-                .skills
-                .get(app)
-                .and_then(Option::as_deref)
-                .unwrap_or_default(),
-            skills.values().map(|skill| (&skill.id, &skill.name)),
-        );
-        super::remember_resource_names(
-            &mut names.prompts,
-            payload.prompts.get(app).unwrap().as_slice(),
-            prompts.values().map(|prompt| (&prompt.id, &prompt.name)),
-        );
-    }
+    // MCP, Skills and instructions stay None: a connection's default Profile
+    // follows global resources instead of freezing a selection.
     Ok(payload)
 }
 
@@ -850,7 +799,6 @@ mod tests {
             name: "Active".into(),
             payload: serde_json::to_string(&payload).unwrap(),
             sort_order: None,
-            project_path: None,
             created_at: None,
             updated_at: None,
         };
@@ -913,7 +861,6 @@ mod tests {
             name: "Removed default".into(),
             payload: serde_json::to_string(&payload).unwrap(),
             sort_order: None,
-            project_path: None,
             created_at: None,
             updated_at: None,
         };
@@ -1013,7 +960,6 @@ mod tests {
                 name: "Clear overrides".into(),
                 payload: serde_json::to_string(&payload).unwrap(),
                 sort_order: None,
-                project_path: None,
                 created_at: None,
                 updated_at: None,
             };

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FullScreenPanel } from "@/components/common/FullScreenPanel";
-import { ProfileSwitcher } from "@/components/profiles/ProfileSwitcher";
+import { ProfilesPage } from "@/components/profiles/ProfilesPage";
 import { ToolErrorMessage } from "@/components/settings/ToolErrorMessage";
 import { Button } from "@/components/ui/button";
 import { toolDisplayName, type useToolManagement } from "./useToolManagement";
@@ -9,7 +9,6 @@ import { toolDisplayName, type useToolManagement } from "./useToolManagement";
 export interface ProjectEnvironmentTarget {
   tool: "claude" | "codex";
   projectPath?: string;
-  profileId?: string;
 }
 
 export function ProjectEnvironmentPanel({
@@ -127,11 +126,10 @@ export function ProjectEnvironmentPanel({
               {t("profiles.environment.prepareHint")}
             </p>
           )}
-          <ProfileSwitcher
+          <ProfilesPage
             activeApp={target.tool}
             projectOnly
             initialProjectPath={target.projectPath}
-            initialProfileId={target.profileId}
             deploymentDisabled={!ready}
           />
         </div>

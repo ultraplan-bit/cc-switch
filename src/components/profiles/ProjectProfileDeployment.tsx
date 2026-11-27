@@ -37,12 +37,14 @@ export function useProjectProfileDeployment(
   const [pendingDeploy, setPendingDeploy] = useState<{
     id: string;
     scope: ProfileScope;
+    projectPath: string;
     conflicts: ProjectDeployConflict[];
     warnings: string[];
   } | null>(null);
 
   const deployToProject = async (
     id: string,
+    projectPath: string,
     resolution: ProjectDeployResolution | null = null,
     targetScope: ProfileScope = scope,
   ) => {
@@ -51,12 +53,14 @@ export function useProjectProfileDeployment(
       const result = await mutation.mutateAsync({
         id,
         scope: targetScope,
+        projectPath,
         resolution,
       });
       if (result.status === "needsResolution") {
         setPendingDeploy({
           id,
           scope: targetScope,
+          projectPath,
           conflicts: result.conflicts,
           warnings: result.warnings,
         });
@@ -129,6 +133,9 @@ export function ProjectProfileConflictDialog({
               files: pendingDeploy.conflicts.length,
             })}
           </DialogDescription>
+          <code className="block break-all text-xs text-fg-2">
+            {pendingDeploy.projectPath}
+          </code>
         </DialogHeader>
         <div className="max-h-[35vh] space-y-2 overflow-y-auto px-6 pb-2">
           {pendingDeploy.warnings.length > 0 && (
@@ -171,6 +178,7 @@ export function ProjectProfileConflictDialog({
               onClick={() =>
                 deployToProject(
                   pendingDeploy.id,
+                  pendingDeploy.projectPath,
                   resolution,
                   pendingDeploy.scope,
                 )
