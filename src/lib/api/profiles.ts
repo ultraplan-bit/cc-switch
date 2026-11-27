@@ -247,11 +247,4 @@ export const profilesApi = {
   async apply(id: string, scope: ProfileScope): Promise<string[]> {
     return await invoke("apply_profile", { id, scope });
   },
-
-  /**
-   * 仅清除某个 Agent 的「全局生效方案」记录，不改动任何配置
-   */
-  async clearCurrent(scope: ProfileScope): Promise<void> {
-    return await invoke("clear_current_profile", { scope });
-  },
 };

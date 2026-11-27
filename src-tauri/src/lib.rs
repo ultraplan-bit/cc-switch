@@ -1672,7 +1672,6 @@ pub fn run() {
             commands::add_profile_project,
             commands::remove_profile_project,
             commands::delete_profile,
-            commands::clear_current_profile,
             commands::apply_profile,
             commands::deploy_profile_to_project,
             // Fetch OpenAI-compatible and Anthropic model lists. Response data structure:

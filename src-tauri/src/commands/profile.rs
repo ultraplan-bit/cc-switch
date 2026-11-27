@@ -362,18 +362,6 @@ pub async fn delete_profile(
     .await
 }
 
-#[tauri::command]
-pub async fn clear_current_profile(
-    state: State<'_, AppState>,
-    scope: String,
-) -> Result<(), String> {
-    let scope = ProfileScope::parse(&scope)?;
-    profile_mutation(&state, move |state| {
-        state.db.set_current_profile_id(scope.as_str(), None)
-    })
-    .await
-}
-
 /// 应用项目快照（只作用于发起页所属分组内的应用）。
 ///
 /// `ProviderService::switch` 用 block_on 拿切换锁，整段只能在阻塞线程池里跑

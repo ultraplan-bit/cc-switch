@@ -294,6 +294,40 @@ export const handlers = [
 
   http.post(`${TAURI_ENDPOINT}/check_env_conflicts`, () => success([])),
 
+  http.post(`${TAURI_ENDPOINT}/get_tool_versions`, async ({ request }) => {
+    const { tools = [] } = await withJson<{ tools?: string[] }>(request);
+    return success(
+      tools.map((name) => ({
+        name,
+        version: null,
+        latest_version: null,
+        error: null,
+        installed_but_broken: false,
+        env_type: "unknown",
+        wsl_distro: null,
+        update_blocked_by_node: null,
+      })),
+    );
+  }),
+
+  http.post(
+    `${TAURI_ENDPOINT}/list_tool_installations`,
+    async ({ request }) => {
+      const { tools = [] } = await withJson<{ tools?: string[] }>(request);
+      return success(
+        tools.map((tool) => ({
+          tool,
+          installs: [],
+          is_conflict: false,
+          needs_confirmation: false,
+          command: "",
+          anchored: false,
+          unmanaged: false,
+        })),
+      );
+    },
+  ),
+
   http.post(`${TAURI_ENDPOINT}/save_settings`, async ({ request }) => {
     const { settings } = await withJson<{ settings: Settings }>(request);
     setSettings(settings);

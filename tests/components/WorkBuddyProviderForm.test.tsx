@@ -11,6 +11,31 @@ import { WorkBuddyProviderForm } from "@/components/providers/forms/WorkBuddyPro
 import { setProviders, setWorkBuddyModelOwners } from "../msw/state";
 import { createTestQueryClient } from "../utils/testQueryClient";
 
+vi.mock("@/config/workbuddyProviderPresets", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/config/workbuddyProviderPresets")
+  >()),
+  // Test model ownership independently of the bundled provider catalog.
+  workbuddyProviderPresets: [
+    {
+      name: "Test preset",
+      providerKey: "test-preset",
+      websiteUrl: "https://preset.example.test",
+      category: "cn_official",
+      settingsConfig: {
+        vendor: "Test preset",
+        url: "https://preset.example.test/v1/chat/completions",
+        apiKey: "",
+        models: [
+          { id: "owned-model" },
+          { id: "native-model" },
+          { id: "available-model" },
+        ],
+      },
+    },
+  ],
+}));
+
 const modelFetchApiMock = vi.hoisted(() => ({
   fetchModelsForConfig: vi.fn(),
   showFetchModelsError: vi.fn(),
@@ -531,8 +556,8 @@ describe("WorkBuddyProviderForm", () => {
       kimi: { id: "kimi", name: "My Kimi", settingsConfig: existing },
     });
     setWorkBuddyModelOwners([
-      { id: "kimi-k3.1-pro", owner: "kimi" },
-      { id: "glm-5.3", owner: null },
+      { id: "owned-model", owner: "kimi" },
+      { id: "native-model", owner: null },
     ]);
     const client = createTestQueryClient();
     rtlRender(
@@ -550,7 +575,7 @@ describe("WorkBuddyProviderForm", () => {
     await waitFor(() =>
       expect(client.getQueryData(["workbuddy", "modelOwners"])).toBeDefined(),
     );
-    fireEvent.click(screen.getByText("OpenCode Go"));
+    fireEvent.click(screen.getByText("Test preset"));
 
     expect(
       await screen.findByText("workbuddy.form.presetModelsSkipped"),
@@ -558,13 +583,11 @@ describe("WorkBuddyProviderForm", () => {
     const ids = screen
       .getAllByLabelText("opencode.modelId")
       .map((input) => (input as HTMLInputElement).value);
-    expect(ids).not.toContain("kimi-k3.1-pro");
-    expect(ids).not.toContain("glm-5.3");
-    expect(ids).toContain("glm-5.3-flash");
+    expect(ids).toEqual(["available-model"]);
     // 名称留空，占位提示写的是厂商标签
     expect(screen.getAllByLabelText("opencode.modelName")[0]).toHaveAttribute(
       "placeholder",
-      "OpenCode Go",
+      "Test preset",
     );
 
     fireEvent.change(screen.getByLabelText("API Key"), {

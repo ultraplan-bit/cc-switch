@@ -275,7 +275,6 @@ fn remaining_database_commands_yield_during_session_sync_contention() {
         "Renamed"
     );
     query!(delete_profile, profile.id, "claude".into());
-    query!(clear_current_profile, "claude".into());
 
     assert!(skill_query!(get_installed_skills).is_empty());
     skill_query!(scan_unmanaged_skills);
@@ -416,12 +415,6 @@ fn profile_and_universal_mutations_wait_for_their_serial_locks() {
         })
     }
 
-    while_serialized(
-        &super::profile::PROFILE_LOCK,
-        "clear_current_profile",
-        super::clear_current_profile(app.state(), "claude".into()),
-    )
-    .unwrap();
     let profile = while_serialized(
         &super::profile::PROFILE_LOCK,
         "create_profile",
