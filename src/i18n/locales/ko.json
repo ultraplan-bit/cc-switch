@@ -3263,6 +3263,30 @@
       "instructionHint": "라이브러리의 프롬프트를 참조합니다. 적용하거나 배포할 때 이 Agent의 지침 파일에 기록됩니다.",
       "instructionsFollowHint": "이 프로필은 지침을 관리하지 않습니다. 리소스 관리를 켜면 템플릿을 선택할 수 있습니다.",
       "saveHint": "저장은 프로필만 업데이트합니다. 전역에 적용하거나 프로젝트에 배포해야 반영됩니다."
+    },
+    "connection": {
+      "section": "API 연결",
+      "configured": "연결 설정을 찾았습니다",
+      "missing": "API 연결을 찾지 못했습니다",
+      "unknown": "연결 확인이 필요합니다",
+      "missingHint": "확인 가능한 설정에서 API 연결을 찾지 못했습니다. 모델만 설정해서는 요청을 보낼 수 없습니다. 프로젝트 공급자를 선택하거나 구성을 먼저 저장하세요.",
+      "unknownHint": "상속할 연결을 확인하지 못했습니다. Claude Code 로그인 또는 설정을 확인하세요.",
+      "chooseProvider": "프로젝트 공급자 선택",
+      "addProvider": "공급자 추가",
+      "providerUnknown": "기존 네이티브 연결",
+      "guardTitle": "프로젝트 API 연결을 찾지 못했습니다",
+      "guardDescription": "프로젝트 공급자를 선택하거나 모델 및 기타 설정만 적용할 수 있습니다. 다른 터미널 환경에서 인증 정보를 제공한다면 확인 후 계속하세요.",
+      "applyConfigurationOnly": "설정만 적용",
+      "appliedDirect": "프로젝트 전용 API 연결을 기록했습니다",
+      "appliedInherited": "프로젝트 설정 적용 완료 · 연결 출처: {{source}}",
+      "appliedMissing": "프로젝트 설정을 적용했습니다. API 연결 설정이 필요합니다",
+      "sources": {
+        "global": "사용자 설정",
+        "project": "프로젝트 설정",
+        "environment": "환경 변수",
+        "login": "Claude 로그인",
+        "routing": "로컬 라우팅"
+      }
     }
   },
   "workspace": {

@@ -101,13 +101,27 @@ export interface ProjectDeployConflict {
   reason: string;
 }
 
+/** Connection metadata only; never includes endpoints or credentials. */
+export interface InheritedConnection {
+  status: "configured" | "missing" | "unknown";
+  source: "global" | "project" | "environment" | "login" | "routing" | null;
+  providerName: string | null;
+  reason: string | null;
+}
+
 export type ProjectDeployResult =
+  | { status: "needsConnection"; connection: InheritedConnection }
   | {
       status: "needsResolution";
       conflicts: ProjectDeployConflict[];
       warnings: string[];
     }
-  | { status: "applied"; changed: string[]; warnings: string[] }
+  | {
+      status: "applied";
+      changed: string[];
+      warnings: string[];
+      connection?: InheritedConnection & { mode: "inherit" | "direct" };
+    }
   | { status: "skipped" };
 
 /**
@@ -144,6 +158,13 @@ export interface ProfilesResponse {
 }
 
 export const profilesApi = {
+  async getConnectionStatus(
+    projectPath?: string,
+  ): Promise<InheritedConnection> {
+    return await invoke("get_profile_connection_status", {
+      projectPath: projectPath ?? null,
+    });
+  },
   /**
    * 读取方案、各 Agent 的全局状态以及已登记项目的部署状态
    */
@@ -219,12 +240,14 @@ export const profilesApi = {
     scope: ProfileScope,
     projectPath: string,
     resolution: ProjectDeployResolution | null = null,
+    allowMissingConnection = false,
   ): Promise<ProjectDeployResult> {
     return await invoke("deploy_profile_to_project", {
       id,
       scope,
       projectPath,
       resolution,
+      allowMissingConnection,
     });
   },
 

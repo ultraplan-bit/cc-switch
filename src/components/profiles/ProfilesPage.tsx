@@ -68,6 +68,8 @@ function ProfilesPageContent({
   const [editing, setEditing] = useState<{
     profile: Profile;
     scope: ProfileScope;
+    projectPath?: string;
+    initialProjectConnection?: "direct";
   } | null>(null);
   const [removingProject, setRemovingProject] = useState<string | null>(null);
 
@@ -362,7 +364,9 @@ function ProfilesPageContent({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => setEditing({ profile, scope })}
+                  onClick={() =>
+                    setEditing({ profile, scope, projectPath: project?.path })
+                  }
                 >
                   <Pencil className="h-3.5 w-3.5" />
                   {t("common.edit")}
@@ -386,7 +390,7 @@ function ProfilesPageContent({
           onCreated={(created) => {
             setCreating(false);
             setSearch("");
-            setEditing({ profile: created, scope });
+            setEditing({ profile: created, scope, projectPath: project?.path });
           }}
         />
       )}
@@ -410,11 +414,23 @@ function ProfilesPageContent({
       <ProjectProfileConflictDialog
         deployment={deployment}
         deploymentDisabled={deploymentDisabled}
+        onChooseProvider={(pending) => {
+          const profile = data?.profiles.find((item) => item.id === pending.id);
+          if (!profile) return;
+          setEditing({
+            profile,
+            scope: pending.scope,
+            projectPath: pending.projectPath,
+            initialProjectConnection: "direct",
+          });
+        }}
       />
       {editing && (
         <ProfileEditPanel
           profile={editing.profile}
           scope={editing.scope}
+          projectPath={editing.projectPath}
+          initialProjectConnection={editing.initialProjectConnection}
           onClose={() => setEditing(null)}
         />
       )}

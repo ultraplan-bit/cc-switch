@@ -21,6 +21,7 @@ use crate::store::AppState;
 pub(crate) mod connection;
 mod import;
 mod native;
+pub(crate) mod readiness;
 pub(crate) use native::capture_native_config;
 
 static PROJECT_DEPLOY_LOCK: Mutex<()> = Mutex::new(());
@@ -44,6 +45,9 @@ pub struct ProjectDeployConflict {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum ProjectDeployResult {
+    NeedsConnection {
+        connection: readiness::InheritedConnection,
+    },
     NeedsResolution {
         conflicts: Vec<ProjectDeployConflict>,
         warnings: Vec<String>,
@@ -51,8 +55,18 @@ pub enum ProjectDeployResult {
     Applied {
         changed: Vec<String>,
         warnings: Vec<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        connection: Option<AppliedConnection>,
     },
     Skipped,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppliedConnection {
+    mode: &'static str,
+    #[serde(flatten)]
+    connection: readiness::InheritedConnection,
 }
 
 /// The Profile a project directory last received for one Agent.
@@ -752,6 +766,27 @@ impl ProjectProfileService {
         project_path: &str,
         resolution: Option<ConflictResolution>,
     ) -> Result<ProjectDeployResult, AppError> {
+        Self::deploy_with_connection_choice(
+            state,
+            profile_id,
+            scope,
+            project_path,
+            resolution,
+            false,
+        )
+    }
+
+    pub fn deploy_with_connection_choice(
+        state: &AppState,
+        profile_id: &str,
+        scope: ProfileScope,
+        project_path: &str,
+        resolution: Option<ConflictResolution>,
+        allow_missing_connection: bool,
+    ) -> Result<ProjectDeployResult, AppError> {
+        if matches!(resolution, Some(ConflictResolution::Skip)) {
+            return Ok(ProjectDeployResult::Skipped);
+        }
         let project_path = crate::services::profile::normalize_project_path(project_path)?
             .ok_or_else(|| AppError::InvalidInput("请选择项目目录".to_string()))?;
         if !state.db.is_profile_project(&project_path)? {
@@ -788,6 +823,18 @@ impl ProjectProfileService {
                 "Profile「{}」没有 Claude Code 或 Codex 的配置快照",
                 profile.name
             )));
+        }
+        let inherited = (app == AppType::Claude && !connection::is_direct(&payload, &app))
+            .then(|| readiness::inspect(state, Some(&project_root)));
+        if let Some(inherited) = inherited.as_ref() {
+            if inherited.status == readiness::ConnectionStatus::Missing
+                && profile_selects_model(&payload)
+                && !allow_missing_connection
+            {
+                return Ok(ProjectDeployResult::NeedsConnection {
+                    connection: inherited.clone(),
+                });
+            }
         }
         let mut manifest = load_manifest(&project_root, app_name)?;
         let previous_profile_id = manifest.profile_id.clone();
@@ -1242,8 +1289,48 @@ impl ProjectProfileService {
             };
         }
         cleanup_skill_backups(&skill_undo);
-        Ok(ProjectDeployResult::Applied { changed, warnings })
+        let connection = if app != AppType::Claude || keep_connection {
+            None
+        } else if let Some(provider) = direct_provider {
+            Some(AppliedConnection {
+                mode: "direct",
+                connection: readiness::InheritedConnection {
+                    status: readiness::ConnectionStatus::Configured,
+                    source: Some(readiness::ConnectionSource::Project),
+                    provider_name: Some(provider.name),
+                    reason: None,
+                },
+            })
+        } else {
+            inherited.map(|connection| AppliedConnection {
+                mode: "inherit",
+                connection,
+            })
+        };
+        Ok(ProjectDeployResult::Applied {
+            changed,
+            warnings,
+            connection,
+        })
     }
+}
+
+fn profile_selects_model(payload: &ProfilePayload) -> bool {
+    (payload.providers.claude.is_some() && payload.models.claude.is_none())
+        || payload
+            .models
+            .claude
+            .as_ref()
+            .is_some_and(|model| !model.trim().is_empty())
+        || payload
+            .model_settings
+            .claude
+            .as_ref()
+            .is_some_and(|settings| {
+                settings
+                    .iter()
+                    .any(|(key, value)| key.ends_with("_MODEL") && !value.trim().is_empty())
+            })
 }
 
 /// Whether the deployment recorded in a manifest still equals the Profile's
@@ -4141,7 +4228,11 @@ pub(crate) mod test_projects {
     ) -> Result<ProjectDeployResult, AppError> {
         let path = root_of(profile_id);
         crate::services::profile::ProfileService::add_project(state, &path)?;
-        ProjectProfileService::deploy(state, profile_id, scope, &path, resolution)
+        // These fixtures exercise file deployment independently of API setup.
+        // The connection prompt is covered through the public default entry below.
+        ProjectProfileService::deploy_with_connection_choice(
+            state, profile_id, scope, &path, resolution, true,
+        )
     }
 
     /// Agents whose project deployment is this exact Profile revision.
@@ -4243,6 +4334,126 @@ mod tests {
         let home = TempUserHome::new();
         let state = AppState::new(std::sync::Arc::new(Database::memory().unwrap()));
         (home, state)
+    }
+
+    #[test]
+    #[serial]
+    fn missing_connection_prompts_before_model_deployment_and_allows_explicit_settings_only() {
+        let (_home, state) = test_state();
+        let _env = crate::test_support::EnvVars::new()
+            .remove("CLAUDE_CONFIG_DIR")
+            .remove("ANTHROPIC_BASE_URL")
+            .remove("ANTHROPIC_AUTH_TOKEN")
+            .remove("ANTHROPIC_API_KEY")
+            .remove("CLAUDE_CODE_OAUTH_TOKEN");
+        let project = tempfile::tempdir().unwrap();
+        seed_profile(&state, project.path(), ProfileScope::Claude, None, None);
+        let mut profile = state.db.get_profile("profile").unwrap().unwrap();
+        let mut payload: ProfilePayload = serde_json::from_str(&profile.payload).unwrap();
+        payload.models.claude = Some("project-model".into());
+        profile.payload = serde_json::to_string(&payload).unwrap();
+        state.db.save_profile(&profile).unwrap();
+        let path = project.path().to_str().unwrap();
+        crate::services::profile::ProfileService::add_project(&state, path).unwrap();
+        let result =
+            ProjectProfileService::deploy(&state, "profile", ProfileScope::Claude, path, None)
+                .unwrap();
+        #[cfg(not(target_os = "macos"))]
+        assert!(
+            matches!(result, ProjectDeployResult::NeedsConnection { connection }
+            if connection.status == readiness::ConnectionStatus::Missing)
+        );
+        #[cfg(not(target_os = "macos"))]
+        assert!(!project.path().join(CLAUDE_PROJECT_SETTINGS).exists());
+        #[cfg(target_os = "macos")]
+        let _ = result; // A keychain which was not inspected is unknown, not missing.
+        let result = ProjectProfileService::deploy_with_connection_choice(
+            &state,
+            "profile",
+            ProfileScope::Claude,
+            path,
+            None,
+            true,
+        )
+        .unwrap();
+        assert!(matches!(
+            result,
+            ProjectDeployResult::Applied {
+                connection: Some(AppliedConnection {
+                    mode: "inherit",
+                    ..
+                }),
+                ..
+            }
+        ));
+        let local: Value =
+            crate::config::read_json_file(&project.path().join(CLAUDE_PROJECT_SETTINGS)).unwrap();
+        assert_eq!(local["model"], "project-model");
+        assert!(local["env"].get("ANTHROPIC_AUTH_TOKEN").is_none());
+    }
+
+    #[test]
+    #[serial]
+    fn connection_guidance_does_not_block_resource_only_or_existing_native_connections() {
+        let (_home, state) = test_state();
+        let project = tempfile::tempdir().unwrap();
+        seed_profile(
+            &state,
+            project.path(),
+            ProfileScope::Claude,
+            Some(vec![]),
+            Some(vec![]),
+        );
+        let path = project.path().to_str().unwrap();
+        crate::services::profile::ProfileService::add_project(&state, path).unwrap();
+        assert!(matches!(
+            ProjectProfileService::deploy(&state, "profile", ProfileScope::Claude, path, None)
+                .unwrap(),
+            ProjectDeployResult::Applied { .. }
+        ));
+        let mut profile = state.db.get_profile("profile").unwrap().unwrap();
+        let mut payload: ProfilePayload = serde_json::from_str(&profile.payload).unwrap();
+        payload.models.claude = Some("native-project-model".into());
+        profile.payload = serde_json::to_string(&payload).unwrap();
+        state.db.save_profile(&profile).unwrap();
+        fs::create_dir_all(project.path().join(".claude")).unwrap();
+        let shared = project.path().join(".claude/settings.json");
+        fs::write(&shared, r#"{"env":{"ANTHROPIC_BASE_URL":"https://native.example","ANTHROPIC_AUTH_TOKEN":"native-test-token"}}"#).unwrap();
+        let before = fs::read(&shared).unwrap();
+        let result =
+            ProjectProfileService::deploy(&state, "profile", ProfileScope::Claude, path, None)
+                .unwrap();
+        assert!(matches!(
+            result,
+            ProjectDeployResult::Applied {
+                connection: Some(AppliedConnection {
+                    mode: "inherit",
+                    connection: readiness::InheritedConnection {
+                        status: readiness::ConnectionStatus::Configured,
+                        source: Some(readiness::ConnectionSource::Project),
+                        ..
+                    }
+                }),
+                ..
+            }
+        ));
+        assert_eq!(fs::read(&shared).unwrap(), before);
+    }
+
+    #[test]
+    fn explicitly_inherited_model_is_not_a_request_to_use_provider_defaults() {
+        let mut payload = ProfilePayload::default();
+        payload.providers.claude = Some("reference-only".into());
+        payload.models.claude = Some(String::new());
+        assert!(!profile_selects_model(&payload));
+        payload.models.claude = None;
+        assert!(profile_selects_model(&payload));
+        payload.providers.claude = None;
+        payload.model_settings.claude = Some(BTreeMap::from([(
+            "ANTHROPIC_DEFAULT_SONNET_MODEL".into(),
+            "chosen-role".into(),
+        )]));
+        assert!(profile_selects_model(&payload));
     }
 
     #[test]

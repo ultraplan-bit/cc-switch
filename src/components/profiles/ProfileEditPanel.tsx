@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { parse as parseToml } from "smol-toml";
@@ -17,6 +17,7 @@ import { useAllMcpServers } from "@/hooks/useMcp";
 import { useInstalledSkills } from "@/hooks/useSkills";
 import { useSaveProfileConfigMutation } from "@/lib/query/profiles";
 import type { Profile, ProfileConfig, ProfileScope } from "@/lib/api/profiles";
+import { profilesApi } from "@/lib/api/profiles";
 import type { Prompt } from "@/lib/api/prompts";
 import type { InstalledSkill } from "@/lib/api/skills";
 import type { McpServersMap, Provider } from "@/types";
@@ -27,15 +28,21 @@ import {
 } from "./ProfileModelFields";
 import { followsGlobalResources } from "./scope";
 
+const ProfileAddProvider = lazy(() => import("./ProfileAddProvider"));
+
 interface ProfileEditPanelProps {
   profile: Profile;
   scope: ProfileScope;
+  projectPath?: string;
+  initialProjectConnection?: "direct";
   onClose: () => void;
 }
 
 export function ProfileEditPanel({
   profile,
   scope,
+  projectPath,
+  initialProjectConnection,
   onClose,
 }: ProfileEditPanelProps) {
   const { t } = useTranslation();
@@ -69,6 +76,8 @@ export function ProfileEditPanel({
         key={`${profile.id}:${scope}`}
         profile={profile}
         scope={scope}
+        projectPath={projectPath}
+        initialProjectConnection={initialProjectConnection}
         onClose={onClose}
         providers={providers.data ?? {}}
         mcp={mcp.data ?? {}}
@@ -115,6 +124,8 @@ export function ProfileEditPanel({
 function ProfileEditForm({
   profile,
   scope,
+  projectPath,
+  initialProjectConnection,
   onClose,
   providers,
   mcp,
@@ -129,6 +140,15 @@ function ProfileEditForm({
   const { t } = useTranslation();
   const id = useId();
   const saving = useRef(false);
+  const providerSelect = useRef<HTMLSelectElement>(null);
+  const [addingProvider, setAddingProvider] = useState(false);
+  const connectionStatus = useQuery({
+    queryKey: ["profile-connection", projectPath ?? null],
+    queryFn: () => profilesApi.getConnectionStatus(projectPath),
+    enabled: scope === "claude",
+    retry: false,
+    networkMode: "always",
+  });
   const mutation = useSaveProfileConfigMutation();
   const [name, setName] = useState(profile.name);
   const [tab, setTab] = useState<
@@ -182,6 +202,21 @@ function ProfileEditForm({
   const projectDirect =
     scope === "claude" && config.claudeProjectConnection === "direct";
   const missingProjectProvider = projectDirect && !provider;
+  const checkingConnection =
+    connectionStatus.isPending && !connectionStatus.data;
+  useEffect(() => {
+    if (initialProjectConnection === "direct") {
+      setConfig((current) => ({
+        ...current,
+        claudeProjectConnection: "direct",
+      }));
+      providerSelect.current?.focus();
+    }
+  }, [initialProjectConnection]);
+  const chooseProjectProvider = () => {
+    setConfig((current) => ({ ...current, claudeProjectConnection: "direct" }));
+    providerSelect.current?.focus();
+  };
   const catalogRows = Array.isArray(config.modelCatalog?.models)
     ? config.modelCatalog.models
     : [];
@@ -275,6 +310,23 @@ function ProfileEditForm({
   const selectedPrompt = config.promptId ? prompts[config.promptId] : undefined;
   const selectClass =
     "h-10 w-full rounded-control border border-border bg-surface px-3 text-sm text-fg-1";
+  if (addingProvider) {
+    return (
+      <Suspense fallback={<p role="status">{t("common.loading")}</p>}>
+        <ProfileAddProvider
+          onClose={() => setAddingProvider(false)}
+          onAdded={(added) => {
+            setConfig((current) => ({
+              ...current,
+              providerId: added.id,
+              claudeProjectConnection: "direct",
+            }));
+            setAddingProvider(false);
+          }}
+        />
+      </Suspense>
+    );
+  }
   return (
     <FullScreenPanel
       isOpen
@@ -445,6 +497,7 @@ function ProfileEditForm({
                 <label className="space-y-2 text-sm">
                   <span>{t("profiles.editor.provider")}</span>
                   <select
+                    ref={providerSelect}
                     className={selectClass}
                     value={config.providerId ?? ""}
                     aria-invalid={missingProjectProvider || undefined}
@@ -498,6 +551,11 @@ function ProfileEditForm({
                 )}
                 {scope === "claude" && (
                   <div className="space-y-2 sm:col-span-2">
+                    <h2 className="text-sm font-medium">
+                      {t("profiles.connection.section", {
+                        defaultValue: "API 接入",
+                      })}
+                    </h2>
                     <label className="block space-y-2 text-sm">
                       <span>{t("profiles.editor.projectConnection")}</span>
                       <select
@@ -536,6 +594,90 @@ function ProfileEditForm({
                       <p className="text-xs leading-relaxed text-fg-2">
                         {t("profiles.editor.projectConnectionCredentialsHint")}
                       </p>
+                    )}
+                    {!projectDirect && (
+                      <div
+                        role="status"
+                        className={`space-y-2 rounded-control p-3 text-sm ${
+                          connectionStatus.data?.status === "missing"
+                            ? "bg-warning-soft text-warning-text"
+                            : "bg-subtle text-fg-2"
+                        }`}
+                      >
+                        <p className="font-medium">
+                          {checkingConnection
+                            ? t("common.loading")
+                            : connectionStatus.data?.status === "configured"
+                              ? t("profiles.connection.configured", {
+                                  defaultValue: "已检测到连接配置",
+                                })
+                              : connectionStatus.data?.status === "missing"
+                                ? t("profiles.connection.missing", {
+                                    defaultValue: "尚未配置 API 接入",
+                                  })
+                                : t("profiles.connection.unknown", {
+                                    defaultValue: "连接状态待确认",
+                                  })}
+                        </p>
+                        {connectionStatus.data?.status === "configured" ? (
+                          <p>
+                            {connectionStatus.data.source &&
+                              t(
+                                `profiles.connection.sources.${connectionStatus.data.source}`,
+                              )}
+                            {connectionStatus.data.providerName &&
+                              ` · ${connectionStatus.data.providerName}`}
+                          </p>
+                        ) : !checkingConnection ? (
+                          <p className="text-xs leading-relaxed">
+                            {t(
+                              connectionStatus.data?.status === "missing"
+                                ? "profiles.connection.missingHint"
+                                : "profiles.connection.unknownHint",
+                              {
+                                defaultValue:
+                                  connectionStatus.data?.status === "missing"
+                                    ? "仅设置模型还不能发送请求。可以选择项目供应商，也可以先保存方案。"
+                                    : "暂时无法确认可继承连接，请检查 Claude Code 的登录或配置。",
+                              },
+                            )}
+                          </p>
+                        ) : null}
+                        <div className="flex flex-wrap gap-2">
+                          {connectionStatus.data?.status === "missing" && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={chooseProjectProvider}
+                            >
+                              {t("profiles.connection.chooseProvider", {
+                                defaultValue: "选择项目供应商",
+                              })}
+                            </Button>
+                          )}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={connectionStatus.isFetching}
+                            onClick={() => void connectionStatus.refetch()}
+                          >
+                            {t("common.retry")}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    {Object.keys(providers).length === 0 && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setAddingProvider(true)}
+                      >
+                        {t("profiles.connection.addProvider", {
+                          defaultValue: "添加供应商",
+                        })}
+                      </Button>
                     )}
                   </div>
                 )}

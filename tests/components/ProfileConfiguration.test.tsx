@@ -103,7 +103,11 @@ describe("Profile owns Agent configuration", () => {
       model: "profile-model",
       nativeConfig: "{}",
     });
-    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(
+      mocks.invoke.mock.calls.every(
+        ([command]) => command === "get_profile_connection_status",
+      ),
+    ).toBe(true);
   });
 
   it("requires an existing provider for direct access and permits returning to inheritance", async () => {

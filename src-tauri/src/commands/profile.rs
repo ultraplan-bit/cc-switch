@@ -354,8 +354,36 @@ pub async fn apply_profile(
     .await
 }
 
-/// 将方案部署到指定的 Claude Code 或 Codex 项目目录。
-/// 与全局 apply 分开，避免更改用户级配置和 enabled 状态。
+/// Read only the available Claude connection evidence; never return credentials.
+#[tauri::command]
+pub async fn get_profile_connection_status(
+    state: State<'_, AppState>,
+    project_path: Option<String>,
+) -> Result<crate::services::project_profile::readiness::InheritedConnection, String> {
+    run_db_task(&state, move |state| {
+        let root = project_path
+            .as_deref()
+            .map(crate::services::profile::normalize_project_path)
+            .transpose()?
+            .flatten()
+            .map(|path| {
+                let root = std::path::Path::new(&path)
+                    .canonicalize()
+                    .map_err(|error| AppError::io(std::path::Path::new(&path), error))?;
+                if !root.is_dir() {
+                    return Err(AppError::InvalidInput("项目目录不可用".into()));
+                }
+                Ok(root)
+            })
+            .transpose()?;
+        Ok::<_, AppError>(crate::services::project_profile::readiness::inspect(
+            state,
+            root.as_deref(),
+        ))
+    })
+    .await
+}
+
 #[tauri::command]
 pub async fn deploy_profile_to_project(
     state: State<'_, AppState>,
@@ -363,11 +391,23 @@ pub async fn deploy_profile_to_project(
     scope: String,
     project_path: String,
     resolution: Option<ConflictResolution>,
+    allow_missing_connection: Option<bool>,
 ) -> Result<ProjectDeployResult, String> {
     let scope = ProfileScope::parse(&scope)?;
     profile_mutation(&state, move |state| {
-        ProjectProfileService::deploy(state, &id, scope, &project_path, resolution)
-            .map_err(|err| err.to_string())
+        let result = if allow_missing_connection.unwrap_or(false) {
+            ProjectProfileService::deploy_with_connection_choice(
+                state,
+                &id,
+                scope,
+                &project_path,
+                resolution,
+                true,
+            )
+        } else {
+            ProjectProfileService::deploy(state, &id, scope, &project_path, resolution)
+        };
+        result.map_err(|err| err.to_string())
     })
     .await
 }

@@ -14,6 +14,7 @@ import type {
   ProfileScope,
   ProjectDeployConflict,
   ProjectDeployResolution,
+  InheritedConnection,
 } from "@/lib/api/profiles";
 import { toast } from "@/lib/toast";
 import { extractErrorMessage } from "@/utils/errorUtils";
@@ -40,6 +41,14 @@ export function useProjectProfileDeployment(
     projectPath: string;
     conflicts: ProjectDeployConflict[];
     warnings: string[];
+    allowMissingConnection: boolean;
+  } | null>(null);
+  const [pendingConnection, setPendingConnection] = useState<{
+    id: string;
+    scope: ProfileScope;
+    projectPath: string;
+    resolution: ProjectDeployResolution | null;
+    connection: InheritedConnection;
   } | null>(null);
 
   const deployToProject = async (
@@ -47,6 +56,7 @@ export function useProjectProfileDeployment(
     projectPath: string,
     resolution: ProjectDeployResolution | null = null,
     targetScope: ProfileScope = scope,
+    allowMissingConnection = false,
   ) => {
     if (!canDeploy && resolution !== "skip") return;
     try {
@@ -55,7 +65,20 @@ export function useProjectProfileDeployment(
         scope: targetScope,
         projectPath,
         resolution,
+        allowMissingConnection,
       });
+      if (result.status === "needsConnection") {
+        setPendingDeploy(null);
+        setPendingConnection({
+          id,
+          scope: targetScope,
+          projectPath,
+          resolution,
+          connection: result.connection,
+        });
+        return;
+      }
+      setPendingConnection(null);
       if (result.status === "needsResolution") {
         setPendingDeploy({
           id,
@@ -63,6 +86,7 @@ export function useProjectProfileDeployment(
           projectPath,
           conflicts: result.conflicts,
           warnings: result.warnings,
+          allowMissingConnection,
         });
         return;
       }
@@ -82,7 +106,36 @@ export function useProjectProfileDeployment(
           closeButton: true,
         });
       } else {
-        toast.success(t("profiles.projectDeploy.success"));
+        const connection = result.connection;
+        const message =
+          connection?.status === "missing"
+            ? t("profiles.connection.appliedMissing", {
+                defaultValue: "项目配置已应用，API 接入仍待配置",
+              })
+            : connection?.status === "configured" &&
+                connection.mode === "direct"
+              ? t("profiles.connection.appliedDirect", {
+                  defaultValue: "项目独立 API 接入已写入",
+                })
+              : connection?.status === "configured" && connection.source
+                ? t("profiles.connection.appliedInherited", {
+                    defaultValue: "项目配置已应用，连接继承自 {{source}}",
+                    source: t(
+                      `profiles.connection.sources.${connection.source}`,
+                    ),
+                  })
+                : t("profiles.projectDeploy.success");
+        if (connection?.status === "missing") toast.warning(message);
+        else
+          toast.success(message, {
+            ...(connection?.status === "unknown"
+              ? {
+                  description: t("profiles.connection.unknown", {
+                    defaultValue: "连接状态待确认",
+                  }),
+                }
+              : {}),
+          });
       }
       if (targetScope === "codex") {
         toast.info(t("profiles.projectDeploy.codexTrustWarning"), {
@@ -102,6 +155,8 @@ export function useProjectProfileDeployment(
     deployToProject,
     pendingDeploy,
     setPendingDeploy,
+    pendingConnection,
+    setPendingConnection,
     isPending: mutation.isPending,
   };
 }
@@ -109,13 +164,93 @@ export function useProjectProfileDeployment(
 export function ProjectProfileConflictDialog({
   deployment,
   deploymentDisabled = false,
+  onChooseProvider,
 }: {
   deployment: ReturnType<typeof useProjectProfileDeployment>;
   deploymentDisabled?: boolean;
+  onChooseProvider?: (pending: {
+    id: string;
+    scope: ProfileScope;
+    projectPath: string;
+  }) => void;
 }) {
   const { t } = useTranslation();
-  const { pendingDeploy, setPendingDeploy, isPending, deployToProject } =
-    deployment;
+  const {
+    pendingDeploy,
+    setPendingDeploy,
+    pendingConnection,
+    setPendingConnection,
+    isPending,
+    deployToProject,
+  } = deployment;
+  if (pendingConnection) {
+    return (
+      <Dialog
+        open
+        onOpenChange={(open) => {
+          if (!open && !isPending) setPendingConnection(null);
+        }}
+      >
+        <DialogContent className="max-w-lg" zIndex="alert">
+          <DialogHeader>
+            <DialogTitle>
+              {t("profiles.connection.guardTitle", {
+                defaultValue: "项目尚未配置 API 接入",
+              })}
+            </DialogTitle>
+            <DialogDescription>
+              {t("profiles.connection.guardDescription", {
+                defaultValue:
+                  "可以先选择项目供应商，也可以只应用模型和其他配置；补齐 API 接入后才能使用模型。",
+              })}
+            </DialogDescription>
+            <code className="block break-all text-xs text-fg-2">
+              {pendingConnection.projectPath}
+            </code>
+          </DialogHeader>
+          <DialogFooter className="flex-wrap gap-2">
+            <Button
+              variant="outline"
+              disabled={isPending}
+              onClick={() => setPendingConnection(null)}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={isPending || deploymentDisabled}
+              onClick={() =>
+                void deployToProject(
+                  pendingConnection.id,
+                  pendingConnection.projectPath,
+                  pendingConnection.resolution,
+                  pendingConnection.scope,
+                  true,
+                )
+              }
+            >
+              {t("profiles.connection.applyConfigurationOnly", {
+                defaultValue: "只应用配置",
+              })}
+            </Button>
+            {onChooseProvider && (
+              <Button
+                disabled={isPending}
+                onClick={() => {
+                  onChooseProvider(pendingConnection);
+                  setPendingConnection(null);
+                }}
+              >
+                {t("profiles.connection.chooseProvider", {
+                  defaultValue: "选择项目供应商",
+                })}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
   if (!pendingDeploy) return null;
 
   return (
@@ -181,6 +316,7 @@ export function ProjectProfileConflictDialog({
                   pendingDeploy.projectPath,
                   resolution,
                   pendingDeploy.scope,
+                  pendingDeploy.allowMissingConnection,
                 )
               }
               disabled={

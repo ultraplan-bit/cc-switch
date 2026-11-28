@@ -3263,6 +3263,30 @@
       "instructionHint": "Verweist auf eine Vorlage aus der Bibliothek. Beim Anwenden oder Bereitstellen wird sie in die Anweisungsdatei dieses Agents geschrieben.",
       "instructionsFollowHint": "Dieses Profil verwaltet keine Anweisungen. Aktivieren Sie die Ressourcenverwaltung, um eine Vorlage zu wählen.",
       "saveHint": "Speichern aktualisiert nur das Profil. Wenden Sie es global an oder stellen Sie es in einem Projekt bereit, um die Änderungen zu nutzen."
+    },
+    "connection": {
+      "section": "API-Verbindung",
+      "configured": "Verbindungskonfiguration gefunden",
+      "missing": "Keine API-Verbindung erkannt",
+      "unknown": "Verbindung muss geprüft werden",
+      "missingHint": "In den verfügbaren Quellen wurde keine API-Verbindung gefunden. Ein Modell allein kann keine Anfragen senden. Wählen Sie einen Projektanbieter oder speichern Sie das Profil für später.",
+      "unknownHint": "Die geerbte Verbindung konnte nicht bestätigt werden. Prüfen Sie die Anmeldung oder Konfiguration von Claude Code.",
+      "chooseProvider": "Projektanbieter auswählen",
+      "addProvider": "Anbieter hinzufügen",
+      "providerUnknown": "Vorhandene native Verbindung",
+      "guardTitle": "Keine API-Verbindung für dieses Projekt erkannt",
+      "guardDescription": "Wählen Sie einen Projektanbieter oder wenden Sie nur Modelle und andere Einstellungen an. Falls Anmeldedaten aus einer anderen Terminalumgebung stammen, prüfen Sie diese vor dem Fortfahren.",
+      "applyConfigurationOnly": "Nur Einstellungen anwenden",
+      "appliedDirect": "Eigene API-Verbindung des Projekts geschrieben",
+      "appliedInherited": "Projekteinstellungen angewendet; Verbindung übernommen aus {{source}}",
+      "appliedMissing": "Projekteinstellungen angewendet; API-Verbindung muss noch eingerichtet werden",
+      "sources": {
+        "global": "Benutzereinstellungen",
+        "project": "Projekteinstellungen",
+        "environment": "Umgebungsvariablen",
+        "login": "Claude-Anmeldung",
+        "routing": "Lokales Routing"
+      }
     }
   },
   "workspace": {

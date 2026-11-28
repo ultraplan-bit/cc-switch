@@ -55,6 +55,8 @@ interface AddProviderDialogProps {
   ) => Promise<void> | void;
   /** 从供应商页哪一格打开的，见 ProviderForm 的同名参数 */
   modeView?: AppMode;
+  /** Project profiles only add one connection; universal sync is a global action. */
+  allowUniversal?: boolean;
 }
 
 export function AddProviderDialog({
@@ -63,12 +65,14 @@ export function AddProviderDialog({
   appId,
   onSubmit,
   modeView,
+  allowUniversal = true,
 }: AddProviderDialogProps) {
   const { t } = useTranslation();
   const { connectionsOnly, pending: resolvingConnectionMode } =
     useProviderConnectionMode(appId, open, modeView);
   // OpenCode and OpenClaw don't support universal providers
   const showUniversalTab =
+    allowUniversal &&
     appId !== "opencode" &&
     appId !== "openclaw" &&
     appId !== "hermes" &&

@@ -3263,6 +3263,30 @@
       "instructionHint": "Reference a prompt from the library. Applying or deploying writes it to this agent's instruction file.",
       "instructionsFollowHint": "This profile does not manage instructions. Turn on resource management to choose a template.",
       "saveHint": "Saving only updates the profile. Apply it globally or deploy it to a project to use the changes."
+    },
+    "connection": {
+      "section": "API connection",
+      "configured": "Connection configuration found",
+      "missing": "No API connection detected",
+      "unknown": "Connection needs verification",
+      "missingHint": "No API connection was found in the available sources. A model alone cannot send requests. Choose a project provider or save the profile for later.",
+      "unknownHint": "The inherited connection could not be confirmed. Check Claude Code sign-in or configuration.",
+      "chooseProvider": "Choose project provider",
+      "addProvider": "Add provider",
+      "providerUnknown": "Existing native connection",
+      "guardTitle": "No API connection detected for this project",
+      "guardDescription": "Choose a project provider, or apply only models and other settings. If credentials are supplied by another terminal environment, verify them before continuing.",
+      "applyConfigurationOnly": "Apply settings only",
+      "appliedDirect": "Independent project API connection written",
+      "appliedInherited": "Project settings applied; connection inherited from {{source}}",
+      "appliedMissing": "Project settings applied; API connection still needs setup",
+      "sources": {
+        "global": "User settings",
+        "project": "Project settings",
+        "environment": "Environment variables",
+        "login": "Claude sign-in",
+        "routing": "Local routing"
+      }
     }
   },
   "workspace": {

@@ -14,7 +14,9 @@ import type {
   ProfileConfig,
   ProfilesResponse,
   ProfileScope,
+  InheritedConnection,
 } from "@/lib/api/profiles";
+import type { Provider } from "@/types";
 import { renderWithQueryClient } from "../utils/testQueryClient";
 
 const mocks = vi.hoisted(() => ({
@@ -30,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   deploy: vi.fn(),
   pickDirectory: vi.fn(),
   updateTrayMenu: vi.fn(),
+  connectionStatus: vi.fn(),
   success: vi.fn(),
   error: vi.fn(),
   info: vi.fn(),
@@ -54,12 +57,54 @@ vi.mock("@/components/JsonEditor", () => ({
     />
   ),
 }));
+vi.mock("@/components/providers/AddProviderDialog", () => ({
+  AddProviderDialog: ({
+    modeView,
+    allowUniversal,
+    onSubmit,
+    onOpenChange,
+  }: {
+    modeView: string;
+    allowUniversal: boolean;
+    onSubmit: (provider: Omit<Provider, "id">) => Promise<void>;
+    onOpenChange: (open: boolean) => void;
+  }) => (
+    <div
+      role="dialog"
+      aria-label={`add-provider-${modeView}`}
+      data-universal={allowUniversal}
+    >
+      <button onClick={() => onOpenChange(false)}>cancel-provider</button>
+      <button
+        onClick={() =>
+          void onSubmit({
+            name: "New project provider",
+            settingsConfig: {
+              env: {
+                ANTHROPIC_BASE_URL: "https://project.example",
+                ANTHROPIC_AUTH_TOKEN: "test-only",
+              },
+            },
+          })
+        }
+      >
+        save-provider
+      </button>
+    </div>
+  ),
+}));
 vi.mock("@/lib/api", async () => ({
   profilesApi: (await import("@/lib/api/profiles")).profilesApi,
   settingsApi: { pickDirectory: mocks.pickDirectory },
   providersApi: {
     updateTrayMenu: mocks.updateTrayMenu,
     getAll: (app: string) => mocks.invoke("get_providers", { app }),
+    add: (
+      provider: Provider,
+      app: string,
+      addToLive: boolean,
+      editorSave: unknown,
+    ) => mocks.invoke("add_provider", { provider, app, addToLive, editorSave }),
   },
   promptsApi: {
     getPrompts: (app: string) => mocks.invoke("get_prompts", { app }),
@@ -117,17 +162,25 @@ const providerLibrary = {
 };
 let current: ProfilesResponse["current"];
 let projects: ProfilesResponse["projects"];
+let availableProviders: Record<string, Provider>;
 
 beforeEach(() => {
   localStorage.removeItem("cc-switch:profiles:location:v2");
   Object.values(mocks).forEach((mock) => mock.mockReset());
   profiles = [];
   projects = [];
+  availableProviders = { ...providerLibrary };
   current = { claude: null, claudeDesktop: null, codex: null };
   mocks.updateTrayMenu.mockResolvedValue(true);
   mocks.pickDirectory.mockResolvedValue("/projects/demo");
   mocks.create.mockResolvedValue(profile());
   mocks.apply.mockResolvedValue([]);
+  mocks.connectionStatus.mockResolvedValue({
+    status: "configured",
+    source: "global",
+    providerName: "Provider A",
+    reason: null,
+  } satisfies InheritedConnection);
   mocks.duplicate.mockResolvedValue(profile());
   mocks.update.mockImplementation(({ id }: { id: string }) =>
     Promise.resolve(profiles.find((item) => item.id === id)),
@@ -152,6 +205,12 @@ beforeEach(() => {
               name: name ?? item.name,
               payload: {
                 ...item.payload,
+                ...(scope === "claude"
+                  ? {
+                      claudeProjectConnection:
+                        config.claudeProjectConnection ?? "inherit",
+                    }
+                  : {}),
                 providers: {
                   ...item.payload.providers,
                   [scope]: config.providerId,
@@ -215,6 +274,8 @@ beforeEach(() => {
   });
   mocks.invoke.mockImplementation((command: string, args: unknown) => {
     switch (command) {
+      case "get_profile_connection_status":
+        return mocks.connectionStatus(args);
       case "list_profiles":
         return Promise.resolve({
           profiles,
@@ -237,7 +298,12 @@ beforeEach(() => {
       case "update_profile_config":
         return mocks.saveConfig(args);
       case "get_providers":
-        return Promise.resolve(providerLibrary);
+        return Promise.resolve(availableProviders);
+      case "add_provider": {
+        const { provider } = args as { provider: Provider };
+        availableProviders = { ...availableProviders, [provider.id]: provider };
+        return Promise.resolve(true);
+      }
       case "get_mcp_servers":
         return Promise.resolve({
           "mcp-a": {
@@ -366,6 +432,7 @@ describe("ProfilesPage", () => {
         scope: "claude",
         projectPath: "/second",
         resolution: null,
+        allowMissingConnection: false,
       }),
     );
     expect(mocks.apply).toHaveBeenCalledTimes(1);
@@ -460,6 +527,7 @@ describe("ProfilesPage", () => {
         scope: "claude",
         projectPath: "/demo",
         resolution: "overwrite",
+        allowMissingConnection: false,
       }),
     );
   });
@@ -506,6 +574,9 @@ describe("ProfilesPage", () => {
       await screen.findByLabelText("profiles.editor.model", {
         selector: "input",
       });
+      expect(
+        screen.getByLabelText("profiles.editor.projectConnection"),
+      ).toHaveValue("inherit");
       if (source === "project")
         expect(mocks.importProject).toHaveBeenCalledWith({
           name: "Demo",
@@ -577,6 +648,331 @@ describe("ProfilesPage", () => {
 });
 
 describe("direct profile configuration editing", () => {
+  it("adds a project provider without writing global configuration or losing the profile draft", async () => {
+    profiles = [profile()];
+    availableProviders = {};
+    mocks.connectionStatus.mockResolvedValue({
+      status: "missing",
+      source: null,
+      providerName: null,
+      reason: null,
+    });
+    renderWithQueryClient(<ProfilesPage activeApp="claude" />);
+    fireEvent.click(await screen.findByRole("button", { name: "common.edit" }));
+    fireEvent.change(await screen.findByLabelText("profiles.editor.name"), {
+      target: { value: "Unsaved project" },
+    });
+    fireEvent.change(
+      screen.getByLabelText("profiles.editor.model", { selector: "input" }),
+      { target: { value: "private-model" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "添加供应商" }));
+    expect(
+      await screen.findByRole("dialog", { name: "add-provider-direct" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("dialog", { name: "add-provider-direct" }),
+    ).toHaveAttribute("data-universal", "false");
+    fireEvent.click(screen.getByRole("button", { name: "cancel-provider" }));
+    expect(await screen.findByLabelText("profiles.editor.name")).toHaveValue(
+      "Unsaved project",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "添加供应商" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "save-provider" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "add-provider-direct" }),
+      ).toBeNull(),
+    );
+    expect(screen.getByLabelText("profiles.editor.name")).toHaveValue(
+      "Unsaved project",
+    );
+    expect(
+      screen.getByLabelText("profiles.editor.model", { selector: "input" }),
+    ).toHaveValue("private-model");
+    expect(
+      screen.getByLabelText("profiles.editor.projectConnection"),
+    ).toHaveValue("direct");
+    const created = Object.values(availableProviders)[0];
+    expect(screen.getByLabelText("profiles.editor.provider")).toHaveValue(
+      created.id,
+    );
+    expect(mocks.invoke).toHaveBeenCalledWith(
+      "add_provider",
+      expect.objectContaining({
+        app: "claude",
+        addToLive: false,
+        editorSave: { base: {}, connectionOnly: true },
+      }),
+    );
+    expect(mocks.saveConfig).not.toHaveBeenCalled();
+    expect(mocks.apply).not.toHaveBeenCalled();
+    expect(mocks.deploy).not.toHaveBeenCalled();
+  });
+
+  it("shows missing inherited access without changing the draft, then guides an explicit project provider choice", async () => {
+    profiles = [profile()];
+    projects = [{ path: "/projects/empty", available: true, deployed: {} }];
+    mocks.connectionStatus.mockResolvedValue({
+      status: "missing",
+      source: null,
+      providerName: null,
+      reason: "no_connection",
+    });
+    renderWithQueryClient(<ProfilesPage activeApp="claude" projectOnly />);
+    fireEvent.click(await screen.findByRole("button", { name: "common.edit" }));
+    expect(await screen.findByText("尚未配置 API 接入")).toBeVisible();
+    expect(mocks.connectionStatus).toHaveBeenCalledWith({
+      projectPath: "/projects/empty",
+    });
+    const connection = screen.getByLabelText(
+      "profiles.editor.projectConnection",
+    );
+    expect(connection).toHaveValue("inherit");
+    expect(screen.getByRole("button", { name: "common.save" })).toBeEnabled();
+    fireEvent.change(screen.getByLabelText("profiles.editor.name"), {
+      target: { value: "My draft" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "选择项目供应商" }));
+    expect(connection).toHaveValue("direct");
+    expect(screen.getByLabelText("profiles.editor.provider")).toHaveFocus();
+    expect(screen.getByRole("button", { name: "common.save" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("profiles.editor.provider"), {
+      target: { value: "provider-b" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    await waitFor(() =>
+      expect(screen.queryByText("profiles.editor.title")).toBeNull(),
+    );
+    expect(profiles[0]).toMatchObject({
+      name: "My draft",
+      payload: {
+        claudeProjectConnection: "direct",
+        providers: { claude: "provider-b" },
+      },
+    });
+    expect(mocks.deploy).not.toHaveBeenCalled();
+  });
+
+  it("keeps connection check failures non-blocking and preserves the editor's project context", async () => {
+    mocks.connectionStatus.mockRejectedValue(new Error("unavailable"));
+    profiles = [profile()];
+    projects = [{ path: "/projects/context", available: true, deployed: {} }];
+    const { rerender } = renderWithQueryClient(
+      <ProfilesPage activeApp="claude" projectOnly />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "common.edit" }));
+    expect(await screen.findByText("连接状态待确认")).toBeVisible();
+    await waitFor(() =>
+      expect(mocks.connectionStatus).toHaveBeenCalledWith({
+        projectPath: "/projects/context",
+      }),
+    );
+    rerender(
+      <ProfilesPage
+        activeApp="codex"
+        projectOnly
+        initialProjectPath="/different"
+      />,
+    );
+    expect(
+      screen.getByLabelText("profiles.editor.projectConnection"),
+    ).toHaveValue("inherit");
+    expect(screen.getByRole("button", { name: "common.save" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    await waitFor(() =>
+      expect(mocks.saveConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scope: "claude",
+          config: expect.objectContaining({
+            claudeProjectConnection: "inherit",
+          }),
+        }),
+      ),
+    );
+    expect(
+      mocks.connectionStatus.mock.calls.every(
+        ([args]) => args.projectPath === "/projects/context",
+      ),
+    ).toBe(true);
+  });
+
+  it("asks before deploying without detected access and preserves the target when applying configuration only", async () => {
+    profiles = [profile()];
+    projects = [{ path: "/projects/pending", available: true, deployed: {} }];
+    const connection = {
+      status: "missing",
+      source: null,
+      providerName: null,
+      reason: "no_connection",
+    } as const;
+    mocks.deploy.mockResolvedValueOnce({
+      status: "needsConnection",
+      connection,
+    });
+    mocks.deploy.mockResolvedValueOnce({
+      status: "applied",
+      changed: [],
+      warnings: [],
+      connection: { ...connection, mode: "inherit" },
+    });
+    const { rerender } = renderWithQueryClient(
+      <ProfilesPage activeApp="claude" projectOnly />,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "profiles.projectDeploy.button",
+      }),
+    );
+    const applyOnly = await screen.findByRole("button", { name: "只应用配置" });
+    expect(mocks.deploy).toHaveBeenCalledTimes(1);
+    expect(mocks.success).not.toHaveBeenCalled();
+    rerender(<ProfilesPage activeApp="codex" projectOnly />);
+    fireEvent.click(applyOnly);
+    await waitFor(() =>
+      expect(mocks.deploy).toHaveBeenLastCalledWith({
+        id: "demo",
+        scope: "claude",
+        projectPath: "/projects/pending",
+        resolution: null,
+        allowMissingConnection: true,
+      }),
+    );
+    expect(mocks.warning).toHaveBeenCalledWith(
+      "项目配置已应用，API 接入仍待配置",
+    );
+  });
+
+  it("opens a direct connection draft from deployment guidance without saving or retrying automatically", async () => {
+    profiles = [profile()];
+    projects = [{ path: "/projects/choose", available: true, deployed: {} }];
+    mocks.deploy.mockResolvedValueOnce({
+      status: "needsConnection",
+      connection: {
+        status: "missing",
+        source: null,
+        providerName: null,
+        reason: null,
+      },
+    });
+    renderWithQueryClient(<ProfilesPage activeApp="claude" projectOnly />);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "profiles.projectDeploy.button",
+      }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "选择项目供应商" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText("profiles.editor.projectConnection"),
+      ).toHaveValue("direct"),
+    );
+    expect(screen.getByLabelText("profiles.editor.provider")).toHaveFocus();
+    expect(mocks.connectionStatus).toHaveBeenCalledWith({
+      projectPath: "/projects/choose",
+    });
+    expect(mocks.saveConfig).not.toHaveBeenCalled();
+    expect(mocks.deploy).toHaveBeenCalledTimes(1);
+    fireEvent.change(
+      screen.getByLabelText("profiles.editor.projectConnection"),
+      { target: { value: "inherit" } },
+    );
+    expect(
+      screen.getByLabelText("profiles.editor.projectConnection"),
+    ).toHaveValue("inherit");
+  });
+
+  it("retains a saved direct connection through list refresh, reopening, and project deployment", async () => {
+    const item = profile();
+    profiles = [item];
+    projects = [
+      { path: "/projects/first", available: true, deployed: {} },
+      { path: "/projects/independent", available: true, deployed: {} },
+    ];
+    const deployedModes: Array<string | undefined> = [];
+    mocks.deploy.mockImplementation(({ id }: { id: string }) => {
+      deployedModes.push(
+        profiles.find((saved) => saved.id === id)?.payload
+          .claudeProjectConnection,
+      );
+      return Promise.resolve({ status: "applied", changed: [], warnings: [] });
+    });
+    const { unmount } = renderWithQueryClient(
+      <ProfilesPage activeApp="claude" />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "common.edit" }));
+    const connection = await screen.findByLabelText(
+      "profiles.editor.projectConnection",
+    );
+    expect(connection).toHaveValue("inherit");
+    fireEvent.change(screen.getByLabelText("profiles.editor.provider"), {
+      target: { value: "provider-b" },
+    });
+    expect(connection).toHaveValue("inherit");
+    fireEvent.change(connection, { target: { value: "direct" } });
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    await waitFor(() =>
+      expect(screen.queryByText("profiles.editor.title")).toBeNull(),
+    );
+    expect(
+      within(screen.getByRole("listitem", { name: "Demo" })).getByText(
+        "profiles.editor.projectConnectionDirect",
+      ),
+    ).toBeVisible();
+    expect(profiles[0].payload).toMatchObject({
+      claudeProjectConnection: "direct",
+      providers: { claude: "provider-b" },
+    });
+    expect(mocks.deploy).not.toHaveBeenCalled();
+
+    // A fresh query client forces this view to read the saved list again.
+    unmount();
+    const readsBeforeReload = mocks.invoke.mock.calls.filter(
+      ([command]) => command === "list_profiles",
+    ).length;
+    renderWithQueryClient(<ProfilesPage activeApp="claude" />);
+    fireEvent.click(await screen.findByRole("button", { name: "common.edit" }));
+    expect(
+      await screen.findByLabelText("profiles.editor.projectConnection"),
+    ).toHaveValue("direct");
+    expect(screen.getByLabelText("profiles.editor.provider")).toHaveValue(
+      "provider-b",
+    );
+    expect(
+      mocks.invoke.mock.calls.filter(([command]) => command === "list_profiles")
+        .length,
+    ).toBeGreaterThan(readsBeforeReload);
+    fireEvent.click(screen.getByRole("button", { name: "common.cancel" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "profiles.scope.project" }),
+    );
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "profiles.projects.select" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("option", { name: "/projects/independent" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "profiles.projectDeploy.button" }),
+    );
+    await waitFor(() =>
+      expect(mocks.invoke).toHaveBeenCalledWith("deploy_profile_to_project", {
+        id: item.id,
+        scope: "claude",
+        projectPath: "/projects/independent",
+        resolution: null,
+        allowMissingConnection: false,
+      }),
+    );
+    expect(deployedModes).toEqual(["direct"]);
+    expect(mocks.apply).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
   it("saves a profile that leaves resources under global control", async () => {
     const item = profile();
     item.payload.mcp.claude = ["mcp-a"];

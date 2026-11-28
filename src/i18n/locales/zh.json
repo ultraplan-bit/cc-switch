@@ -3263,6 +3263,30 @@
       "instructionHint": "引用提示词库的内容，应用或部署时写入此 Agent 的指令文件。",
       "instructionsFollowHint": "此方案不管理指令。开启资源管理后可选择指令模板。",
       "saveHint": "保存只更新方案；应用到全局或部署到项目后生效。"
+    },
+    "connection": {
+      "section": "API 接入",
+      "configured": "已检测到连接配置",
+      "missing": "尚未检测到 API 接入",
+      "unknown": "连接状态待确认",
+      "missingHint": "当前可检测来源中没有 API 接入。仅设置模型还不能发送请求，请选择项目供应商，或先保存方案。",
+      "unknownHint": "暂时无法确认可继承连接，请检查 Claude Code 的登录或配置。",
+      "chooseProvider": "选择项目供应商",
+      "addProvider": "添加供应商",
+      "providerUnknown": "已有原生连接",
+      "guardTitle": "项目尚未检测到 API 接入",
+      "guardDescription": "可以先选择项目供应商，也可以只应用模型和其他配置。若接入配置在其他终端环境中，请确认后继续。",
+      "applyConfigurationOnly": "只应用配置",
+      "appliedDirect": "项目独立 API 接入已写入",
+      "appliedInherited": "项目配置已应用，连接继承自 {{source}}",
+      "appliedMissing": "项目配置已应用，API 接入仍待配置",
+      "sources": {
+        "global": "用户级配置",
+        "project": "项目配置",
+        "environment": "环境变量",
+        "login": "Claude 登录",
+        "routing": "本地路由"
+      }
     }
   },
   "workspace": {

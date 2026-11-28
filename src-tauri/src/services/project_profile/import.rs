@@ -619,12 +619,13 @@ mod tests {
         let status = ProjectProfileService::project_status(&state, &registered[0]);
         assert!(status.available);
         assert!(status.deployed.is_empty());
-        let result = ProjectProfileService::deploy(
+        let result = ProjectProfileService::deploy_with_connection_choice(
             &state,
             &profile.id,
             ProfileScope::Claude,
             &registered[0],
             Some(ConflictResolution::Overwrite),
+            true,
         )
         .unwrap();
         assert!(matches!(result, ProjectDeployResult::Applied { .. }));

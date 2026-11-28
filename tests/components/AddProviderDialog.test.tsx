@@ -622,4 +622,21 @@ context_window = 500000
     );
     expect(universalProps.onManageUniversalProviders).toBeTypeOf("function");
   });
+
+  it("项目供应商入口可以关闭统一供应商预设和管理", async () => {
+    connectionMode.connectionsOnly = true;
+    render(
+      <AddProviderDialog
+        open
+        onOpenChange={vi.fn()}
+        appId="claude"
+        modeView="direct"
+        allowUniversal={false}
+        onSubmit={vi.fn()}
+      />,
+    );
+    await screen.findByRole("button", { name: "common.add" });
+    expect(universalProps.onUniversalPresetSelect).toBeUndefined();
+    expect(universalProps.onManageUniversalProviders).toBeUndefined();
+  });
 });

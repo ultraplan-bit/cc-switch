@@ -190,12 +190,21 @@ export const useDeployProfileToProjectMutation = () => {
       scope,
       projectPath,
       resolution,
+      allowMissingConnection = false,
     }: {
       id: string;
       scope: ProfileScope;
       projectPath: string;
       resolution?: ProjectDeployResolution | null;
-    }) => profilesApi.deployToProject(id, scope, projectPath, resolution),
+      allowMissingConnection?: boolean;
+    }) =>
+      profilesApi.deployToProject(
+        id,
+        scope,
+        projectPath,
+        resolution,
+        allowMissingConnection,
+      ),
     onSuccess: async (result) => {
       if (result.status === "applied") {
         await queryClient.invalidateQueries({ queryKey: ["profiles"] });

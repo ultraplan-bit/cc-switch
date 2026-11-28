@@ -3192,6 +3192,30 @@
       "instructionHint": "Kitaplıktaki bir istemi kullanır. Uygulama veya dağıtım sırasında bu Agent’ın talimat dosyasına yazılır.",
       "instructionsFollowHint": "Bu profil talimatları yönetmiyor. Şablon seçmek için kaynak yönetimini açın.",
       "saveHint": "Kaydetmek yalnızca profili günceller. Değişiklikleri kullanmak için genel olarak uygulayın veya bir projeye dağıtın."
+    },
+    "connection": {
+      "section": "API bağlantısı",
+      "configured": "Bağlantı yapılandırması bulundu",
+      "missing": "API bağlantısı bulunamadı",
+      "unknown": "Bağlantı doğrulanmalı",
+      "missingHint": "Erişilebilir kaynaklarda API bağlantısı bulunamadı. Yalnızca model seçmek istek göndermek için yeterli değildir. Proje sağlayıcısını seçin veya profili daha sonrası için kaydedin.",
+      "unknownHint": "Devralınan bağlantı doğrulanamadı. Claude Code oturumunu veya yapılandırmasını kontrol edin.",
+      "chooseProvider": "Proje sağlayıcısını seç",
+      "addProvider": "Sağlayıcı ekle",
+      "providerUnknown": "Mevcut yerel bağlantı",
+      "guardTitle": "Bu proje için API bağlantısı bulunamadı",
+      "guardDescription": "Proje sağlayıcısını seçin veya yalnızca modelleri ve diğer ayarları uygulayın. Kimlik bilgileri başka bir terminal ortamından sağlanıyorsa devam etmeden önce doğrulayın.",
+      "applyConfigurationOnly": "Yalnızca ayarları uygula",
+      "appliedDirect": "Projeye özel API bağlantısı yazıldı",
+      "appliedInherited": "Proje ayarları uygulandı; bağlantı kaynağı: {{source}}",
+      "appliedMissing": "Proje ayarları uygulandı; API bağlantısı hâlâ ayarlanmalı",
+      "sources": {
+        "global": "Kullanıcı ayarları",
+        "project": "Proje ayarları",
+        "environment": "Ortam değişkenleri",
+        "login": "Claude oturumu",
+        "routing": "Yerel yönlendirme"
+      }
     }
   },
   "workspace": {

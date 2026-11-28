@@ -213,6 +213,7 @@ describe("Agent management project environment", () => {
         scope: "claude",
         projectPath: "/projects/demo",
         resolution: null,
+        allowMissingConnection: false,
       }),
     );
     expect(mocks.run).not.toHaveBeenCalled();
