@@ -55,6 +55,8 @@ struct AccountData {
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct StoreFile {
+    #[serde(skip)]
+    load_error: Option<String>,
     #[serde(default)]
     version: u32,
     #[serde(default)]
@@ -161,17 +163,14 @@ impl AgyAccountManager {
 
     pub fn with_login_store(data_dir: PathBuf, login: Arc<dyn AgyLoginStore>) -> Self {
         let path = data_dir.join(STORE_FILENAME);
-        let store = match std::fs::read(&path) {
-            Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_else(|error| {
-                log::warn!("[AgyAccount] 账号文件解析失败，按空表处理: {error}");
-                StoreFile::default()
-            }),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => StoreFile::default(),
-            Err(error) => {
-                log::warn!("[AgyAccount] 账号文件读取失败，按空表处理: {error}");
-                StoreFile::default()
-            }
-        };
+        let store =
+            crate::config::load_json_or_set_aside(&path, "AgyAccount").unwrap_or_else(|error| {
+                log::error!("{error}");
+                StoreFile {
+                    load_error: Some(error.to_string()),
+                    ..StoreFile::default()
+                }
+            });
         Self {
             data_dir,
             login,
@@ -577,11 +576,15 @@ impl AgyAccountManager {
     }
 
     fn persist(&self, store: &StoreFile) -> Result<(), AppError> {
+        if let Some(error) = &store.load_error {
+            return Err(AppError::Config(error.clone()));
+        }
         let snapshot = StoreFile {
             version: 1,
             accounts: store.accounts.clone(),
             dismissed: store.dismissed.clone(),
             dismissed_emails: store.dismissed_emails.clone(),
+            load_error: None,
         };
         let content = serde_json::to_vec_pretty(&snapshot)
             .map_err(|source| AppError::JsonSerialize { source })?;

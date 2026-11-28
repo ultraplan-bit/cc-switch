@@ -1268,3 +1268,53 @@ fn user_data_dir_falls_back_when_the_account_is_unreadable() {
     std::fs::write(fixture.paths.info(), "not json").unwrap();
     assert_eq!(user_data_dir_in(&fixture.paths, &root), root);
 }
+
+/// An account file that can't be read (a hand-edit typo, a newer format after a
+/// downgrade) holds the only copies of the other accounts' logins. Listing accounts
+/// adopts the live login and saves; that save must not destroy the old file.
+#[test]
+fn an_unreadable_account_file_is_kept_instead_of_overwritten() {
+    let fx = Fixture::new();
+    fx.sign_in("u-1", 0);
+    fx.manager().status().unwrap();
+    fx.sign_in("u-2", 0);
+    fx.manager().status().unwrap();
+    let store_path = fx.data_dir.join(STORE_FILENAME);
+    let mut unreadable = std::fs::read(&store_path).unwrap();
+    unreadable.extend_from_slice(b"\n}");
+    std::fs::write(&store_path, &unreadable).unwrap();
+
+    let status = fx.manager().status().unwrap();
+
+    assert_eq!(status.current_account_id.as_deref(), Some("u-2"));
+    assert!(
+        crate::test_support::dir_holds_file_with(&fx.data_dir, &unreadable),
+        "the unreadable account file was overwritten"
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn failed_preservation_blocks_account_writes_after_file_unlock() {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    let fx = Fixture::new();
+    fx.sign_in("u-1", 0);
+    fx.manager().status().unwrap();
+    let path = fx.data_dir.join(STORE_FILENAME);
+    let mut original = std::fs::read(&path).unwrap();
+    original.extend_from_slice(b"\n}");
+    std::fs::write(&path, &original).unwrap();
+    let held = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(1)
+        .open(&path)
+        .unwrap();
+    let reopened = fx.manager();
+    drop(held);
+    fx.sign_in("u-2", 0);
+
+    let error = reopened.status().unwrap_err();
+    assert!(error.to_string().contains("account writes are blocked"));
+    assert_eq!(std::fs::read(&path).unwrap(), original);
+}

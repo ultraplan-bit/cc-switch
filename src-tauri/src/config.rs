@@ -75,7 +75,7 @@ pub(crate) fn sqlite_unsupported_in_temp_dir() -> bool {
 ///
 /// 用 `var_os` 而非 `var`：非 Unicode 的取值只应让路径变 lossy，而不该让
 /// “覆盖是否存在”的判断失效、进而退回真实用户目录。
-fn test_home_override() -> Option<PathBuf> {
+pub(crate) fn test_home_override() -> Option<PathBuf> {
     let raw = std::env::var_os("CC_SWITCH_TEST_HOME")?;
     // to_string_lossy 的结果必须先绑住，否则 trim 借的是一个已释放的临时值。
     let lossy = raw.to_string_lossy();
@@ -438,6 +438,50 @@ pub fn write_text_file_private(path: &Path, data: &str) -> Result<(), AppError> 
     atomic_write_private(path, data.as_bytes())
 }
 
+/// 读 CC Switch 自己的 JSON 数据文件（账号表这类）。没有文件时是默认值；读不了或
+/// 解析不了时先改名保留，再按默认值继续。保留失败必须返回错误，调用方不能保存空表。
+pub(crate) fn load_json_or_set_aside<T: serde::de::DeserializeOwned + Default>(
+    path: &Path,
+    tag: &str,
+) -> Result<T, AppError> {
+    load_json_or_set_aside_with(path, tag, |from, to| fs::rename(from, to))
+}
+
+fn load_json_or_set_aside_with<T: serde::de::DeserializeOwned + Default>(
+    path: &Path,
+    tag: &str,
+    set_aside: impl FnOnce(&Path, &Path) -> std::io::Result<()>,
+) -> Result<T, AppError> {
+    let error = match fs::read(path) {
+        Ok(bytes) => match serde_json::from_slice(&bytes) {
+            Ok(value) => return Ok(value),
+            Err(error) => error.to_string(),
+        },
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(T::default()),
+        Err(error) => error.to_string(),
+    };
+    static ASIDE_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let mut aside = path.as_os_str().to_owned();
+    aside.push(format!(
+        ".unreadable-{}-{}",
+        chrono::Utc::now().timestamp_millis(),
+        ASIDE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    let aside = PathBuf::from(aside);
+    set_aside(path, &aside).map_err(|rename_error| {
+        AppError::Config(format!(
+            "[{tag}] Cannot preserve unreadable account file {} ({error}): {rename_error}; account writes are blocked",
+            path.display()
+        ))
+    })?;
+    log::warn!(
+        "[{tag}] {} 读不了（{error}），已改名为 {} 保留，按空表继续",
+        path.display(),
+        aside.display()
+    );
+    Ok(T::default())
+}
+
 /// 原子写入：写入临时文件后 rename 替换，避免半写状态
 pub fn atomic_write(path: &Path, data: &[u8]) -> Result<(), AppError> {
     atomic_write_with_unix_mode(path, data, None)
@@ -749,6 +793,26 @@ pub(crate) fn commit_staged(tmp: &Path, path: &Path) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unreadable_json_preservation_failure_does_not_return_an_empty_store() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("accounts.json");
+        let unreadable = b"{\"accounts\": {\"saved-login\":";
+        fs::write(&path, unreadable).unwrap();
+        let result =
+            load_json_or_set_aside_with::<serde_json::Value>(&path, "AccountTest", |_, _| {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "denied",
+                ))
+            });
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("account writes are blocked"));
+        assert_eq!(fs::read(&path).unwrap(), unreadable);
+    }
 
     /// 共享的环境变量互斥锁：改 `HOME` / `CC_SWITCH_TEST_HOME` 这类进程级
     /// 状态的测试都必须经它（配合 `#[serial_test::serial]`）。锁必须放在

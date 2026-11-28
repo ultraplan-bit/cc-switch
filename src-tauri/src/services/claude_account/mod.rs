@@ -56,6 +56,9 @@ struct AccountData {
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct StoreFile {
+    /// Failed preservation must remain attached to the loaded state until a successful reload.
+    #[serde(skip)]
+    load_error: Option<String>,
     #[serde(default)]
     version: u32,
     /// 账号 key → 本机数据
@@ -146,9 +149,13 @@ fn store_file_guard() -> std::sync::MutexGuard<'static, ()> {
 }
 
 fn persist_store(data_dir: &Path, store: &StoreFile) -> Result<(), AppError> {
+    if let Some(error) = &store.load_error {
+        return Err(AppError::Config(error.clone()));
+    }
     let snapshot = StoreFile {
         version: 1,
         accounts: store.accounts.clone(),
+        load_error: None,
     };
     let content = serde_json::to_vec_pretty(&snapshot)
         .map_err(|source| AppError::JsonSerialize { source })?;
@@ -156,18 +163,14 @@ fn persist_store(data_dir: &Path, store: &StoreFile) -> Result<(), AppError> {
 }
 
 fn load_store(data_dir: &Path) -> StoreFile {
-    let path = data_dir.join(STORE_FILENAME);
-    match std::fs::read(&path) {
-        Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_else(|error| {
-            log::warn!("[ClaudeAccount] 账号文件解析失败，按空表处理: {error}");
-            StoreFile::default()
-        }),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => StoreFile::default(),
-        Err(error) => {
-            log::warn!("[ClaudeAccount] 账号文件读取失败，按空表处理: {error}");
-            StoreFile::default()
-        }
-    }
+    crate::config::load_json_or_set_aside(&data_dir.join(STORE_FILENAME), "ClaudeAccount")
+        .unwrap_or_else(|error| {
+            log::error!("{error}");
+            StoreFile {
+                load_error: Some(error.to_string()),
+                ..StoreFile::default()
+            }
+        })
 }
 
 /// 同步一个账号目录的共享层（见 [`shared`]）。失败只记日志：共享不上不该挡住用号。

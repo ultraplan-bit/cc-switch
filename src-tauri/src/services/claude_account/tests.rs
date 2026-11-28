@@ -190,3 +190,71 @@ async fn plan_from_the_credentials_updates_the_account() {
     assert_eq!(accounts[0].plan.as_deref(), Some("pro"));
     assert_eq!(accounts[0].rate_limit_tier, None);
 }
+
+/// Finishing a login reloads the account file and saves it with the new account.
+/// If the file can't be read, that save must not destroy it: it holds the other
+/// accounts.
+#[tokio::test]
+async fn an_unreadable_account_file_is_kept_instead_of_overwritten() {
+    let tmp = tempfile::tempdir().unwrap();
+    let manager = ClaudeAccountManager::new(tmp.path().to_path_buf());
+    manager.insert_for_test("acc-a:", "a@example.com").await;
+    manager.insert_for_test("acc-b:", "b@example.com").await;
+    let store_path = tmp.path().join(STORE_FILENAME);
+    let mut unreadable = std::fs::read(&store_path).unwrap();
+    unreadable.extend_from_slice(b"\n}");
+    std::fs::write(&store_path, &unreadable).unwrap();
+
+    let local_id = layout::new_local_id();
+    let config_dir = layout::config_dir(tmp.path(), &local_id);
+    create_private_dir(&config_dir).unwrap();
+    std::fs::write(
+        config_dir.join(".claude.json"),
+        r#"{"oauthAccount":{"accountUuid":"acc-c","emailAddress":"c@example.com"}}"#,
+    )
+    .unwrap();
+    let account = manager
+        .finish_login(
+            local_id,
+            login::LoginExit {
+                success: true,
+                message: String::new(),
+            },
+        )
+        .await
+        .unwrap()
+        .expect("new account");
+
+    assert_eq!(account.label(), "c@example.com");
+    assert!(
+        crate::test_support::dir_holds_file_with(tmp.path(), &unreadable),
+        "the unreadable account file was overwritten"
+    );
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn failed_preservation_blocks_account_writes_after_file_unlock() {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    let dir = tempfile::tempdir().unwrap();
+    let manager = ClaudeAccountManager::new(dir.path().to_path_buf());
+    manager.insert_for_test("acc-a:", "a@example.com").await;
+    let path = dir.path().join(STORE_FILENAME);
+    let mut original = std::fs::read(&path).unwrap();
+    original.extend_from_slice(b"\n}");
+    std::fs::write(&path, &original).unwrap();
+    let held = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(1)
+        .open(&path)
+        .unwrap();
+
+    // remove_all reloads the disk store; it must carry the preservation error into persist.
+    let error = manager.remove_all().await.unwrap_err();
+    assert!(error.to_string().contains("account writes are blocked"));
+    drop(held);
+    let store = manager.store.lock().await;
+    assert!(manager.persist(&store).is_err());
+    assert_eq!(std::fs::read(&path).unwrap(), original);
+}

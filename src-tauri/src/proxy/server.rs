@@ -126,8 +126,12 @@ impl ProxyServer {
 
         log::info!("[{}] 代理服务器启动于 {local_addr}", log_srv::STARTED);
 
-        // 更新全局代理端口，用于系统代理检测
+        // 更新全局代理端口，用于系统代理检测；并登记活跃监听器以阻止内部请求回打自身代理
         crate::proxy::http_client::set_proxy_port(actual_port);
+        let active_listener_guard = crate::proxy::http_client::register_active_proxy_listener(
+            self.config.listen_address.clone(),
+            actual_port,
+        );
 
         // 保存关闭句柄
         *self.shutdown_tx.write().await = Some(shutdown_tx);
@@ -146,11 +150,12 @@ impl ProxyServer {
         // 开启 preserve_header_case 以捕获客户端请求头的原始大小写
         let state = self.state.clone();
         let handle = tokio::spawn(async move {
+            let _active_listener_guard = active_listener_guard;
             let mut shutdown_rx = shutdown_rx;
             loop {
                 tokio::select! {
                     result = listener.accept() => {
-                        let (stream, _remote_addr) = match result {
+                        let (stream, remote_addr) = match result {
                             Ok(v) => v,
                             Err(e) => {
                                 log::error!("[{SRV}] accept 失败: {e}", SRV = log_srv::ACCEPT_ERR);
@@ -161,6 +166,11 @@ impl ProxyServer {
 
                         let app = app.clone();
                         tokio::spawn(async move {
+                            let conn_addrs = browser_guard::ConnectionAddrs {
+                                remote: remote_addr,
+                                local: stream.local_addr().ok(),
+                            };
+
                             // Peek raw TCP bytes to capture original header casing
                             // before hyper parses (and lowercases) the header names.
                             let original_cases = {
@@ -191,6 +201,7 @@ impl ProxyServer {
 
                                     // Insert our own header case map alongside hyper's internal one
                                     parts.extensions.insert(cases);
+                                    parts.extensions.insert(conn_addrs);
 
                                     let body = axum::body::Body::new(body);
                                     let axum_req = http::Request::from_parts(parts, body);
@@ -652,6 +663,54 @@ mod tests {
         assert_eq!(desktop.status(), StatusCode::UNAUTHORIZED);
 
         proxy.stop().await.expect("stop test proxy");
+    }
+
+    /// 即使代理监听在 0.0.0.0，来自本机回环的 DNS 重绑定请求仍必须被 Host 规则拦截。
+    #[tokio::test]
+    async fn wildcard_listener_still_rejects_loopback_dns_rebinding() {
+        use http_body_util::{BodyExt, Empty};
+
+        let db = Arc::new(Database::memory().expect("memory database"));
+        let proxy = ProxyServer::new(
+            ProxyConfig {
+                listen_address: "0.0.0.0".to_string(),
+                listen_port: 0,
+                ..ProxyConfig::default()
+            },
+            db,
+            None,
+        );
+        let info = proxy.start().await.expect("start wildcard proxy");
+        let registration = ("0.0.0.0".to_string(), info.port);
+        assert!(crate::proxy::http_client::active_proxy_listeners().contains(&registration));
+        let stream = tokio::net::TcpStream::connect(("127.0.0.1", info.port))
+            .await
+            .unwrap();
+        let (mut sender, connection) = hyper::client::conn::http1::handshake(TokioIo::new(stream))
+            .await
+            .unwrap();
+        let connection = tokio::spawn(connection);
+
+        // A single sender guarantees these requests share one TCP connection.
+        for (host, path, expected) in [
+            ("rebind.evil.example", "/status", StatusCode::FORBIDDEN),
+            ("127.0.0.1", "/health", StatusCode::OK),
+            ("rebind.evil.example", "/status", StatusCode::FORBIDDEN),
+        ] {
+            let request = http::Request::builder()
+                .uri(path)
+                .header(header::HOST, format!("{host}:{}", info.port))
+                .body(Empty::<bytes::Bytes>::new())
+                .unwrap();
+            let response = sender.send_request(request).await.unwrap();
+            assert_eq!(response.status(), expected, "{host}{path}");
+            response.into_body().collect().await.unwrap();
+        }
+
+        drop(sender);
+        connection.abort();
+        proxy.stop().await.expect("stop wildcard proxy");
+        assert!(!crate::proxy::http_client::active_proxy_listeners().contains(&registration));
     }
 
     /// Regression for #3787: a provider accidentally pointing at the proxy must
