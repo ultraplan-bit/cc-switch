@@ -567,14 +567,11 @@ fn later_deployment_failure_rolls_back_connection_ignore_file_and_manifest() {
             name: "Instructions".into(),
             content: "original instructions".into(),
             description: None,
-            enabled: false,
+
             created_at: None,
             updated_at: None,
         };
-        state
-            .db
-            .save_prompt(&AppType::Claude, &instructions)
-            .unwrap();
+        state.db.save_prompt(&instructions).unwrap();
         let mut initial = profile(
             &state,
             &root,
@@ -603,10 +600,7 @@ fn later_deployment_failure_rolls_back_connection_ignore_file_and_manifest() {
         initial.payload = serde_json::to_string(&payload).unwrap();
         state.db.save_profile(&initial).unwrap();
         instructions.content = "updated instructions".into();
-        state
-            .db
-            .save_prompt(&AppType::Claude, &instructions)
-            .unwrap();
+        state.db.save_prompt(&instructions).unwrap();
 
         // Preflight may read this file, but replacement after the settings write must fail.
         let locked = fs::OpenOptions::new()

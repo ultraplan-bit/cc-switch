@@ -49,7 +49,8 @@ use std::sync::{Mutex, MutexGuard};
 
 /// 当前 Schema 版本号
 /// 当前格式唯一受支持；格式变化递增版本，不提供旧版本升级路径。
-pub(crate) const SCHEMA_VERSION: i32 = 30;
+/// 31 同时包含 Profile 用途和统一提示词结构，拒绝两个任务分支各自的 30 格式。
+pub(crate) const SCHEMA_VERSION: i32 = 31;
 
 /// 安全地序列化 JSON，避免 unwrap panic
 pub(crate) fn to_json_string<T: Serialize>(value: &T) -> Result<String, AppError> {
@@ -334,15 +335,6 @@ impl Database {
         let conn = lock_conn!(self.conn);
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM mcp_servers", [], |row| row.get(0))
-            .map_err(|e| AppError::Database(e.to_string()))?;
-        Ok(count == 0)
-    }
-
-    /// 检查提示词表是否为空
-    pub fn is_prompts_table_empty(&self) -> Result<bool, AppError> {
-        let conn = lock_conn!(self.conn);
-        let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM prompts", [], |row| row.get(0))
             .map_err(|e| AppError::Database(e.to_string()))?;
         Ok(count == 0)
     }

@@ -1,5 +1,4 @@
 import { useState, type ReactNode } from "react";
-import { useQueries } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
   BookOpen,
@@ -24,8 +23,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { HoverTip } from "@/components/ui/hover-tip";
-import { promptsApi, type AppId } from "@/lib/api";
-import { promptKeys } from "@/lib/query/prompts";
+import type { AppId } from "@/lib/api";
 import { SearchField } from "@/components/ui/search-field";
 import { cn } from "@/lib/utils";
 import { renderSegs } from "./promptUtils";
@@ -151,14 +149,22 @@ export function PromptPageFrame({
         }
       />
 
-      <div className="mt-0.5 flex h-14 shrink-0 items-center gap-3 px-6">
-        <PromptAppPicker
-          app={app}
-          apps={apps}
-          count={count}
-          disabled={appSwitchDisabled}
-          onAppChange={onAppChange}
-        />
+      <div className="px-6 pt-2 text-caption text-fg-2">
+        {t("prompts.library.title")} · {count}
+      </div>
+      <div className="mt-0.5 flex min-h-14 shrink-0 flex-wrap items-center gap-3 px-6 py-2">
+        {apps.includes(app) ? (
+          <PromptAppPicker
+            app={app}
+            apps={apps}
+            disabled={appSwitchDisabled}
+            onAppChange={onAppChange}
+          />
+        ) : (
+          <span className="text-body text-fg-2">
+            {t("common.noAvailableAgents")}
+          </span>
+        )}
         {segments}
         {target ? (
           <span
@@ -221,26 +227,16 @@ function PromptSearch({
 function PromptAppPicker({
   app,
   apps,
-  count,
   disabled,
   onAppChange,
 }: {
   app: AppId;
   apps: AppId[];
-  count: number;
   disabled: boolean;
   onAppChange: (app: AppId) => void;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  // 弹层里每个应用的条数：打开时才读，读的是和应用页页头入口同一份缓存
-  const counts = useQueries({
-    queries: apps.map((id) => ({
-      queryKey: promptKeys.list(id),
-      queryFn: () => promptsApi.getPrompts(id),
-      enabled: open,
-    })),
-  });
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -251,12 +247,10 @@ function PromptAppPicker({
           disabled={disabled}
           className="shrink-0 gap-2 pe-2 ps-2.5"
         >
-          <span className="sr-only">{t("prompts.appLabel")}</span>
+          <span className="sr-only">{t("prompts.library.targetAgent")}</span>
           <AppGlyph app={app} size={16} badgeClassName="bg-surface" />
           <span>{APP_DISPLAY_NAME[app]}</span>
-          <span className="text-caption font-normal tabular-nums text-fg-2">
-            {count}
-          </span>
+
           <ChevronDown
             aria-hidden="true"
             className="h-3.5 w-3.5 shrink-0 text-fg-2"
@@ -265,17 +259,11 @@ function PromptAppPicker({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        aria-label={t("prompts.appSelect")}
+        aria-label={t("prompts.library.targetAgent")}
         className="flex w-[300px] flex-col rounded-panel border-border bg-surface p-1 shadow-v7-md"
       >
-        {apps.map((id, index) => {
+        {apps.map((id) => {
           const selected = id === app;
-          const data = counts[index]?.data;
-          const n = selected
-            ? count
-            : data
-              ? Object.keys(data).length
-              : undefined;
           return (
             <button
               key={id}
@@ -294,14 +282,6 @@ function PromptAppPicker({
               <span className="min-w-0 flex-1 truncate">
                 {APP_DISPLAY_NAME[id]}
               </span>
-              <span
-                className={cn(
-                  "text-caption font-normal tabular-nums",
-                  n ? "text-fg-2" : "text-fg-3",
-                )}
-              >
-                {n ?? ""}
-              </span>
               <Check
                 aria-hidden="true"
                 strokeWidth={1.5}
@@ -315,8 +295,7 @@ function PromptAppPicker({
         })}
         <div aria-hidden="true" className="mx-1.5 my-1 h-px bg-border" />
         <p className="m-0 px-2.5 pb-1.5 pt-1 text-caption text-fg-2">
-          <span className="block">{t("prompts.appNoteDesktop")}</span>
-          <span className="block">{t("prompts.appNoteOpenclaw")}</span>
+          {t("prompts.library.targetHint")}
         </p>
       </PopoverContent>
     </Popover>

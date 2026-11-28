@@ -285,11 +285,12 @@ fn workbuddy_prompts_project_to_user_memory_md() {
     reset_test_fs();
     let state = create_test_state().unwrap();
     let prompt: Prompt = serde_json::from_value(json!({
-        "id": "p", "name": "Rules", "content": "be brief", "enabled": true
+        "id": "p", "name": "Rules", "content": "be brief"
     }))
     .unwrap();
     // 没登录 WorkBuddy 时写数据目录本身的 MEMORY.md（登录后按账号分目录，见 workbuddy_account）
-    PromptService::upsert_prompt(&state, AppType::WorkBuddy, "p", prompt).unwrap();
+    PromptService::upsert_prompt(&state, "p", prompt).unwrap();
+    PromptService::enable_prompt(&state, AppType::WorkBuddy, "p").unwrap();
     let path = ensure_test_home().join(".workbuddy/MEMORY.md");
     assert_eq!(fs::read_to_string(path).unwrap(), "be brief");
 }

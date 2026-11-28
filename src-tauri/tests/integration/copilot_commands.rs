@@ -195,10 +195,10 @@ fn copilot_mcp_skills_and_prompts_follow_the_native_home() {
     assert!(!servers["native"].apps.copilot);
 
     let prompt: Prompt = serde_json::from_value(
-        json!({"id":"global","name":"Global","content":"Prefer small commits.","enabled":false}),
+        json!({"id":"global","name":"Global","content":"Prefer small commits."}),
     )
     .unwrap();
-    PromptService::upsert_prompt(&state, AppType::Copilot, "global", prompt).unwrap();
+    PromptService::upsert_prompt(&state, "global", prompt).unwrap();
     PromptService::enable_prompt(&state, AppType::Copilot, "global").unwrap();
     assert_eq!(
         fs::read_to_string(home.path("copilot-instructions.md")).unwrap(),

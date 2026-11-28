@@ -35,7 +35,7 @@ Claude Code、Codex、Gemini CLI 等 AI 编程工具各有各的配置格式。�
 - **一个应用，十二个工具** — Claude Code、Claude Desktop、Codex、Gemini CLI、Grok Build、OpenCode、OpenClaw、Hermes、Pi、MiniMax Code、Kimi Code、Oh My Pi
 - **告别手动编辑** — 90+ 供应商预设，包括 AWS Bedrock、NVIDIA NIM 和社区中转服务
 - **直连、路由、聚合，按需选择** — 直连是工具直接连供应商；路由经本机转发，能转换接口格式、自动故障转移，让 Claude Code 用 GPT、Codex 用 Claude；聚合把多家供应商的模型放进 Claude Code 或 Codex 的同一个模型列表，选哪个模型，请求就发给哪一家
-- **MCP、Skills 与提示词集中管理** — MCP 和 Skills 添加一次，按工具勾选同步；提示词按工具分别维护
+- **MCP、Skills 与提示词集中管理** — 资源统一保存，按需分发；同一份 Markdown 提示词可被多个 Agent 和 Profile 引用，明确应用后才写入各自的指令文件
 - **会话读得懂** — 把各工具的会话记录整理成阅读页：每一轮做了什么、改了哪些文件、哪一步失败了，一目了然
 - **用量与额度一目了然** — 不开本地路由也能统计 Token 用量和花费；供应商卡片和托盘上直接显示订阅额度剩余量与账户余额
 - **跨平台** — 基于 Tauri 2 构建的原生桌面应用，支持 Windows、macOS 和 Linux
@@ -123,7 +123,7 @@ paru -S cc-switch-bin
 ### MCP、提示词、Skills、项目与会话
 
 - **MCP**：点击侧栏的“MCP” → 通过模板或自定义配置添加服务器（或“导入已有”）→ 切换各工具的同步开关
-- **提示词**：点击侧栏的“提示词” → 使用 Markdown 编辑器创建提示词 → 启用后写入该工具的提示词文件
+- **提示词**：点击侧栏的“提示词” → 保存共享 Markdown 文档 → 选择目标 Agent 并明确应用到对应指令文件
 - **Skills**：点击侧栏的“Skills” →“发现技能” → 搜索 skills.sh 或浏览 GitHub 仓库 → 选择目标 Agent，或选择“仅保存到资源库”。ZIP 导入与备份恢复沿用同一目标选择；存储位置为 `~/.agents/skills` 时，仍遵循 Agent 的原生自动发现规则。
 - **Profile 与项目**：Claude Code/Codex 页头下方提供固定 Profile 入口，也可从「Agent 管理 → 配置项目」提前准备。全局和项目 Profile 分别保存，跨用途通过复制生成独立方案；两者共用模型、行为、MCP、Skills 和指令编辑能力，API 地址、密钥和账号引用供应商连接库。项目方案支持从项目原生配置导入，并可部署到多个目录。保存后手动应用或部署，项目更新采用手动覆盖，不持续追踪或自动同步。Claude Desktop 支持全局连接引用与策略配置，模型路由保留原有管理能力。详见[项目级 Agent Profile](docs/project-agent-profiles-zh.md)。
 - **会话**：点击侧栏的“会话” → 浏览、搜索会话历史，打开阅读页，或恢复各工具的会话
@@ -160,13 +160,13 @@ paru -S cc-switch-bin
 - **聚合**：把多家供应商的模型放进同一个模型列表，按所选模型分发请求，见下方[聚合模式](#聚合模式)。
 - **会话**：浏览、搜索会话历史，打开阅读页，复制恢复命令继续对话（OpenClaw、Hermes 的会话暂不支持恢复）。Hermes 只显示最近 500 个会话。
 - **用量统计**：不开本地路由时，从各工具的本地会话记录统计；经本地路由的请求也会计入。
-- 在 Claude Desktop 页面打开的 MCP、Skills、提示词和会话面板，作用于 Claude Code。
+- MCP、Skills 和提示词使用共享资源库，分发目标按已安装且已启用的 Agent 呈现；Claude Desktop 的提示词默认目标和会话入口对应 Claude Code。
 
 ### 供应商管理
 
 - **90+ 供应商预设** — 选择预设、填入 Key 即可添加，也可以创建自定义配置。添加面板支持按中文名和域名搜索，同一家的不同套餐和地区合并成一行
 - **只改关键字段** — 切换时只替换请求地址、Key、模型等连接信息，插件、Hook、MCP、你自己加的设置和注释都原样保留；编辑器底部显示切换后配置文件的样子，CC Switch 第一次改写配置文件前会自动备份原文件
-- **项目** — Claude Code、Codex 支持原生项目导入、独立模型/行为/资源编辑、重命名、复制、改绑、解绑及删除 Profile；查看选择按 Agent 持久保存，返回编辑页外时保护未保存草稿。保存与手动部署分开，部署复用冲突处理及失败恢复；导入的原样未托管文件不因后来取消引用被删除。项目资源继续遵循原生作用域与继承规则，不自动同步。Claude Desktop 仅支持全局 Profile，其他 Agent 的项目适配尚未扩展。
+- **项目** — Claude Code、Codex 支持原生项目导入、独立模型/行为/资源编辑，以及方案的重命名、复制和删除；项目目录独立登记和移除。查看选择按 Agent 持久保存，返回编辑页外时保护未保存草稿。保存与手动部署分开，部署复用冲突处理及失败恢复；导入的原样未托管文件不因后来取消引用被删除。项目资源继续遵循原生作用域与继承规则，不自动同步。Claude Desktop 仅支持全局 Profile，其他 Agent 的项目适配尚未扩展。
 - **授权中心（Beta）** — 在侧栏的「授权中心」里登录多个 GitHub Copilot、ChatGPT、xAI（Grok）账号，把订阅当作供应商用在 Claude Code、Claude Desktop 和 Codex 中（除 Codex 的 OpenAI Official 外，都需要在路由模式下使用）。在官方客户端以外使用订阅可能违反厂商的服务条款，请自行评估风险
 - **Claude Desktop 接入第三方** — 可以直连 Anthropic 兼容端点；非 Claude 模型选“模型映射”，经本地路由把 Sonnet、Opus、Haiku 等档位映射到供应商的实际模型
 - **通用供应商** — 一份配置同步到 Claude Code、Codex 和 Gemini CLI
@@ -193,7 +193,7 @@ paru -S cc-switch-bin
 ### MCP、提示词与 Skills
 
 - **统一 MCP 面板** — 一处管理所有 MCP 服务器，按工具勾选同步（Claude Code、Codex、Gemini CLI、Grok Build、OpenCode、Hermes、Pi、MiniMax Code、Kimi Code、Oh My Pi），支持从各工具导入现有配置，支持 Deep Link 导入
-- **提示词** — 按工具分别管理的提示词库，使用 Markdown 编辑器；启用后写入该工具的提示词文件（CLAUDE.md / AGENTS.md / GEMINI.md），启用前会先把文件里原有的内容存回提示词库，不会丢失。Pi 还可以编辑 SYSTEM.md、APPEND_SYSTEM.md 和提示词模板
+- **提示词** — 跨 Agent 共享 Markdown 资源库，同一份内容可被多个 Profile 引用；保存只更新资源库，明确应用后才分发到对应文件：Claude Code 使用 `CLAUDE.md`，Codex 使用 `AGENTS.md`，Gemini 使用 `GEMINI.md`。目标文件修改需主动导入，覆盖前检查冲突。Pi 还可以编辑 SYSTEM.md、APPEND_SYSTEM.md 和提示词模板
 - **Skills** — 搜索 skills.sh，或从 GitHub 仓库、ZIP 文件一键安装；检查更新并一键全部更新；同步到各工具的方式可选自动、只用软链接或只用复制，存储位置可选 `~/.agents/skills`
 - 三个面板都支持搜索，MCP 和 Skills 还可以按工具一键全部启用或停用；供应商、MCP 和提示词都在内容区整页编辑，有未保存的修改时离开会先提醒
 

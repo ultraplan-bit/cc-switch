@@ -6,7 +6,6 @@ export interface Prompt {
   name: string;
   content: string;
   description?: string;
-  enabled: boolean;
   createdAt?: number;
   updatedAt?: number;
 }
@@ -15,6 +14,14 @@ export interface Prompt {
 export interface PromptFileLocation {
   path: string;
   displayPath: string;
+}
+
+export interface PromptTargetSnapshot extends PromptFileLocation {
+  content: string | null;
+  revision: string;
+  appliedPromptId: string | null;
+  managed: boolean;
+  matchesLibrary: boolean;
 }
 
 export type PiPromptFileKind = "system_override" | "system_append";
@@ -32,32 +39,45 @@ export interface PiPromptTemplate {
 }
 
 export const promptsApi = {
-  async getPrompts(app: AppId): Promise<Record<string, Prompt>> {
-    return await invoke("get_prompts", { app });
+  async getPrompts(): Promise<Record<string, Prompt>> {
+    return await invoke("get_prompts");
   },
 
-  async upsertPrompt(app: AppId, id: string, prompt: Prompt): Promise<void> {
-    return await invoke("upsert_prompt", { app, id, prompt });
+  async upsertPrompt(id: string, prompt: Prompt): Promise<void> {
+    return await invoke("upsert_prompt", { id, prompt });
   },
 
-  async deletePrompt(app: AppId, id: string): Promise<void> {
-    return await invoke("delete_prompt", { app, id });
+  async deletePrompt(id: string): Promise<void> {
+    return await invoke("delete_prompt", { id });
   },
 
-  async enablePrompt(app: AppId, id: string): Promise<void> {
-    return await invoke("enable_prompt", { app, id });
+  async getPromptTarget(app: AppId): Promise<PromptTargetSnapshot> {
+    return await invoke("get_prompt_target", { app });
+  },
+
+  async applyPrompt(
+    app: AppId,
+    id: string,
+    expectedRevision: string,
+    expectedContent: string,
+  ): Promise<PromptTargetSnapshot> {
+    return await invoke("apply_prompt", {
+      app,
+      id,
+      expectedRevision,
+      expectedContent,
+    });
+  },
+
+  async removePromptApplication(
+    app: AppId,
+    expectedRevision: string,
+  ): Promise<PromptTargetSnapshot> {
+    return await invoke("remove_prompt_application", { app, expectedRevision });
   },
 
   async importFromFile(app: AppId): Promise<string> {
     return await invoke("import_prompt_from_file", { app });
-  },
-
-  async getCurrentFileContent(app: AppId): Promise<string | null> {
-    return await invoke("get_current_prompt_file_content", { app });
-  },
-
-  async getFileLocation(app: AppId): Promise<PromptFileLocation> {
-    return await invoke("get_prompt_file_location", { app });
   },
 
   async getPiPromptFile(kind: PiPromptFileKind): Promise<PiPromptFileSnapshot> {

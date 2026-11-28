@@ -55,8 +55,8 @@ export function ProfileEditPanel({
   const skills = useInstalledSkills();
   const prompts = useQuery({
     networkMode: "always",
-    queryKey: promptKeys.list(scope),
-    queryFn: () => promptsApi.getPrompts(scope),
+    queryKey: promptKeys.list(),
+    queryFn: () => promptsApi.getPrompts(),
     enabled: scope !== "claude-desktop",
   });
   const required =

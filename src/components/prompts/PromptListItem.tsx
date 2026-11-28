@@ -17,35 +17,34 @@ import { promptMenuContentClass, promptMenuItemClass } from "./PromptPageFrame";
 interface PromptListItemProps {
   id: string;
   prompt: Prompt;
-  /** 启用中的那条：常驻浅底 +「已启用」徽标，按钮变「停用」 */
+  /** Last applied document for the selected target. */
   active: boolean;
+  pendingUpdate?: boolean;
   /** 第二行：说明（没有就用正文第一行）· 大小 · 更新时间 */
   detail: string;
   first: boolean;
   disabled?: boolean;
-  onToggle: (id: string, enabled: boolean) => void;
+  applyDisabled?: boolean;
+  onApply: (id: string) => void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
-  onCopyToApps?: (id: string) => void;
   onCopyContent?: (id: string) => void;
-  /** 删除不能用时的原因（启用中的不能删） */
-  deleteBlockedReason?: string;
 }
 
-/** 提示库的一行（高 60）：点行打开编辑抽屉，右边是启用 / 停用、编辑、⋯。 */
+/** Shared document row with explicit distribution action. */
 const PromptListItem: React.FC<PromptListItemProps> = ({
   id,
   prompt,
   active,
+  pendingUpdate,
   detail,
   first,
   disabled = false,
-  onToggle,
+  applyDisabled = false,
+  onApply,
   onEdit,
   onDelete,
-  onCopyToApps,
   onCopyContent,
-  deleteBlockedReason,
 }) => {
   const { t } = useTranslation();
 
@@ -74,7 +73,11 @@ const PromptListItem: React.FC<PromptListItemProps> = ({
           </span>
           {active ? (
             <span className="inline-flex h-[18px] shrink-0 items-center whitespace-nowrap rounded-full bg-success-soft px-[7px] text-badge text-success-text">
-              {t("prompts.enabled")}
+              {t(
+                pendingUpdate
+                  ? "prompts.library.pending"
+                  : "prompts.library.applied",
+              )}
             </span>
           ) : null}
         </div>
@@ -90,14 +93,14 @@ const PromptListItem: React.FC<PromptListItemProps> = ({
         type="button"
         variant="neutral"
         size="compact"
-        disabled={disabled}
-        aria-label={t(active ? "prompts.disableAria" : "prompts.enableAria", {
+        disabled={disabled || applyDisabled}
+        aria-label={t("prompts.library.applyAria", {
           name: prompt.name,
         })}
-        onClick={() => onToggle(id, !active)}
+        onClick={() => onApply(id)}
         className="min-w-14 shrink-0"
       >
-        {t(active ? "prompts.disable" : "prompts.enable")}
+        {t(active ? "prompts.library.reapply" : "prompts.library.distribute")}
       </Button>
 
       <div className="flex shrink-0 gap-1">
@@ -134,14 +137,6 @@ const PromptListItem: React.FC<PromptListItemProps> = ({
             align="end"
             className={cn(promptMenuContentClass, "w-[240px]")}
           >
-            {onCopyToApps ? (
-              <DropdownMenuItem
-                className={promptMenuItemClass}
-                onSelect={() => onCopyToApps(id)}
-              >
-                {t("prompts.copyToApps")}
-              </DropdownMenuItem>
-            ) : null}
             {onCopyContent ? (
               <DropdownMenuItem
                 className={promptMenuItemClass}
@@ -150,26 +145,17 @@ const PromptListItem: React.FC<PromptListItemProps> = ({
                 {t("prompts.copyContent")}
               </DropdownMenuItem>
             ) : null}
-            {onCopyToApps || onCopyContent ? (
+            {onCopyContent ? (
               <DropdownMenuSeparator className="mx-1.5 my-1 bg-border" />
             ) : null}
             <DropdownMenuItem
-              disabled={Boolean(deleteBlockedReason)}
               onSelect={() => onDelete(id)}
               className={cn(
                 promptMenuItemClass,
-                "flex-col items-start gap-0",
-                deleteBlockedReason
-                  ? "text-fg-3"
-                  : "text-danger-text focus:text-danger-text",
+                "text-danger-text focus:text-danger-text",
               )}
             >
               <span>{t("common.delete")}</span>
-              {deleteBlockedReason ? (
-                <span className="text-caption text-fg-2">
-                  {deleteBlockedReason}
-                </span>
-              ) : null}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

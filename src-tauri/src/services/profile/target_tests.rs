@@ -50,14 +50,9 @@ fn profile_targets_reject_wrong_destinations_without_writing_files() {
 
     let error = ProfileService::apply(&state, &project.id, ProfileScope::Claude).unwrap_err();
     assert!(error.to_string().contains("复制为全局方案"));
-    let error = ProjectProfileService::deploy(
-        &state,
-        &global.id,
-        ProfileScope::Claude,
-        &path,
-        None,
-    )
-    .unwrap_err();
+    let error =
+        ProjectProfileService::deploy(&state, &global.id, ProfileScope::Claude, &path, None)
+            .unwrap_err();
     assert!(error.to_string().contains("复制为项目方案"));
     for allow_missing_connection in [false, true] {
         for resolution in [

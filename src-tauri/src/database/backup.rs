@@ -143,6 +143,7 @@ fn read_sql_file_bounded(source_path: &Path, max_bytes: u64) -> Result<String, A
 
 /// Tables whose data rows are skipped when exporting for WebDAV sync.
 const SYNC_SKIP_TABLES: &[&str] = &[
+    "prompt_applications",
     "proxy_request_logs",
     "stream_check_logs",
     "provider_health",
@@ -155,6 +156,7 @@ const SYNC_SKIP_TABLES: &[&str] = &[
 /// Tables whose local data is preserved from the live database during WebDAV import.
 /// Excludes ephemeral tables like provider_health that can safely rebuild at runtime.
 const SYNC_PRESERVE_TABLES: &[&str] = &[
+    "prompt_applications",
     "proxy_request_logs",
     "stream_check_logs",
     "proxy_live_backup",
@@ -871,6 +873,7 @@ impl Database {
             "provider_endpoints",
             "mcp_servers",
             "prompts",
+            "prompt_applications",
             "skills",
             "skill_repos",
             "settings",

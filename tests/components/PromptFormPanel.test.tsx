@@ -4,157 +4,133 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-
 import PromptFormPanel from "@/components/prompts/PromptFormPanel";
 import type { Prompt } from "@/lib/api";
-
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (key: string, options?: Record<string, unknown>) =>
-      options?.file ? `${key}:${String(options.file)}` : key,
-  }),
+  useTranslation: () => ({ t: (key: string) => key }),
 }));
-
-const active: Prompt = {
+const prompt: Prompt = {
   id: "team",
-  name: "Team rules",
+  name: "Team",
   content: "# Rules",
-  enabled: true,
   createdAt: 1,
-  updatedAt: 1,
 };
-
 describe("PromptFormPanel", () => {
+  it("does not reset a draft when saved query data refreshes", () => {
+    const onSave = vi.fn();
+    const onClose = vi.fn();
+    const view = render(
+      <PromptFormPanel
+        editingId="team"
+        initialData={prompt}
+        onSave={onSave}
+        onClose={onClose}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("prompts.content"), {
+      target: { value: "draft" },
+    });
+    view.rerender(
+      <PromptFormPanel
+        editingId="team"
+        initialData={{ ...prompt, content: "background update" }}
+        onSave={onSave}
+        onClose={onClose}
+      />,
+    );
+    expect(screen.getByLabelText("prompts.content")).toHaveValue("draft");
+  });
+  it("confirms before closing a dirty draft and keeps it when cancelled", async () => {
+    const onClose = vi.fn();
+    render(
+      <PromptFormPanel
+        editingId="team"
+        initialData={prompt}
+        onSave={vi.fn()}
+        onClose={onClose}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("prompts.content"), {
+      target: { value: "draft" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "common.back" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "prompts.library.discardTitle",
+    });
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: "prompts.library.keepEditing",
+      }),
+    );
+    expect(screen.getByLabelText("prompts.content")).toHaveValue("draft");
+    fireEvent.click(screen.getByRole("button", { name: "common.cancel" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "prompts.library.discard" }),
+    );
+    expect(onClose).toHaveBeenCalledOnce();
+  });
   it("submits once and refuses to close while saving", async () => {
-    let resolveSave!: () => void;
+    let resolve!: () => void;
     const onSave = vi.fn(
       () =>
-        new Promise<void>((resolve) => {
-          resolveSave = resolve;
+        new Promise<void>((done) => {
+          resolve = done;
         }),
     );
     const onClose = vi.fn();
     render(
-      <PromptFormPanel appId="claude" onSave={onSave} onClose={onClose} />,
-    );
-
-    const nameInput = screen.getByLabelText(/prompts.name/);
-    fireEvent.change(nameInput, { target: { value: "My Prompt" } });
-    const saveButton = screen.getByRole("button", {
-      name: "prompts.addSubmit",
-    });
-    fireEvent.click(saveButton);
-    fireEvent.click(saveButton);
-    fireEvent.click(screen.getByRole("button", { name: "common.cancel" }));
-
-    expect(onSave).toHaveBeenCalledTimes(1);
-    expect(onClose).not.toHaveBeenCalled();
-    expect(nameInput).toBeDisabled();
-    expect(screen.getByLabelText("prompts.content")).toBeDisabled();
-
-    await act(async () => {
-      resolveSave();
-      await Promise.resolve();
-    });
-    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-  });
-
-  it("stays open when the parent write lock rejects a save", async () => {
-    const onSave = vi.fn().mockResolvedValue(false);
-    const onClose = vi.fn();
-    render(<PromptFormPanel appId="codex" onSave={onSave} onClose={onClose} />);
-
-    fireEvent.change(screen.getByLabelText(/prompts.name/), {
-      target: { value: "Codex Prompt" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "prompts.addSubmit" }));
-
-    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
-    expect(onClose).not.toHaveBeenCalled();
-    expect(screen.getByLabelText(/prompts.name/)).toBeEnabled();
-  });
-
-  it("explains a missing name only after a save attempt", () => {
-    const onSave = vi.fn();
-    render(
-      <PromptFormPanel appId="hermes" onSave={onSave} onClose={vi.fn()} />,
-    );
-
-    expect(
-      screen.queryByText("prompts.nameRequiredHermes"),
-    ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "prompts.addSubmit" }));
-
-    expect(screen.getByText("prompts.nameRequiredHermes")).toBeInTheDocument();
-    expect(screen.getByLabelText(/prompts.name/)).toHaveAttribute(
-      "aria-invalid",
-      "true",
-    );
-    expect(onSave).not.toHaveBeenCalled();
-  });
-
-  it("names the overwritten file on the save button of the enabled prompt", () => {
-    render(
       <PromptFormPanel
-        appId="hermes"
+        initialData={prompt}
         editingId="team"
-        initialData={active}
-        onSave={vi.fn()}
-        onClose={vi.fn()}
+        onSave={onSave}
+        onClose={onClose}
       />,
     );
-
-    expect(
-      screen.getByRole("button", { name: "prompts.saveAndOverwrite:SOUL.md" }),
-    ).toBeInTheDocument();
-    // 删除只在列表里，编辑页底栏只有取消和保存
-    expect(
-      screen.queryByRole("button", { name: "common.delete" }),
-    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    fireEvent.click(screen.getByRole("button", { name: "common.cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "common.back" }));
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(onClose).not.toHaveBeenCalled();
+    await act(async () => {
+      resolve();
+    });
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
   });
-
-  it("keeps Pi content as typed and writes AGENTS.md for the enabled prompt", async () => {
+  it("preserves exact Markdown and saves no application state", async () => {
     const onSave = vi.fn().mockResolvedValue(true);
     render(
       <PromptFormPanel
-        appId="pi"
+        initialData={prompt}
         editingId="team"
-        initialData={active}
         onSave={onSave}
         onClose={vi.fn()}
       />,
     );
-
     fireEvent.change(screen.getByLabelText("prompts.content"), {
-      target: { value: "  spaced\n" },
+      target: { value: "  # Rules\n\n" },
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: "prompts.saveAndWritePi" }),
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ content: "  # Rules\n\n" }),
     );
-
-    await waitFor(() =>
-      expect(onSave).toHaveBeenCalledWith(
-        "team",
-        expect.objectContaining({ content: "  spaced\n", enabled: true }),
-      ),
-    );
+    expect(onSave.mock.calls[0][1]).not.toHaveProperty("enabled");
   });
-
-  it("refuses MiniMax Code prompts over 32 KB", () => {
-    const onSave = vi.fn();
-    render(<PromptFormPanel appId="mcode" onSave={onSave} onClose={vi.fn()} />);
-
+  it("retains the form after save rejection and validates the name", async () => {
+    const onSave = vi.fn().mockResolvedValue(false);
+    const onClose = vi.fn();
+    render(<PromptFormPanel onSave={onSave} onClose={onClose} />);
+    fireEvent.click(screen.getByRole("button", { name: "prompts.addSubmit" }));
+    expect(screen.getByText("prompts.nameRequired")).toBeVisible();
     fireEvent.change(screen.getByLabelText(/prompts.name/), {
-      target: { value: "Big" },
-    });
-    fireEvent.change(screen.getByLabelText("prompts.content"), {
-      target: { value: "a".repeat(32 * 1024 + 1) },
+      target: { value: "New" },
     });
     fireEvent.click(screen.getByRole("button", { name: "prompts.addSubmit" }));
-
-    expect(screen.getByText("prompts.mcodeTooLarge")).toBeInTheDocument();
-    expect(onSave).not.toHaveBeenCalled();
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

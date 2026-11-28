@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use crate::database::Database;
 use crate::error::AppError;
 use crate::services::sync_protocol::run_with_sync_lock;
-use crate::services::{model_pricing, PromptService, ProviderService};
+use crate::services::{model_pricing, ProviderService};
 use crate::settings::{self, WebDavSyncStatus};
 use crate::store::AppState;
 
@@ -206,9 +206,7 @@ pub(crate) fn run_post_import_sync(app_state: &AppState) -> Result<(), AppError>
     if let Err(error) = ProviderService::sync_current_to_live(app_state) {
         failures.push(format!("live configuration: {error}"));
     }
-    if let Err(error) = PromptService::sync_all_to_live(app_state) {
-        failures.push(format!("prompts: {error}"));
-    }
+    // Restoring the shared prompt library never deploys instructions to local Agents.
     if let Err(error) = model_pricing::sync_local_model_pricing(&app_state.db) {
         failures.push(format!("model pricing: {error}"));
     }

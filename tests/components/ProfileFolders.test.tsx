@@ -1,6 +1,7 @@
 import {
   act,
   fireEvent,
+  renderHook,
   screen,
   waitFor,
   within,
@@ -9,6 +10,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProfilesPage } from "@/components/profiles/ProfilesPage";
 import { ProfileEditPanel } from "@/components/profiles/ProfileEditPanel";
+import { useProfileLocation } from "@/components/profiles/useProfileLocation";
 import type {
   Profile,
   ProfileConfig,
@@ -107,7 +109,7 @@ vi.mock("@/lib/api", async () => ({
     ) => mocks.invoke("add_provider", { provider, app, addToLive, editorSave }),
   },
   promptsApi: {
-    getPrompts: (app: string) => mocks.invoke("get_prompts", { app }),
+    getPrompts: () => mocks.invoke("get_prompts"),
   },
 }));
 vi.mock("@/lib/toast", () => ({
@@ -347,7 +349,6 @@ beforeEach(() => {
             id: "prompt-a",
             name: "Instructions A",
             content: "Project instruction",
-            enabled: true,
           },
         });
       case "apply_profile":
@@ -871,6 +872,75 @@ describe("ProfilesPage", () => {
 });
 
 describe("direct profile configuration editing", () => {
+  it("uses the remembered connection directory only while the project registry is loading", () => {
+    localStorage.setItem(
+      "cc-switch:profiles:location:v2",
+      JSON.stringify({ claude: { mode: "global", path: "/removed" } }),
+    );
+    const { result, rerender } = renderHook(
+      ({
+        registered,
+      }: {
+        registered: ProfilesResponse["projects"] | undefined;
+      }) => useProfileLocation("claude", registered),
+      {
+        initialProps: { registered: undefined } as {
+          registered: ProfilesResponse["projects"] | undefined;
+        },
+      },
+    );
+    expect(result.current.selectedProjectPath).toBe("/removed");
+    rerender({ registered: [] });
+    expect(result.current.selectedProjectPath).toBeUndefined();
+    rerender({
+      registered: [{ path: "/available", available: true, deployed: {} }],
+    });
+    expect(result.current.selectedProjectPath).toBe("/available");
+  });
+
+  it.each([
+    ["claude", "global"],
+    ["codex", "project"],
+  ] as const)(
+    "references the shared prompt library from a %s %s profile without distributing it",
+    async (scope, target) => {
+      const item = profile(scope, target);
+      item.payload.prompts[scope] = "prompt-a";
+      profiles = [item];
+      renderWithQueryClient(
+        <ProfileEditPanel profile={item} scope={scope} onClose={vi.fn()} />,
+      );
+      fireEvent.click(
+        await screen.findByRole("tab", {
+          name: "profiles.editor.instructionsTab",
+        }),
+      );
+      expect(screen.getByLabelText("profiles.editor.prompt")).toHaveValue(
+        "prompt-a",
+      );
+      expect(screen.getByText("Project instruction")).toBeVisible();
+      expect(
+        mocks.invoke.mock.calls.filter(
+          ([command]) => command === "get_prompts",
+        ),
+      ).toEqual([["get_prompts"]]);
+      fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+      await waitFor(() =>
+        expect(mocks.saveConfig).toHaveBeenCalledWith(
+          expect.objectContaining({
+            scope,
+            config: expect.objectContaining({ promptId: "prompt-a" }),
+          }),
+        ),
+      );
+      const commands = mocks.invoke.mock.calls.map(([command]) => command);
+      expect(commands).not.toContain("apply_prompt");
+      expect(commands).not.toContain("remove_prompt_application");
+      expect(mocks.apply).not.toHaveBeenCalled();
+      expect(mocks.deploy).not.toHaveBeenCalled();
+    },
+  );
+
   it("adds a project provider without writing global configuration or losing the profile draft", async () => {
     profiles = [profile("claude", "project")];
     availableProviders = {};

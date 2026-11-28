@@ -7,7 +7,7 @@
 //! - 供应商：`ProviderService::switch_connection_only`（内建代理接管热切换与接管下禁切官方）
 //! - MCP：`McpService::toggle_app`（改标志 + 单 server 物化）
 //! - Skills：`SkillService::toggle_app`（改标志 + 单 skill 物化）
-//! - Prompt：`PromptService::enable_prompt`（互斥激活 + 原子写 live）
+//! - Prompt：`PromptService::enable_prompt`（读取共享模板并显式应用到当前 Agent）
 //!
 //! apply 为 best-effort：单项失败收集为 warning 继续，不整体回滚。
 
@@ -21,7 +21,6 @@ use serde::{Deserialize, Serialize};
 use crate::app_config::AppType;
 use crate::database::{Profile, ProfileTarget};
 use crate::error::AppError;
-use crate::prompt::Prompt;
 use crate::services::{McpService, PromptService, ProviderService, SkillService};
 use crate::store::AppState;
 
@@ -947,14 +946,26 @@ impl ProfileService {
                         .collect(),
                 );
             }
-            let prompts = state.db.get_prompts(app)?;
+            let prompts = state.db.get_prompts()?;
             if let Some(slot) = payload.prompts.get_mut(app) {
-                *slot = Some(
-                    prompts
-                        .values()
-                        .find(|p| p.enabled)
-                        .map_or_else(|| NO_ACTIVE_PROMPT.to_string(), |p| p.id.clone()),
-                );
+                let target = PromptService::get_target(state, app.clone())?;
+                // Do not snapshot a different library revision than the file in use.
+                *slot = Some(if target.managed && target.matches_library {
+                    target
+                        .applied_prompt_id
+                        .unwrap_or_else(|| NO_ACTIVE_PROMPT.into())
+                } else if target
+                    .content
+                    .as_ref()
+                    .is_some_and(|content| !content.is_empty())
+                {
+                    return Err(AppError::Conflict(format!(
+                        "{} 的当前指令尚未对应共享提示词库；请先在提示词页主动导入并应用，再创建或更新当前配置快照",
+                        target.display_path
+                    )));
+                } else {
+                    NO_ACTIVE_PROMPT.into()
+                });
             }
             let names = payload.resource_names.get_mut(app).expect("validated app");
             remember_resource_names(
@@ -1359,7 +1370,7 @@ impl ProfileService {
         }
         let servers = state.db.get_mcp_server_rows()?;
         let skills = state.db.get_all_installed_skills()?;
-        let prompts = state.db.get_prompts(app)?;
+        let prompts = state.db.get_prompts()?;
         for (ids, old_ids, known) in [
             (
                 &config.mcp_ids,
@@ -1718,21 +1729,18 @@ impl ProfileService {
                 }
             }
 
-            // 4. Prompt（None = 不动；NO_ACTIVE_PROMPT = 停用当前启用项；
-            //    已激活则幂等跳过，避免无谓的文件写与备份）
+            // 4. Prompt（None = 不动；NO_ACTIVE_PROMPT = 撤下未被外部修改的托管文件）。
+            // Explicit reapplication resolves the current shared definition.
             if let Some(Some(target_prompt)) = payload.prompts.get(app) {
-                let prompts = state.db.get_prompts(app)?;
+                let prompts = state.db.get_prompts()?;
                 match prompts.get(target_prompt) {
                     None if target_prompt == NO_ACTIVE_PROMPT => {
-                        if prompts.values().any(|p| p.enabled) {
-                            Self::disable_active_prompts(state, app, warnings);
-                        }
+                        Self::disable_active_prompts(state, app, warnings);
                     }
                     None => warnings.push(format!(
                         "[{app_str}] prompt '{}' no longer exists, skipped",
                         resource_label(target_prompt, names.prompts.get(target_prompt))
                     )),
-                    Some(p) if p.enabled => {}
                     Some(_) => {
                         if let Err(e) =
                             PromptService::enable_prompt(state, app.clone(), target_prompt)
@@ -2024,27 +2032,11 @@ impl ProfileService {
         Ok(())
     }
 
-    /// 停用应用当前启用的提示词（项目快照里该应用没有启用项时）。
-    ///
-    /// 先经 `PromptService::get_prompts` 把 live 文件里的外部编辑回填进启用项，
-    /// 再走与界面「停用」相同的 `upsert_prompt(enabled=false)`：停掉最后一条启用项时清空文件。
+    /// 撤下本工具写入且未被外部修改的全局指令；不回填共享模板。
     fn disable_active_prompts(state: &AppState, app: &AppType, warnings: &mut Vec<String>) {
         let app_str = app.as_str();
-        let prompts = match PromptService::get_prompts(state, app.clone()) {
-            Ok(prompts) => prompts,
-            Err(e) => {
-                warnings.push(format!("[{app_str}] read prompts failed: {e}"));
-                return;
-            }
-        };
-        for (id, prompt) in prompts.into_iter().filter(|(_, p)| p.enabled) {
-            let disabled = Prompt {
-                enabled: false,
-                ..prompt
-            };
-            if let Err(e) = PromptService::upsert_prompt(state, app.clone(), &id, disabled) {
-                warnings.push(format!("[{app_str}] disable prompt '{id}' failed: {e}"));
-            }
+        if let Err(error) = PromptService::disable_prompt(state, app.clone()) {
+            warnings.push(format!("[{app_str}] remove applied prompt failed: {error}"));
         }
     }
 }

@@ -95,7 +95,8 @@ export function useProfileLocation(
 
   return {
     location,
-    selectedProject,
+    selectedProjectPath:
+      selectedProject?.path ?? (projects === undefined ? own?.path : undefined),
     setMode: (mode: "global" | "project") => update({ ...own, mode }),
     selectProject: (path: string) => update({ mode: "project", path }),
   };

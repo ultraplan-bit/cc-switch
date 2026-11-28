@@ -35,7 +35,7 @@ Claude Code, Codex ve Gemini CLI gibi yapay zeka kodlama araçlarının her biri
 - **Tek Uygulama, On İki Araç** — Claude Code, Claude Desktop, Codex, Gemini CLI, Grok Build, OpenCode, OpenClaw, Hermes, Pi, MiniMax Code, Kimi Code ve Oh My Pi
 - **Elle Düzenlemeye Son** — AWS Bedrock, NVIDIA NIM ve topluluk aktarma hizmetleri dahil 90'dan fazla sağlayıcı hazır ayarı
 - **Doğrudan, Yönlendirme veya Birleştirme — Seçim Sizin** — Doğrudan, aracı doğrudan sağlayıcıya bağlar; Yönlendirme, istekleri makineniz üzerinden iletir, API biçimlerini dönüştürür ve otomatik yük devri yapar; böylece Claude Code'da GPT'yi, Codex'te Claude'u kullanabilirsiniz; Birleştirme ise birden fazla sağlayıcının modellerini Claude Code veya Codex'te tek bir model listesine koyar ve her istek seçtiğiniz modelin sağlayıcısına gider
-- **Merkezi MCP, Skills ve İstemler** — MCP sunucularını ve Skills'i bir kez ekleyin, ardından hangi araçlarla eşitleneceğini seçin; istemler her araç için ayrı ayrı tutulur
+- **Merkezi MCP, Skills ve İstemler** — Kaynakları bir kez kaydedip gereken hedeflere uygulayın; aynı paylaşılan Markdown belgesi birden fazla Agent ve Profile tarafından kullanılabilir
 - **Okunabilir Oturumlar** — Her aracın oturum günlüklerini bir okuma görünümüne dönüştürür: her turun ne yaptığı, hangi dosyaların değiştiği ve hangi adımın başarısız olduğu tek bakışta görünür
 - **Kullanım ve Kotalar Bir Bakışta** — Yerel yönlendirme olmadan bile token kullanımını ve harcamayı izleyin; kalan abonelik kotası ve hesap bakiyeleri doğrudan sağlayıcı kartlarında ve tepsi menüsünde görünür
 - **Çapraz Platform** — Tauri 2 ile geliştirilmiş, Windows, macOS ve Linux için yerel masaüstü uygulaması
@@ -123,7 +123,7 @@ En son Linux derlemesini [Releases](../../releases) sayfasından indirin:
 ### MCP, İstemler, Skills, Projeler ve Oturumlar
 
 - **MCP**: Kenar çubuğunda "MCP"ye tıklayın → Şablonlarla veya özel yapılandırmayla sunucu ekleyin (veya "Mevcut Olanı İçe Aktar") → Her araç için eşitlemeyi açıp kapatın
-- **İstemler**: Kenar çubuğunda "İstemler"e tıklayın → Markdown düzenleyiciyle istem oluşturun → Bir istemi etkinleştirerek o aracın istem dosyasına yazın
+- **İstemler**: Kenar çubuğundan İstemler'i açın → paylaşılan Markdown belgesini kaydedin → hedef Agent'ları seçip açıkça uygulayın
 - **Skills**: Kenar çubuğunda "Skills"e tıklayın → "Becerileri Keşfedin" → skills.sh'de arama yapın veya GitHub depolarına göz atın → Desteklenen araçlara tek tıkla kurun
 - **Projeler**: Önce "Ayarlar → Genel"de "Proje değiştiriciyi göster"i açın, ardından Claude Code, Claude Desktop veya Codex sayfasında üstteki proje değiştiriciyi açın → Mevcut yapılandırmayı kaydetmek için "Yeni proje"; daha sonra tüm kurulumu bir anda değiştirmek için değiştiriciden seçin
 - **Oturumlar**: Kenar çubuğunda "Oturumlar"a tıklayın → Konuşma geçmişine göz atın ve arayın, okuma görünümünü açın veya her aracın oturumlarını geri yükleyin
@@ -192,7 +192,7 @@ Sağlayıcı yönetimi, MCP/İstemler/Skills, yerel yönlendirme ve yük devri v
 ### MCP, İstemler ve Skills
 
 - **Birleşik MCP paneli** — Tüm MCP sunucularını tek yerden yönetin, her birinin hangi araçlarla eşitleneceğini seçin (Claude Code, Codex, Gemini CLI, Grok Build, OpenCode, Hermes, Pi, MiniMax Code, Kimi Code, Oh My Pi), her aracın mevcut yapılandırmalarını içe aktarın ve Deep Link ile içe aktarın
-- **İstemler** — Markdown düzenleyicili, araç başına bir istem kitaplığı; bir istemi etkinleştirmek onu aracın istem dosyasına (CLAUDE.md / AGENTS.md / GEMINI.md) yazar ve dosyanın mevcut içeriği önce kitaplığa kaydedilir, böylece hiçbir şey kaybolmaz. Pi ayrıca SYSTEM.md, APPEND_SYSTEM.md ve istem şablonlarını düzenleyebilir
+- **İstemler** — Paylaşılan Markdown kitaplığı. Kaydetmek yalnızca kitaplığı değiştirir; uygulama işlemi Claude Code için `CLAUDE.md`, Codex için `AGENTS.md`, Gemini için `GEMINI.md` yazar. Dış değişiklikler kullanıcı tarafından içe aktarılır, üzerine yazmadan önce çakışmalar denetlenir. Pi'nin SYSTEM.md, APPEND_SYSTEM.md ve yerel istem şablonu düzenleyicileri korunur
 - **Skills** — skills.sh'de arayın veya GitHub depolarından ya da ZIP dosyalarından tek tıkla kurun; güncellemeleri denetleyin ve tümünü tek tıkla güncelleyin; her araca otomatik olarak, yalnızca sembolik bağlarla veya yalnızca kopyalarla eşitleyin; isteğe bağlı olarak `~/.agents/skills` içinde saklayabilirsiniz
 - Her üç panel de aramayı destekler; MCP ve Skills ayrıca araç başına tek seferde etkinleştirilip devre dışı bırakılabilir; sağlayıcılar, MCP sunucuları ve istemler içerik alanında tam sayfa düzenlenir ve kaydedilmemiş değişikliklerle ayrılmadan önce uyarılırsınız
 

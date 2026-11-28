@@ -133,26 +133,23 @@ pub fn create_test_state_with_config(
             db.save_mcp_server(server)?;
         }
     }
-    for (app, prompts, snippet) in [
+    for prompt in config.prompts.values() {
+        db.save_prompt(prompt)?;
+    }
+    for (app, snippet) in [
         (
             cc_switch_lib::AppType::Claude,
-            &config.prompts.claude.prompts,
             &config.common_config_snippets.claude,
         ),
         (
             cc_switch_lib::AppType::Codex,
-            &config.prompts.codex.prompts,
             &config.common_config_snippets.codex,
         ),
         (
             cc_switch_lib::AppType::Gemini,
-            &config.prompts.gemini.prompts,
             &config.common_config_snippets.gemini,
         ),
     ] {
-        for prompt in prompts.values() {
-            db.save_prompt(&app, prompt)?;
-        }
         db.set_config_snippet(&app, snippet.clone())?;
     }
     for repo in &config.skills.repos {

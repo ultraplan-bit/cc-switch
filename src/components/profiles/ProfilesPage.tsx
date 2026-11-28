@@ -87,7 +87,7 @@ function ProfilesPageContent({
   const addProjectMutation = useAddProfileProjectMutation();
   const removeProjectMutation = useRemoveProfileProjectMutation();
   const deployment = useProjectProfileDeployment(scope, !deploymentDisabled);
-  const { location, selectedProject, setMode, selectProject } =
+  const { location, selectedProjectPath, setMode, selectProject } =
     useProfileLocation(scope, data?.projects, {
       projectOnly,
       initialProjectPath,
@@ -218,7 +218,7 @@ function ProfilesPageContent({
               setCreating({
                 scope,
                 target: location.mode,
-                projectPath: project?.path,
+                projectPath: selectedProjectPath,
               })
             }
           >
@@ -394,7 +394,7 @@ function ProfilesPageContent({
                       scope,
                       projectPath:
                         copied.target === "project"
-                          ? selectedProject?.path
+                          ? selectedProjectPath
                           : undefined,
                     });
                   }}

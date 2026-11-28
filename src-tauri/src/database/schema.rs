@@ -115,12 +115,23 @@ impl Database {
         )
         .map_err(|e| AppError::Database(e.to_string()))?;
 
-        // 4. Prompts 表
-        conn.execute("CREATE TABLE IF NOT EXISTS prompts (
-            id TEXT NOT NULL, app_type TEXT NOT NULL, name TEXT NOT NULL, content TEXT NOT NULL,
-            description TEXT, enabled BOOLEAN NOT NULL DEFAULT 1, created_at INTEGER, updated_at INTEGER,
-            PRIMARY KEY (id, app_type)
-        )", []).map_err(|e| AppError::Database(e.to_string()))?;
+        // 4. Shared prompt documents, independent from their application targets.
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS prompts (
+            id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, content TEXT NOT NULL,
+            description TEXT, created_at INTEGER, updated_at INTEGER
+        )",
+            [],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS prompt_applications (
+            app_type TEXT PRIMARY KEY NOT NULL, prompt_id TEXT NOT NULL,
+            path TEXT NOT NULL, content_hash TEXT NOT NULL
+        )",
+            [],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
 
         // 5. Skills 表
         conn.execute(
@@ -1857,6 +1868,47 @@ impl Database {
             return Err(AppError::Database(
                 "数据库含不支持的 Profile 用途；原数据库保持不变".into(),
             ));
+        }
+        // The version alone must not admit an old per-Agent prompt table whose
+        // version marker was changed by hand. Validate without repairing it.
+        for (table, expected) in [
+            (
+                "prompts",
+                &[
+                    "id",
+                    "name",
+                    "content",
+                    "description",
+                    "created_at",
+                    "updated_at",
+                ][..],
+            ),
+            (
+                "prompt_applications",
+                &["app_type", "prompt_id", "path", "content_hash"][..],
+            ),
+        ] {
+            let mut statement = conn
+                .prepare(&format!("PRAGMA table_info(\"{table}\")"))
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            let columns = statement
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(1)?, row.get::<_, i64>(5)?))
+                })
+                .map_err(|e| AppError::Database(e.to_string()))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            if columns.len() != expected.len()
+                || columns.iter().zip(expected).enumerate().any(
+                    |(index, ((name, primary_key), expected))| {
+                        name.as_str() != *expected || *primary_key != i64::from(index == 0)
+                    },
+                )
+            {
+                return Err(AppError::Database(format!(
+                    "不支持 {table} 表结构；当前仅支持统一提示词格式，不会转换或修改此数据库。"
+                )));
+            }
         }
         Ok(())
     }

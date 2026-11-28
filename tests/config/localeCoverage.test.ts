@@ -92,9 +92,7 @@ describe("Turkish locale", () => {
     expect(
       translations.get("settings.manualUninstallBunLauncherHint"),
     ).toContain("OpenClaw Bun launcher");
-    expect(translations.get("prompts.contentPlaceholderHermes")).toMatch(
-      /^# SOUL\.md\n/,
-    );
+    expect(translations.get("prompts.library.help")).toContain("Markdown");
   });
 });
 
@@ -149,9 +147,7 @@ describe("Korean locale", () => {
     expect(
       translations.get("settings.manualUninstallBunLauncherHint"),
     ).toContain("OpenClaw Bun launcher");
-    expect(translations.get("prompts.contentPlaceholderHermes")).toMatch(
-      /^# SOUL\.md\n/,
-    );
+    expect(translations.get("prompts.library.help")).toContain("Markdown");
   });
 });
 

@@ -1,102 +1,99 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { useIsMutating } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { BookOpen } from "lucide-react";
-import { AppPageHeader } from "@/components/shell/AppPageHeader";
 import { toast } from "@/lib/toast";
-import { APP_DISPLAY_NAME } from "@/components/shell/AppGlyph";
-import { promptsApi, type AppId, type Prompt } from "@/lib/api";
+import { settingsApi, type AppId, type Prompt } from "@/lib/api";
 import { usePromptActions } from "@/hooks/usePromptActions";
-import { useDelayedFlag } from "@/hooks/useDelayedFlag";
 import { useTauriEvent } from "@/hooks/useTauriEvent";
-import PiPromptPanel from "./PiPromptPanel";
+import { Button } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import PromptFormPanel from "./PromptFormPanel";
 import {
   PromptEmptyState,
   PromptLibrary,
   filterPromptEntries,
 } from "./PromptLibrary";
-import { PromptCopyDialog } from "./PromptCopyDialog";
+import { PromptDistributionDialog } from "./PromptDistributionDialog";
 import { PromptPageFrame } from "./PromptPageFrame";
-import { toggleEffectText, usePromptPageCommon } from "./usePromptPageCommon";
 import {
-  copyText,
-  formatSize,
-  renderSegs,
-  showPromptToast,
-  utf8Bytes,
-} from "./promptUtils";
+  PI_PROMPT_SAVE_MUTATION_KEY,
+  PiPromptTemplates,
+  PiSystemPromptFiles,
+  type PiPromptTemplatesHandle,
+} from "./PiNativePromptResources";
+import { copyText, promptFileName } from "./promptUtils";
 
 export interface PromptPanelProps {
   appId: AppId;
-  /** 已安装、已启用且支持提示词的 Agent。 */
   apps: AppId[];
   onAppChange: (app: AppId) => void;
   open?: boolean;
   onInteractionBlockedChange?: (blocked: boolean) => void;
   onNavigationBlockedChange?: (blocked: boolean) => void;
 }
-
-const StandardPromptPanel: React.FC<PromptPanelProps> = ({
-  open = true,
+type Tab = "library" | "system" | "templates";
+const PromptPanel: React.FC<PromptPanelProps> = ({
   appId,
   apps,
   onAppChange,
+  open = true,
   onInteractionBlockedChange,
   onNavigationBlockedChange,
 }) => {
   const { t } = useTranslation();
   const available = apps.includes(appId);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [copyingId, setCopyingId] = useState<string | null>(null);
-  const [writePending, setWritePending] = useState(false);
-  const [reloadPending, setReloadPending] = useState(false);
-  const writeLockRef = React.useRef(false);
-  const reloadLockRef = React.useRef(false);
-  const reloadRunGenerationRef = React.useRef(0);
-  const overlayOpenRef = React.useRef(false);
-  const externalReloadQueuedRef = React.useRef(false);
-  const appIdRef = React.useRef(appId);
-  appIdRef.current = appId;
-
-  const {
-    prompts,
-    loading,
-    currentFileContent,
-    reload,
-    savePrompt,
-    deletePrompt,
-    toggleEnabled,
-    importFromFile,
-    getLatestPrompts,
-  } = usePromptActions(appId, { notify: false });
-  const reloadRef = React.useRef(reload);
-  reloadRef.current = reload;
-  const { displayPath, location, fileName, invalidate, moreItems } =
-    usePromptPageCommon(appId);
-
-  const dialogOpen = copyingId !== null;
-  const interactionBlocked =
-    loading || reloadPending || writePending || isFormOpen || dialogOpen;
-  // 编辑页只盖住内容区，不锁导航：离开页面就关掉它（同供应商编辑页）
-  const navigationBlocked = writePending || dialogOpen;
-  // 外观上的禁用晚 300ms 才出现：切回窗口时的重读、点一下启用这类很快的操作，
-  // 不让整列按钮闪一下变灰。拦截仍看 interactionBlocked 和写锁；表单、对话框打开时照常立即禁用。
+  const actions = usePromptActions(appId, available);
+  const { prompts, library, target, pending } = actions;
+  const [editing, setEditing] = useState<{
+    id?: string;
+    prompt?: Prompt;
+  } | null>(null);
+  const [distributing, setDistributing] = useState<Prompt | null>(null);
+  const [deleting, setDeleting] = useState<Prompt | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [tab, setTab] = useState<Tab>("library");
+  const [nativeEditing, setNativeEditing] = useState(false);
+  const templateRef = useRef<PiPromptTemplatesHandle>(null);
+  const nativeSaving =
+    useIsMutating({ mutationKey: PI_PROMPT_SAVE_MUTATION_KEY }) > 0;
+  const refreshRef = useRef(actions.refresh);
+  refreshRef.current = actions.refresh;
+  const blocked =
+    pending ||
+    nativeSaving ||
+    nativeEditing ||
+    Boolean(editing || distributing || deleting || removing);
+  const loading = library.isPending;
   const controlsDisabled =
-    useDelayedFlag(loading || reloadPending || writePending) ||
-    !available ||
-    isFormOpen ||
-    dialogOpen;
-
+    blocked || loading || (library.isError && !library.data);
+  const activeTab =
+    appId === "pi" && (available || nativeEditing || nativeSaving)
+      ? tab
+      : "library";
+  const snapshot = available ? target.data : undefined;
+  const appliedPrompt = snapshot?.appliedPromptId
+    ? prompts[snapshot.appliedPromptId]
+    : undefined;
   useEffect(() => {
-    onInteractionBlockedChange?.(interactionBlocked);
-  }, [interactionBlocked, onInteractionBlockedChange]);
-
+    if (!blocked && !available && apps[0]) {
+      setTab("library");
+      onAppChange(apps[0]);
+    }
+  }, [apps, available, blocked, onAppChange]);
   useEffect(() => {
-    onNavigationBlockedChange?.(navigationBlocked);
-  }, [navigationBlocked, onNavigationBlockedChange]);
-
+    if (!available) setRemoving(null);
+  }, [available]);
+  useEffect(() => {
+    onInteractionBlockedChange?.(controlsDisabled);
+    onNavigationBlockedChange?.(blocked);
+  }, [
+    blocked,
+    controlsDisabled,
+    onInteractionBlockedChange,
+    onNavigationBlockedChange,
+  ]);
   useEffect(
     () => () => {
       onInteractionBlockedChange?.(false);
@@ -104,544 +101,329 @@ const StandardPromptPanel: React.FC<PromptPanelProps> = ({
     },
     [onInteractionBlockedChange, onNavigationBlockedChange],
   );
-
-  const runExternalReload = React.useCallback(async () => {
-    if (writeLockRef.current || overlayOpenRef.current) {
-      externalReloadQueuedRef.current = true;
-      return;
-    }
-
-    const runGeneration = ++reloadRunGenerationRef.current;
-    externalReloadQueuedRef.current = false;
-    reloadLockRef.current = true;
-    setReloadPending(true);
-    try {
-      await reloadRef.current();
-    } finally {
-      if (reloadRunGenerationRef.current === runGeneration) {
-        reloadLockRef.current = false;
-        setReloadPending(false);
-      }
-    }
-  }, []);
-
-  const beginWrite = () => {
-    if (!available || loading || reloadLockRef.current || writeLockRef.current)
-      return false;
-    writeLockRef.current = true;
-    setWritePending(true);
-    return true;
-  };
-
-  const endWrite = () => {
-    writeLockRef.current = false;
-    setWritePending(false);
-    invalidate();
-    if (externalReloadQueuedRef.current) {
-      void runExternalReload();
-    }
-  };
-
-  /** 撤销等页外写入之后：刷新缓存；还停在同一个应用就重读列表。 */
-  const afterUndo = (app: AppId) => {
-    invalidate();
-    if (appIdRef.current === app) void runExternalReload();
-  };
-
-  useEffect(() => {
-    if (open) void runExternalReload();
-  }, [appId, open, runExternalReload]);
-
   useEffect(() => {
     if (!open) return;
-    const handleFocus = () => void runExternalReload();
-    window.addEventListener("focus", handleFocus);
-    return () => window.removeEventListener("focus", handleFocus);
-  }, [open, runExternalReload]);
-
-  useEffect(() => {
-    setSearchQuery("");
-    overlayOpenRef.current = false;
-    setIsFormOpen(false);
-    setEditingId(null);
-    setCopyingId(null);
-    if (externalReloadQueuedRef.current) {
-      void runExternalReload();
-    }
-  }, [appId, runExternalReload]);
-
-  useEffect(() => {
-    const handlePromptImported = (event: Event) => {
-      const customEvent = event as CustomEvent;
-      if (customEvent.detail?.app === appId) {
-        void runExternalReload();
-      }
+    const refresh = () => {
+      void refreshRef.current();
     };
-
-    window.addEventListener("prompt-imported", handlePromptImported);
-    return () => {
-      window.removeEventListener("prompt-imported", handlePromptImported);
-    };
-  }, [appId, runExternalReload]);
-
-  useTauriEvent("profile-applied", runExternalReload);
-
-  const handleAdd = () => {
-    if (reloadLockRef.current || writeLockRef.current || interactionBlocked) {
+    window.addEventListener("prompt-imported", refresh);
+    return () => window.removeEventListener("prompt-imported", refresh);
+  }, [open]);
+  useTauriEvent("profile-applied", () => {
+    void refreshRef.current();
+  });
+  const save = async (id: string, prompt: Prompt) => {
+    const saved = await actions.savePrompt(id, prompt);
+    if (saved) toast.success(t("prompts.library.saved"));
+    return saved;
+  };
+  const importFile = async () => {
+    if (
+      controlsDisabled ||
+      !available ||
+      target.isError ||
+      target.isFetching ||
+      !snapshot?.content?.trim()
+    )
       return;
-    }
-    overlayOpenRef.current = true;
-    setEditingId(null);
-    setIsFormOpen(true);
+    if (await actions.importFromFile())
+      toast.success(t("prompts.library.imported"));
   };
-
-  const handleEdit = (id: string) => {
-    if (reloadLockRef.current || writeLockRef.current || interactionBlocked) {
-      return;
-    }
-    overlayOpenRef.current = true;
-    setEditingId(id);
-    setIsFormOpen(true);
-  };
-
-  const closeOverlay = () => {
-    overlayOpenRef.current = false;
-    setIsFormOpen(false);
-    setEditingId(null);
-    setCopyingId(null);
-  };
-
-  // 删除不弹确认框：只删库、不碰文件，toast 给「撤销」（原 id、原位置、原更新时间写回）
-  const performDelete = async (id: string) => {
-    const original = prompts[id];
-    if (!original || original.enabled) return;
-    if (!beginWrite()) return;
-    const app = appId;
-    try {
-      const refreshed = await deletePrompt(id);
-      if (refreshed === false) {
-        externalReloadQueuedRef.current = true;
-      }
-      showPromptToast(t, {
-        title: t("prompts.toast.deleted", { name: original.name }),
-        description: t("prompts.toast.deletedSub", { path: displayPath }),
-        undoneTitle: t("prompts.toast.restored", { name: original.name }),
-        onUndo: async () => {
-          await promptsApi.upsertPrompt(app, id, original);
-          afterUndo(app);
-        },
-      });
-    } catch {
-      // Error handled by hook
-    } finally {
-      endWrite();
+  const fileName = promptFileName(appId);
+  const changeApp = (app: AppId) => {
+    if (!blocked && apps.includes(app)) {
+      setTab("library");
+      onAppChange(app);
     }
   };
-
-  const handleDelete = (id: string) => {
-    if (reloadLockRef.current || writeLockRef.current || interactionBlocked) {
-      return;
-    }
-    void performDelete(id);
+  const copyContent = async (id: string) => {
+    if (await copyText(prompts[id].content))
+      toast.success(t("prompts.copiedContent", { name: prompts[id].name }));
+    else toast.error(t("prompts.copyFailed"));
   };
-
-  const handleToggle = async (id: string, enabled: boolean) => {
-    const before = prompts;
-    const target = before[id];
-    if (!target) return;
-    const previousActive = Object.entries(before).find(
-      ([key, prompt]) => key !== id && prompt.enabled,
-    );
-    const fileWasBlank = !currentFileContent?.trim();
-    if (!beginWrite()) return;
-    const app = appId;
-    try {
-      const refreshed = await toggleEnabled(id, enabled);
-      if (refreshed === false) {
-        externalReloadQueuedRef.current = true;
-      }
-      const effect = toggleEffectText(t, app, enabled);
-      if (!enabled) {
-        showPromptToast(t, {
-          title: t("prompts.toast.disabled", {
-            name: target.name,
-            path: displayPath,
-          }),
-          description: effect || undefined,
-          onUndo: async () => {
-            await promptsApi.enablePrompt(app, id);
-            afterUndo(app);
-          },
-        });
-        return;
-      }
-      // 启用前文件里有库里没有的内容，后端会先存成一条「原始提示词」
-      const after = getLatestPrompts() ?? {};
-      const backup = Object.entries(after).find(
-        ([key]) => !(key in before) && key.startsWith("backup-"),
-      );
-      const description = [
-        backup ? t("prompts.toast.backup", { name: backup[1].name }) : "",
-        effect,
-      ]
-        .filter(Boolean)
-        .join(t("prompts.toast.joiner"));
-      // 撤销只给能原样还原的：之前有启用中的就换回去；之前文件是空的就停用
-      const onUndo = previousActive
-        ? async () => {
-            await promptsApi.enablePrompt(app, previousActive[0]);
-            afterUndo(app);
-          }
-        : fileWasBlank && !backup
-          ? async () => {
-              const latest = (await promptsApi.getPrompts(app))[id] ?? target;
-              await promptsApi.upsertPrompt(app, id, {
-                ...latest,
-                enabled: false,
-              });
-              afterUndo(app);
-            }
-          : undefined;
-      showPromptToast(t, {
-        title: t("prompts.toast.enabled", {
-          name: target.name,
-          path: displayPath,
-        }),
-        description: description || undefined,
-        onUndo,
-      });
-    } catch {
-      // Error handled by hook
-    } finally {
-      endWrite();
+  const remove = async () => {
+    if (!removing || !available) return;
+    if (await actions.removeApplication(removing)) {
+      setRemoving(null);
+      toast.success(t("prompts.library.removed"));
     }
   };
-
-  const handleSave = async (id: string, prompt: Prompt) => {
-    if (!beginWrite()) return false;
-    const isNew = !(id in prompts);
-    try {
-      const refreshed = await savePrompt(id, prompt);
-      if (refreshed === false) {
-        externalReloadQueuedRef.current = true;
-      }
-      if (isNew) {
-        showPromptToast(t, {
-          title: t("prompts.toast.added", { name: prompt.name }),
-        });
-      } else if (prompt.enabled) {
-        showPromptToast(t, {
-          title: t("prompts.toast.savedActive", {
-            name: prompt.name,
-            path: displayPath,
-          }),
-          description: toggleEffectText(t, appId, true) || undefined,
-        });
-      } else {
-        showPromptToast(t, {
-          title: t("prompts.toast.saved", { name: prompt.name }),
-        });
-      }
-      return true;
-    } catch {
-      // Error handled by hook
-      return false;
-    } finally {
-      endWrite();
+  const deletePrompt = async () => {
+    if (!deleting) return;
+    if (await actions.deletePrompt(deleting.id)) {
+      setDeleting(null);
+      toast.success(t("prompts.library.deleted"));
     }
   };
-
-  const handleCloseForm = () => {
-    if (writeLockRef.current) return;
-    closeOverlay();
-    if (externalReloadQueuedRef.current) {
-      void runExternalReload();
-    }
-  };
-
-  const handleImport = async () => {
-    if (reloadLockRef.current || writeLockRef.current || interactionBlocked) {
-      return;
-    }
-    if (!beginWrite()) return;
-    const app = appId;
-    try {
-      const id = await importFromFile();
-      showPromptToast(t, {
-        title: t("prompts.toast.imported", { path: displayPath }),
-        onUndo: async () => {
-          await promptsApi.deletePrompt(app, id);
-          afterUndo(app);
-        },
-      });
-    } catch {
-      // Error handled by hook
-    } finally {
-      endWrite();
-    }
-  };
-
-  const handleCopyContent = (id: string) => {
-    const prompt = prompts[id];
-    if (!prompt) return;
-    void copyText(prompt.content).then((ok) => {
-      if (ok) {
-        showPromptToast(t, {
-          title: t("prompts.copiedContent", { name: prompt.name }),
-        });
-      } else {
-        toast.error(t("prompts.copyFailed"));
-      }
-    });
-  };
-
-  const handleOpenCopy = (id: string) => {
-    if (reloadLockRef.current || writeLockRef.current || interactionBlocked) {
-      return;
-    }
-    overlayOpenRef.current = true;
-    setCopyingId(id);
-  };
-
-  const handleCopyToApps = async (targets: AppId[]) => {
-    const source = copyingId ? prompts[copyingId] : undefined;
-    if (!source) return;
-    if (!beginWrite()) return;
-    const timestamp = Math.floor(Date.now() / 1000);
-    const created: Array<{ app: AppId; id: string }> = [];
-    const failed: AppId[] = [];
-    for (const target of targets.filter((app) => apps.includes(app))) {
-      const id = `prompt-${Date.now()}`;
-      try {
-        await promptsApi.upsertPrompt(target, id, {
-          id,
-          name: source.name,
-          description: source.description,
-          content: source.content,
-          enabled: false,
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        });
-        created.push({ app: target, id });
-      } catch {
-        failed.push(target);
-      }
-    }
-    closeOverlay();
-    endWrite();
-    if (created.length) {
-      showPromptToast(t, {
-        title: t("prompts.toast.copied", {
-          name: source.name,
-          apps: created
-            .map((item) => APP_DISPLAY_NAME[item.app])
-            .join(t("prompts.listSeparator")),
-        }),
-        onUndo: async () => {
-          for (const item of created) {
-            await promptsApi.deletePrompt(item.app, item.id);
-          }
-          invalidate();
-        },
-      });
-    }
-    if (failed.length) {
-      toast.error(
-        t("prompts.copyDialog.failed", {
-          apps: failed
-            .map((app) => APP_DISPLAY_NAME[app])
-            .join(t("prompts.listSeparator")),
-        }),
-      );
-    }
-  };
-
-  const promptEntries = useMemo(() => Object.entries(prompts), [prompts]);
-  const listEmpty = promptEntries.length === 0;
-  const fileText = currentFileContent ?? null;
-  const fileHasContent = Boolean(fileText?.trim());
-  const duplicate = fileHasContent
-    ? promptEntries.find(
-        ([, prompt]) => prompt.content.trim() === fileText!.trim(),
-      )
-    : undefined;
-  const importReason =
-    fileText === null
-      ? t("prompts.importReason.missing", { file: fileName })
-      : !fileText.trim()
-        ? t("prompts.importReason.empty", { file: fileName })
-        : duplicate
-          ? t("prompts.importReason.duplicate", { name: duplicate[1].name })
-          : undefined;
-  const fileMeta =
-    fileText === null
-      ? t("prompts.fileMissing")
-      : !fileText.trim()
-        ? t("prompts.fileEmpty")
-        : formatSize(utf8Bytes(fileText));
-  const resultCount = filterPromptEntries(promptEntries, searchQuery).length;
-  const isHermes = appId === "hermes";
-
   return (
     <PromptPageFrame
       app={appId}
       apps={apps}
-      onAppChange={onAppChange}
-      appSwitchDisabled={navigationBlocked}
-      count={promptEntries.length}
-      help={
-        isHermes
-          ? {
-              title: t("prompts.helpHermesTitle"),
-              text: t("prompts.helpHermesText"),
-            }
-          : { title: t("prompts.helpTitle"), text: t("prompts.helpText") }
-      }
-      primary={{
-        label: t("prompts.add"),
-        onClick: handleAdd,
-        disabled: controlsDisabled,
+      onAppChange={changeApp}
+      appSwitchDisabled={blocked}
+      count={Object.keys(prompts).length}
+      help={{
+        title: t("prompts.library.title"),
+        text: t("prompts.library.help"),
       }}
-      moreItems={moreItems(
-        {
-          key: "import",
-          label: renderSegs(t("prompts.importCurrent", { file: fileName })),
-          reason: importReason,
-          onSelect: () => void handleImport(),
-        },
-        { label: t("prompts.copyFilePath"), path: location.data?.path },
-      )}
-      target={{
-        label: t("prompts.targetFile"),
-        path: displayPath,
-        meta: ` · ${fileMeta}`,
-      }}
-      search={
-        listEmpty
+      primary={
+        activeTab === "system"
           ? null
           : {
-              value: searchQuery,
-              onChange: setSearchQuery,
-              placeholder: t("prompts.searchPlaceholder"),
-              ariaLabel: t("prompts.searchAriaLabel"),
-              resultCount,
+              label: t(
+                activeTab === "templates"
+                  ? "pi.prompts.newTemplate"
+                  : "prompts.add",
+              ),
+              disabled:
+                controlsDisabled || (activeTab === "templates" && !available),
+              onClick: () =>
+                activeTab === "templates"
+                  ? templateRef.current?.openCreate()
+                  : setEditing({}),
             }
       }
-    >
-      {listEmpty ? (
-        loading ? (
-          <div className="py-12 text-center text-body text-fg-2">
-            {t("prompts.loading")}
-          </div>
-        ) : (
-          <PromptEmptyState
-            app={appId}
-            displayPath={displayPath}
-            fileText={fileText}
-            disabled={controlsDisabled}
-            onImport={() => void handleImport()}
-            onAdd={handleAdd}
+      moreItems={[
+        {
+          key: "import",
+          label: t("prompts.importCurrent", { file: fileName }),
+          reason:
+            !available ||
+            controlsDisabled ||
+            target.isFetching ||
+            target.isError
+              ? t("prompts.library.targetUnavailable")
+              : !snapshot?.content?.trim()
+                ? t("prompts.importReason.empty", { file: fileName })
+                : undefined,
+          onSelect: () => void importFile(),
+        },
+        {
+          key: "open-folder",
+          label: t("prompts.openFolder"),
+          reason: !available
+            ? t("prompts.library.targetUnavailable")
+            : blocked
+              ? t("common.saving")
+              : undefined,
+          onSelect: () => {
+            if (!available) return;
+            void settingsApi
+              .openConfigFolder(appId)
+              .catch(() => toast.error(t("prompts.openFolderFailed")));
+          },
+        },
+        {
+          key: "refresh",
+          label: t("common.refresh"),
+          reason: blocked ? t("common.saving") : undefined,
+          onSelect: () => void actions.refresh(),
+        },
+        {
+          key: "copy-path",
+          label: t("prompts.copyFilePath"),
+          reason: !snapshot
+            ? t("prompts.library.targetUnavailable")
+            : undefined,
+          onSelect: () => {
+            if (snapshot) void copyText(snapshot.path);
+          },
+        },
+      ]}
+      segments={
+        appId === "pi" && (available || nativeEditing || nativeSaving) ? (
+          <SegmentedControl
+            size="sm"
+            aria-label={t("pi.prompts.kindLabel")}
+            value={activeTab}
+            onValueChange={(value: Tab) => {
+              if (!blocked) {
+                setTab(value);
+                setSearch("");
+              }
+            }}
+            items={[
+              { value: "library", label: t("prompts.library.title") },
+              { value: "system", label: t("pi.prompts.systemTab") },
+              { value: "templates", label: t("pi.prompts.templatesTab") },
+            ]}
           />
-        )
+        ) : undefined
+      }
+      target={
+        activeTab === "library" && available
+          ? {
+              label: t("prompts.library.targetFile"),
+              path: snapshot?.displayPath ?? fileName,
+            }
+          : null
+      }
+      search={
+        activeTab === "system"
+          ? null
+          : {
+              value: search,
+              onChange: setSearch,
+              placeholder: t(
+                activeTab === "templates"
+                  ? "pi.prompts.searchTemplates"
+                  : "prompts.searchPlaceholder",
+              ),
+              ariaLabel: t(
+                activeTab === "templates"
+                  ? "pi.prompts.searchTemplatesLabel"
+                  : "prompts.searchAriaLabel",
+              ),
+              resultCount:
+                activeTab === "library"
+                  ? filterPromptEntries(Object.entries(prompts), search).length
+                  : undefined,
+            }
+      }
+      notices={
+        activeTab === "library" ? (
+          <>
+            <p className="text-sm text-fg-2">{t("prompts.library.saveHint")}</p>
+            {!available ? (
+              <p className="text-sm text-fg-2">
+                {t("common.noAvailableAgentsHint")}
+              </p>
+            ) : target.isError ? (
+              <p role="alert" className="text-sm text-danger-text">
+                {t("prompts.library.targetUnavailable")}{" "}
+                <Button
+                  variant="link"
+                  size="compact"
+                  onClick={() => void target.refetch()}
+                >
+                  {t("common.retry")}
+                </Button>
+              </p>
+            ) : snapshot?.appliedPromptId ? (
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span>
+                  {appliedPrompt
+                    ? t(
+                        snapshot.matchesLibrary
+                          ? "prompts.library.current"
+                          : "prompts.library.currentPending",
+                        { name: appliedPrompt.name },
+                      )
+                    : t("prompts.library.deletedSource")}
+                </span>
+                {snapshot.managed || snapshot.content === null ? (
+                  <Button
+                    variant="neutral"
+                    size="compact"
+                    disabled={blocked || target.isFetching}
+                    onClick={() => setRemoving(snapshot.revision)}
+                  >
+                    {t("prompts.library.remove")}
+                  </Button>
+                ) : (
+                  <span className="text-fg-2">
+                    {t("prompts.library.externalChanges")}
+                  </span>
+                )}
+              </div>
+            ) : snapshot?.content?.trim() ? (
+              <p className="text-sm text-fg-2">
+                {t("prompts.library.externalFile")}
+              </p>
+            ) : null}
+          </>
+        ) : undefined
+      }
+    >
+      {activeTab === "system" ? (
+        <PiSystemPromptFiles
+          available={available}
+          onEditingChange={setNativeEditing}
+        />
+      ) : activeTab === "templates" ? (
+        <PiPromptTemplates
+          ref={templateRef}
+          available={available}
+          onEditingChange={setNativeEditing}
+          search={search}
+          onClearSearch={() => setSearch("")}
+        />
+      ) : library.isError && !library.data ? (
+        <div role="alert" className="py-10 text-center">
+          <p>{t("prompts.loadFailed")}</p>
+          <Button variant="neutral" onClick={() => void library.refetch()}>
+            {t("common.retry")}
+          </Button>
+        </div>
+      ) : loading ? (
+        <p role="status" className="py-10 text-center">
+          {t("prompts.loading")}
+        </p>
+      ) : Object.keys(prompts).length === 0 ? (
+        <PromptEmptyState
+          displayPath={snapshot?.displayPath ?? fileName}
+          fileText={snapshot?.content ?? null}
+          disabled={controlsDisabled}
+          onImport={() => void importFile()}
+          onAdd={() => setEditing({})}
+        />
       ) : (
         <PromptLibrary
           prompts={prompts}
-          searchQuery={searchQuery}
-          listLabel={t("prompts.listLabel", { app: APP_DISPLAY_NAME[appId] })}
+          searchQuery={search}
+          listLabel={t("prompts.library.title")}
           disabled={controlsDisabled}
-          onClearSearch={() => setSearchQuery("")}
-          onToggle={(id, enabled) => void handleToggle(id, enabled)}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onCopyToApps={apps.length > 1 ? handleOpenCopy : undefined}
-          onCopyContent={handleCopyContent}
-        />
-      )}
-
-      {isFormOpen && (
-        <PromptFormPanel
-          appId={appId}
-          saveDisabled={!available}
-          editingId={editingId || undefined}
-          initialData={editingId ? prompts[editingId] : undefined}
-          onSave={handleSave}
-          onClose={handleCloseForm}
-        />
-      )}
-
-      {copyingId && prompts[copyingId] ? (
-        <PromptCopyDialog
-          prompt={prompts[copyingId]}
-          targets={apps.filter((app) => app !== appId)}
-          pending={writePending}
-          onCancel={() => {
-            if (writeLockRef.current) return;
-            closeOverlay();
-            if (externalReloadQueuedRef.current) void runExternalReload();
+          applyDisabled={apps.length === 0}
+          appliedPromptId={snapshot?.appliedPromptId}
+          matchesLibrary={snapshot?.matchesLibrary}
+          onClearSearch={() => setSearch("")}
+          onApply={(id) => {
+            if (apps.length > 0) setDistributing(prompts[id]);
           }}
-          onConfirm={(targets) => void handleCopyToApps(targets)}
+          onEdit={(id) => setEditing({ id, prompt: prompts[id] })}
+          onDelete={(id) => setDeleting(prompts[id])}
+          onCopyContent={(id) => void copyContent(id)}
         />
-      ) : null}
+      )}
+      {editing && (
+        <PromptFormPanel
+          key={editing.id ?? "new"}
+          editingId={editing.id}
+          initialData={editing.prompt}
+          onSave={save}
+          onClose={() => setEditing(null)}
+        />
+      )}
+      {distributing && (
+        <PromptDistributionDialog
+          prompt={distributing}
+          apps={apps}
+          initialApp={appId}
+          onClose={() => setDistributing(null)}
+          onApplied={() => {
+            void actions.refresh();
+          }}
+        />
+      )}
+      <ConfirmDialog
+        isOpen={Boolean(deleting)}
+        title={t("prompts.library.deleteTitle")}
+        message={t("prompts.library.deleteHint", { name: deleting?.name })}
+        pending={pending}
+        onConfirm={() => void deletePrompt()}
+        onCancel={() => setDeleting(null)}
+      />
+      <ConfirmDialog
+        isOpen={Boolean(removing) && available}
+        title={t("prompts.library.remove")}
+        message={t("prompts.library.removeHint", {
+          path: snapshot?.displayPath,
+        })}
+        pending={pending}
+        onConfirm={() => void remove()}
+        onCancel={() => setRemoving(null)}
+      />
     </PromptPageFrame>
   );
 };
-
-const PromptPanel: React.FC<PromptPanelProps> = (props) => {
-  const { t } = useTranslation();
-  const [blockedApp, setBlockedApp] = useState<AppId | null>(null);
-  // 保留正在编辑的草稿或写入，关闭编辑器/写入结束后再改选可用目标。
-  const appId = props.apps.includes(props.appId)
-    ? props.appId
-    : (blockedApp ?? props.apps[0]);
-  const onInteractionBlockedChange = React.useCallback(
-    (blocked: boolean) => {
-      setBlockedApp(blocked ? (appId ?? null) : null);
-      props.onInteractionBlockedChange?.(blocked);
-    },
-    [appId, props.onInteractionBlockedChange],
-  );
-  useEffect(() => {
-    if (appId && appId !== props.appId) props.onAppChange(appId);
-  }, [appId, props.appId, props.onAppChange]);
-
-  if (!appId) {
-    return (
-      <>
-        <AppPageHeader
-          icon={<BookOpen className="h-5 w-5" />}
-          title={t("nav.prompts")}
-        />
-        <div
-          className="px-6 py-12 text-center text-body text-fg-2"
-          role="status"
-        >
-          <p>{t("common.noAvailableAgents")}</p>
-          <p className="mt-2">{t("common.noAvailableAgentsHint")}</p>
-        </div>
-      </>
-    );
-  }
-
-  if (appId === "pi") {
-    return (
-      <PiPromptPanel
-        open={props.open ?? true}
-        apps={props.apps}
-        onAppChange={props.onAppChange}
-        onInteractionBlockedChange={onInteractionBlockedChange}
-        onNavigationBlockedChange={props.onNavigationBlockedChange}
-      />
-    );
-  }
-
-  return (
-    <StandardPromptPanel
-      key={appId}
-      {...props}
-      appId={appId}
-      onInteractionBlockedChange={onInteractionBlockedChange}
-    />
-  );
-};
-
 export default PromptPanel;

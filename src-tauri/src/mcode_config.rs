@@ -726,46 +726,44 @@ mod capability_tests {
         .unwrap();
         let original_instructions = fs::read_to_string(&path).unwrap();
         let draft = serde_json::from_value(
-            json!({"id":"draft","name":"Draft","content":"Draft instructions","enabled":false}),
+            json!({"id":"draft","name":"Draft","content":"Draft instructions"}),
         )
         .unwrap();
-        PromptService::upsert_prompt(&state, AppType::Mcode, "draft", draft).unwrap();
+        PromptService::upsert_prompt(&state, "draft", draft).unwrap();
         assert_eq!(fs::read_to_string(&path).unwrap(), original_instructions);
-        PromptService::delete_prompt(&state, AppType::Mcode, "draft").unwrap();
-        assert_eq!(
-            PromptService::import_from_file_on_first_launch(&state, AppType::Mcode).unwrap(),
-            1
-        );
-        let prompts = PromptService::get_prompts(&state, AppType::Mcode).unwrap();
-        let (id, prompt) = prompts.first().unwrap();
-        PromptService::enable_prompt(&state, AppType::Mcode, id).unwrap();
+        PromptService::delete_prompt(&state, "draft").unwrap();
+        let imported_id = PromptService::import_from_file(&state, AppType::Mcode).unwrap();
+        let prompts = PromptService::get_prompts(&state).unwrap();
+        let id = &imported_id;
+        let prompt = &prompts[id];
+        let target = PromptService::get_target(&state, AppType::Mcode).unwrap();
+        PromptService::apply_prompt(
+            &state,
+            AppType::Mcode,
+            id,
+            &target.revision,
+            &prompt.content,
+        )
+        .unwrap();
         assert_eq!(fs::read_to_string(&path).unwrap(), prompt.content);
         let mut oversized = prompt.clone();
         oversized.id = "oversized".into();
         oversized.content = "中".repeat(10923);
-        assert!(PromptService::upsert_prompt(
-            &state,
-            AppType::Mcode,
-            "oversized",
-            oversized.clone()
-        )
-        .is_err());
-        assert_eq!(db.get_prompts(&AppType::Mcode).unwrap().len(), 1);
-        oversized.enabled = false;
-        db.save_prompt(&AppType::Mcode, &oversized).unwrap();
+        // The shared document may be valid for other Agents; MCode's limit
+        // is enforced when applying it to MCode, never while saving the library.
+        PromptService::upsert_prompt(&state, "oversized", oversized).unwrap();
+        assert_eq!(db.get_prompts().unwrap().len(), 2);
         assert!(PromptService::enable_prompt(&state, AppType::Mcode, "oversized").is_err());
-        assert!(db.get_prompts(&AppType::Mcode).unwrap()[id].enabled);
-        assert!(!db.get_prompts(&AppType::Mcode).unwrap()["oversized"].enabled);
-        db.delete_prompt(&AppType::Mcode, id).unwrap();
-        oversized.enabled = true;
-        db.save_prompt(&AppType::Mcode, &oversized).unwrap();
-        assert!(PromptService::sync_to_live(&state, AppType::Mcode).is_err());
         assert_eq!(fs::read_to_string(&path).unwrap(), prompt.content);
-        db.delete_prompt(&AppType::Mcode, "oversized").unwrap();
-        db.save_prompt(&AppType::Mcode, prompt).unwrap();
-        let mut disabled = prompt.clone();
-        disabled.enabled = false;
-        PromptService::upsert_prompt(&state, AppType::Mcode, id, disabled).unwrap();
+        assert_eq!(
+            PromptService::get_target(&state, AppType::Mcode)
+                .unwrap()
+                .applied_prompt_id
+                .as_deref(),
+            Some(id.as_str())
+        );
+        db.delete_prompt("oversized").unwrap();
+        PromptService::disable_prompt(&state, AppType::Mcode).unwrap();
         assert!(fs::read_to_string(&path).unwrap().is_empty());
         PromptService::enable_prompt(&state, AppType::Mcode, id).unwrap();
         assert_eq!(fs::read_to_string(&path).unwrap(), original_instructions);

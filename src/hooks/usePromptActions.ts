@@ -1,326 +1,95 @@
-import { readLocalCache, writeLocalCache } from "@/lib/localCache";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
-import { promptsApi, type Prompt, type AppId } from "@/lib/api";
+import { promptsApi, type AppId, type Prompt } from "@/lib/api";
+import { promptKeys } from "@/lib/query/prompts";
+import { extractErrorMessage } from "@/utils/errorUtils";
 
 const EMPTY_PROMPTS: Record<string, Prompt> = {};
 
-interface PromptActionsOptions {
-  /** false：成功时不弹通用 toast（提示词页自己写带后果和撤销的 toast）；失败照样提示 */
-  notify?: boolean;
-}
-
-export function usePromptActions(
-  appId: AppId,
-  { notify = true }: PromptActionsOptions = {},
-) {
+/** The library has one identity; changing Agent only changes the target snapshot. */
+export function usePromptActions(appId: AppId, available = true) {
   const { t } = useTranslation();
-  const [prompts, setPrompts] = useState<Record<string, Prompt>>({});
-  const [promptsAppId, setPromptsAppId] = useState<AppId | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [currentFileContent, setCurrentFileContent] = useState<string | null>(
-    null,
-  );
-  const [currentFileAppId, setCurrentFileAppId] = useState<AppId | null>(null);
-  const [togglingId, setTogglingId] = useState<string | null>(null);
-  const reloadGenerationRef = useRef(0);
-  const currentAppIdRef = useRef(appId);
-  const promptsAppIdRef = useRef<AppId | null>(null);
-  // 最近一次从后端读到的列表（写操作之后调用方要拿新列表比对，比如启用时多出来的「原始提示词」）
-  const latestLoadedRef = useRef<{
-    appId: AppId;
-    prompts: Record<string, Prompt>;
-  } | null>(null);
-  currentAppIdRef.current = appId;
+  const queryClient = useQueryClient();
+  const writeLock = useRef(false);
+  const [pending, setPending] = useState(false);
+  const library = useQuery({
+    queryKey: promptKeys.list(),
+    queryFn: () => promptsApi.getPrompts(),
+    networkMode: "always",
+  });
+  const target = useQuery({
+    queryKey: promptKeys.target(appId),
+    queryFn: () => promptsApi.getPromptTarget(appId),
+    networkMode: "always",
+    enabled: available,
+  });
 
-  const visiblePrompts = promptsAppId === appId ? prompts : EMPTY_PROMPTS;
-  const visibleCurrentFileContent =
-    currentFileAppId === appId ? currentFileContent : null;
-
-  const updatePromptsForApp = useCallback(
-    (
-      targetAppId: AppId,
-      updater: (current: Record<string, Prompt>) => Record<string, Prompt>,
-    ) => {
-      if (currentAppIdRef.current !== targetAppId) return;
-
-      const previousAppId = promptsAppIdRef.current;
-      setPrompts((current) =>
-        updater(previousAppId === targetAppId ? current : EMPTY_PROMPTS),
-      );
-      promptsAppIdRef.current = targetAppId;
-      setPromptsAppId(targetAppId);
-    },
-    [],
-  );
-
-  useEffect(
-    () => () => {
-      reloadGenerationRef.current += 1;
-    },
-    [],
-  );
-
-  const reload = useCallback(async (): Promise<boolean> => {
-    const requestAppId = appId;
-    if (currentAppIdRef.current !== requestAppId) return false;
-
-    const requestGeneration = ++reloadGenerationRef.current;
-    const isCurrentRequest = () =>
-      reloadGenerationRef.current === requestGeneration &&
-      currentAppIdRef.current === requestAppId;
-
-    // 先显示上次的列表（本地缓存），后台读到最新的再替换；没有缓存才显示「加载中」
-    const cacheKey = `prompts.${requestAppId}.v1`;
-    const cached = readLocalCache<Record<string, Prompt>>(cacheKey);
-    if (cached && promptsAppIdRef.current !== requestAppId) {
-      updatePromptsForApp(requestAppId, () => cached);
-    }
-    setLoading(!cached);
+  const refresh = async () => {
+    await queryClient.invalidateQueries({ queryKey: promptKeys.all });
+    return queryClient.getQueryState(promptKeys.list())?.status !== "error";
+  };
+  const write = async (action: () => Promise<void>): Promise<boolean> => {
+    if (writeLock.current) return false;
+    writeLock.current = true;
+    setPending(true);
     try {
-      const data = await promptsApi.getPrompts(requestAppId);
-      if (!isCurrentRequest()) return false;
-      latestLoadedRef.current = { appId: requestAppId, prompts: data };
-      updatePromptsForApp(requestAppId, () => data);
-      writeLocalCache(cacheKey, data);
-
+      await action();
       try {
-        const content = await promptsApi.getCurrentFileContent(requestAppId);
-        if (!isCurrentRequest()) return false;
-        setCurrentFileContent(content);
-        setCurrentFileAppId(requestAppId);
+        if (!(await refresh())) toast.error(t("prompts.library.refreshFailed"));
       } catch {
-        if (isCurrentRequest()) {
-          setCurrentFileContent(null);
-          setCurrentFileAppId(requestAppId);
-        }
+        toast.error(t("prompts.library.refreshFailed"));
       }
       return true;
-    } catch {
-      if (isCurrentRequest()) {
-        toast.error(t("prompts.loadFailed"));
-      }
+    } catch (error) {
+      toast.error(
+        extractErrorMessage(error) || t("prompts.library.writeFailed"),
+      );
       return false;
     } finally {
-      if (isCurrentRequest()) {
-        setLoading(false);
-      }
+      writeLock.current = false;
+      setPending(false);
     }
-  }, [appId, t, updatePromptsForApp]);
-
-  const savePrompt = useCallback(
-    async (id: string, prompt: Prompt) => {
-      try {
-        await promptsApi.upsertPrompt(appId, id, prompt);
-        updatePromptsForApp(appId, (current) => ({
-          ...current,
-          [id]: prompt,
-        }));
-        const refreshed =
-          currentAppIdRef.current === appId ? await reload() : false;
-        if (notify) {
-          toast.success(t("prompts.saveSuccess"), {
-            closeButton: true,
-            description:
-              appId === "pi" && prompt.enabled
-                ? t("pi.prompts.reloadNotice")
-                : undefined,
-          });
-        }
-        return refreshed;
-      } catch (error) {
-        toast.error(t("prompts.saveFailed"));
-        throw error;
-      }
-    },
-    [appId, notify, reload, t, updatePromptsForApp],
-  );
-
-  const deletePrompt = useCallback(
-    async (id: string) => {
-      try {
-        await promptsApi.deletePrompt(appId, id);
-        updatePromptsForApp(appId, (current) => {
-          const next = { ...current };
-          delete next[id];
-          return next;
-        });
-        const refreshed =
-          currentAppIdRef.current === appId ? await reload() : false;
-        if (notify) {
-          toast.success(t("prompts.deleteSuccess"), { closeButton: true });
-        }
-        return refreshed;
-      } catch (error) {
-        toast.error(t("prompts.deleteFailed"));
-        throw error;
-      }
-    },
-    [appId, notify, reload, t, updatePromptsForApp],
-  );
-
-  const enablePrompt = useCallback(
-    async (id: string) => {
-      try {
-        await promptsApi.enablePrompt(appId, id);
-        updatePromptsForApp(appId, (current) =>
-          Object.fromEntries(
-            Object.entries(current).map(([key, prompt]) => [
-              key,
-              { ...prompt, enabled: key === id },
-            ]),
-          ),
-        );
-        const refreshed =
-          currentAppIdRef.current === appId ? await reload() : false;
-        if (notify) {
-          toast.success(t("prompts.enableSuccess"), { closeButton: true });
-        }
-        return refreshed;
-      } catch (error) {
-        toast.error(t("prompts.enableFailed"));
-        throw error;
-      }
-    },
-    [appId, notify, reload, t, updatePromptsForApp],
-  );
-
-  const toggleEnabled = useCallback(
-    async (id: string, enabled: boolean) => {
-      if (appId === "pi") {
-        setTogglingId(id);
-        try {
-          if (enabled) {
-            await promptsApi.enablePrompt(appId, id);
-          } else {
-            const prompt = visiblePrompts[id];
-            if (!prompt) {
-              throw new Error(`Prompt ${id} does not exist`);
-            }
-            await promptsApi.upsertPrompt(appId, id, {
-              ...prompt,
-              enabled: false,
-            });
-          }
-          const refreshed =
-            currentAppIdRef.current === appId ? await reload() : false;
-          if (notify) {
-            toast.success(
-              t(
-                enabled
-                  ? "pi.prompts.usePromptSuccess"
-                  : "pi.prompts.stopUsingSuccess",
-              ),
-              {
-                closeButton: true,
-                description: t("pi.prompts.reloadNotice"),
-              },
-            );
-          }
-          return refreshed;
-        } catch (error) {
-          toast.error(
-            enabled ? t("prompts.enableFailed") : t("prompts.disableFailed"),
-          );
-          throw error;
-        } finally {
-          setTogglingId(null);
-        }
-      }
-
-      const previousPrompts = visiblePrompts;
-      const mutationGeneration = reloadGenerationRef.current;
-
-      if (enabled) {
-        const updatedPrompts = Object.keys(visiblePrompts).reduce(
-          (acc, key) => {
-            acc[key] = {
-              ...visiblePrompts[key],
-              enabled: key === id,
-            };
-            return acc;
-          },
-          {} as Record<string, Prompt>,
-        );
-        updatePromptsForApp(appId, () => updatedPrompts);
-      } else {
-        updatePromptsForApp(appId, (current) => ({
-          ...current,
-          [id]: {
-            ...current[id],
-            enabled: false,
-          },
-        }));
-      }
-
-      try {
-        if (enabled) {
-          await promptsApi.enablePrompt(appId, id);
-          if (notify) {
-            toast.success(t("prompts.enableSuccess"), { closeButton: true });
-          }
-        } else {
-          await promptsApi.upsertPrompt(appId, id, {
-            ...visiblePrompts[id],
-            enabled: false,
-          });
-          if (notify) {
-            toast.success(t("prompts.disableSuccess"), { closeButton: true });
-          }
-        }
-        return currentAppIdRef.current === appId ? await reload() : false;
-      } catch (error) {
-        if (
-          currentAppIdRef.current === appId &&
-          reloadGenerationRef.current === mutationGeneration
-        ) {
-          updatePromptsForApp(appId, () => previousPrompts);
-        }
-        toast.error(
-          enabled ? t("prompts.enableFailed") : t("prompts.disableFailed"),
-        );
-        throw error;
-      }
-    },
-    [appId, notify, reload, t, updatePromptsForApp, visiblePrompts],
-  );
-
-  const importFromFile = useCallback(async () => {
-    try {
-      const id = await promptsApi.importFromFile(appId);
-      if (currentAppIdRef.current === appId) {
-        await reload();
-      }
-      if (notify) {
-        toast.success(t("prompts.importSuccess"), { closeButton: true });
-      }
-      return id;
-    } catch (error) {
-      toast.error(t("prompts.importFailed"));
-      throw error;
-    }
-  }, [appId, notify, reload, t]);
-
-  /** 最近一次读到的当前应用列表；还没读过或读的是别的应用时返回 null。 */
-  const getLatestPrompts = useCallback((): Record<string, Prompt> | null => {
-    const latest = latestLoadedRef.current;
-    return latest && latest.appId === currentAppIdRef.current
-      ? latest.prompts
-      : null;
-  }, []);
+  };
 
   return {
-    prompts: visiblePrompts,
-    loading,
-    currentFileContent: visibleCurrentFileContent,
-    togglingId,
-    reload,
-    savePrompt,
-    deletePrompt,
-    enablePrompt,
-    toggleEnabled,
-    importFromFile,
-    getLatestPrompts,
+    prompts: library.data ?? EMPTY_PROMPTS,
+    library,
+    target,
+    pending,
+    refresh,
+    savePrompt: (id: string, prompt: Prompt) =>
+      write(async () => {
+        await promptsApi.upsertPrompt(id, prompt);
+        queryClient.setQueryData<Record<string, Prompt>>(
+          promptKeys.list(),
+          (current) => ({ ...current, [id]: prompt }),
+        );
+      }),
+    deletePrompt: (id: string) =>
+      write(async () => {
+        await promptsApi.deletePrompt(id);
+        queryClient.setQueryData<Record<string, Prompt>>(
+          promptKeys.list(),
+          (current) => {
+            const next = { ...current };
+            delete next[id];
+            return next;
+          },
+        );
+      }),
+    importFromFile: () =>
+      available
+        ? write(async () => {
+            await promptsApi.importFromFile(appId);
+          })
+        : Promise.resolve(false),
+    removeApplication: (revision: string) =>
+      available
+        ? write(async () => {
+            await promptsApi.removePromptApplication(appId, revision);
+          })
+        : Promise.resolve(false),
   };
 }

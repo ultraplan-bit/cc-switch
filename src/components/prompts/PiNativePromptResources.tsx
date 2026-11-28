@@ -373,6 +373,7 @@ export function PiSystemPromptFiles({
 
   // 删除不弹确认框：直接删、关抽屉，toast 给「撤销」（原样写回）；原本是空白的文件不给撤销
   const remove = useMutation({
+    mutationKey: PI_PROMPT_SAVE_MUTATION_KEY,
     mutationFn: async ({
       kind,
       snapshot,
@@ -828,6 +829,7 @@ export const PiPromptTemplates = forwardRef<
 
   // 删除不弹确认框：直接删，toast 给「撤销」（按 expectedRevision="missing" 原样写回）
   const remove = useMutation({
+    mutationKey: PI_PROMPT_SAVE_MUTATION_KEY,
     mutationFn: (template: PiPromptTemplate) =>
       promptsApi.deletePiPromptTemplate(template.slug, template.revision),
     onSuccess: async (_removed, template) => {

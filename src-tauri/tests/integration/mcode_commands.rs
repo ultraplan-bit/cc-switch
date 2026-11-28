@@ -10,34 +10,34 @@ fn failed_mcode_prompt_writes_preserve_state_and_can_be_retried() {
     reset_test_fs();
     let state = create_test_state().unwrap();
     let path = ensure_test_home().join(".minimax/AGENTS.md");
-    let active: Prompt = serde_json::from_value(json!({
-        "id":"active", "name":"Active", "content":"original", "enabled":true
+    let prompt: Prompt = serde_json::from_value(json!({
+        "id":"shared", "name":"Shared", "content":"original"
     }))
     .unwrap();
-    state.db.save_prompt(&AppType::Mcode, &active).unwrap();
-    // A directory at the file path deterministically rejects the atomic rename.
+    PromptService::upsert_prompt(&state, &prompt.id, prompt.clone()).unwrap();
+    // Library edits are independent of an unreadable native target.
     fs::create_dir_all(&path).unwrap();
-    let mut edited = active.clone();
+    let mut edited = prompt.clone();
     edited.content = "updated".into();
-    assert!(
-        PromptService::upsert_prompt(&state, AppType::Mcode, &active.id, edited.clone()).is_err()
+    PromptService::upsert_prompt(&state, &edited.id, edited.clone()).unwrap();
+    assert!(PromptService::enable_prompt(&state, AppType::Mcode, &prompt.id).is_err());
+    assert_eq!(
+        state.db.get_prompts().unwrap()[&prompt.id].content,
+        "updated"
     );
-    let mut disabled = active.clone();
-    disabled.enabled = false;
-    assert!(
-        PromptService::upsert_prompt(&state, AppType::Mcode, &active.id, disabled.clone()).is_err()
-    );
-    let stored = &state.db.get_prompts(&AppType::Mcode).unwrap()[&active.id];
-    assert!(stored.enabled);
-    assert_eq!(stored.content, "original");
+    assert!(state
+        .db
+        .get_prompt_application(&AppType::Mcode)
+        .unwrap()
+        .is_none());
     fs::remove_dir(&path).unwrap();
-    fs::write(&path, "original").unwrap();
-    PromptService::upsert_prompt(&state, AppType::Mcode, &active.id, disabled).unwrap();
-    assert!(!state.db.get_prompts(&AppType::Mcode).unwrap()[&active.id].enabled);
-    assert_eq!(fs::read_to_string(&path).unwrap(), "");
-    PromptService::upsert_prompt(&state, AppType::Mcode, &active.id, edited).unwrap();
+    PromptService::enable_prompt(&state, AppType::Mcode, &prompt.id).unwrap();
     assert_eq!(fs::read_to_string(&path).unwrap(), "updated");
-    assert!(state.db.get_prompts(&AppType::Mcode).unwrap()[&active.id].enabled);
+    assert!(
+        PromptService::get_target(&state, AppType::Mcode)
+            .unwrap()
+            .matches_library
+    );
 }
 
 #[test]

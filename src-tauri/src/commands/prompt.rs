@@ -10,47 +10,55 @@ use crate::services::pi_prompt_files::{
     PiPromptFileKind, PiPromptFileService, PiPromptFileSnapshot, PiPromptTemplate,
     PiPromptTemplateService,
 };
-use crate::services::prompt::PromptService;
+use crate::services::prompt::{PromptService, PromptTargetSnapshot};
 use crate::store::AppState;
 
 #[tauri::command]
-pub async fn get_prompts(
-    app: String,
-    state: State<'_, AppState>,
-) -> Result<IndexMap<String, Prompt>, AppError> {
-    let app_type = AppType::from_str(&app)?;
-    PromptService::get_prompts(&state, app_type)
+pub async fn get_prompts(state: State<'_, AppState>) -> Result<IndexMap<String, Prompt>, AppError> {
+    PromptService::get_prompts(&state)
 }
 
 #[tauri::command]
 pub async fn upsert_prompt(
-    app: String,
     id: String,
     prompt: Prompt,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let app_type = AppType::from_str(&app)?;
-    PromptService::upsert_prompt(&state, app_type, &id, prompt)
+    PromptService::upsert_prompt(&state, &id, prompt)
 }
 
 #[tauri::command]
-pub async fn delete_prompt(
-    app: String,
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<(), AppError> {
-    let app_type = AppType::from_str(&app)?;
-    PromptService::delete_prompt(&state, app_type, &id)
+pub async fn delete_prompt(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
+    PromptService::delete_prompt(&state, &id)
 }
 
 #[tauri::command]
-pub async fn enable_prompt(
+pub async fn apply_prompt(
     app: String,
     id: String,
+    expected_revision: String,
+    expected_content: String,
     state: State<'_, AppState>,
-) -> Result<(), AppError> {
+) -> Result<PromptTargetSnapshot, AppError> {
     let app_type = AppType::from_str(&app)?;
-    PromptService::enable_prompt(&state, app_type, &id)
+    PromptService::apply_prompt(&state, app_type, &id, &expected_revision, &expected_content)
+}
+
+#[tauri::command]
+pub async fn get_prompt_target(
+    app: String,
+    state: State<'_, AppState>,
+) -> Result<PromptTargetSnapshot, AppError> {
+    PromptService::get_target(&state, AppType::from_str(&app)?)
+}
+
+#[tauri::command]
+pub async fn remove_prompt_application(
+    app: String,
+    expected_revision: String,
+    state: State<'_, AppState>,
+) -> Result<PromptTargetSnapshot, AppError> {
+    PromptService::remove_prompt_application(&state, AppType::from_str(&app)?, &expected_revision)
 }
 
 #[tauri::command]
@@ -60,30 +68,6 @@ pub async fn import_prompt_from_file(
 ) -> Result<String, AppError> {
     let app_type = AppType::from_str(&app)?;
     PromptService::import_from_file(&state, app_type)
-}
-
-#[tauri::command]
-pub async fn get_current_prompt_file_content(app: String) -> Result<Option<String>, AppError> {
-    let app_type = AppType::from_str(&app)?;
-    PromptService::get_current_file_content(app_type)
-}
-
-/// 提示词目标文件的位置：`path` 是完整路径（复制用），`displayPath` 把主目录写成 `~`（显示用）。
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PromptFileLocation {
-    pub path: String,
-    pub display_path: String,
-}
-
-#[tauri::command]
-pub async fn get_prompt_file_location(app: String) -> Result<PromptFileLocation, String> {
-    let app_type = AppType::from_str(&app)?;
-    let path = crate::prompt_files::prompt_file_path(&app_type)?;
-    Ok(PromptFileLocation {
-        path: path.to_string_lossy().to_string(),
-        display_path: crate::prompt_files::display_path(&path),
-    })
 }
 
 #[tauri::command]
