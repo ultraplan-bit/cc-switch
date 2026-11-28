@@ -112,7 +112,6 @@ export interface HermesProviderPreset extends PresetFamilyFields {
   settingsConfig: HermesProviderSettingsConfig;
   isOfficial?: boolean;
   isPartner?: boolean;
-  primePartner?: boolean; // 旧版的置顶合作伙伴标记；v7 起界面不再读取，新预设不写
   partnerPromotionKey?: string;
   category?: ProviderCategory;
   templateValues?: Record<string, TemplateValueConfig>;
@@ -303,7 +302,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     family: "kimi",
     planKey: "payg",
     regionKey: "cn",
-    primePartner: true,
     websiteUrl: "https://platform.kimi.com",
     settingsConfig: {
       name: "kimi",
@@ -351,7 +349,6 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     family: "kimi",
     planKey: "coding",
     regionKey: "cn",
-    primePartner: true,
     websiteUrl: "https://www.kimi.com/code/",
     settingsConfig: {
       name: "kimi_coding",

@@ -553,7 +553,6 @@ describe("App integration with MSW", () => {
     setSettings({
       showProfileSwitcher: false,
       firstRunNoticeConfirmed: true,
-      newLayoutNoticeConfirmed: true,
     });
     const originalVisibility = getSettings().visibleApps;
     const { default: App } = await import("@/App");
@@ -742,7 +741,6 @@ describe("App integration with MSW", () => {
   it("keeps the unsaved guard when re-clicking the current page", async () => {
     setSettings({
       firstRunNoticeConfirmed: true,
-      newLayoutNoticeConfirmed: true,
     });
     const { default: App } = await import("@/App");
     renderApp(App);

@@ -13,14 +13,14 @@ in_failover_queue: false
 
 id: default
 name: default
-settings_config: {"auth":{"OPENAI_API_KEY":"sk-live"},"config":"model_provider = \"relay\"\nmodel = \"gpt-5-codex\"\nmodel_reasoning_effort = \"high\"\n\n[model_providers.relay]\nname = \"relay\"\nbase_url = \"https://relay.example/v1\"\nwire_api = \"responses\"\n\n[mcp_servers.external]\ncommand = \"external\"\n"}
+settings_config: {"auth":{"OPENAI_API_KEY":"sk-live"},"config":"model_provider = \"relay\"\nmodel = \"gpt-5-codex\"\nmodel_reasoning_effort = \"high\"\n\n[model_providers.relay]\nname = \"relay\"\nbase_url = \"https://relay.example/v1\"\nwire_api = \"responses\"\n\n[projects.\"/Users/me/repo\"]\ntrust_level = \"trusted\"\n\n[mcp_servers.external]\ncommand = \"external\"\n"}
 website_url: NULL
 category: custom
 sort_index: NULL
 notes: NULL
 icon: NULL
 icon_color: NULL
-meta: {"commonConfigEnabled":true}
+meta: {}
 is_current: true
 in_failover_queue: false
 

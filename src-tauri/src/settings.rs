@@ -10,7 +10,7 @@ use crate::app_config::AppType;
 use crate::error::AppError;
 use crate::services::skill::{SkillStorageLocation, SyncMethod};
 
-/// 自定义端点配置（历史兼容，实际存储在 provider.meta.custom_endpoints）
+/// 自定义端点配置，存储在 provider.meta.custom_endpoints。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CustomEndpoint {
@@ -30,12 +30,7 @@ fn default_true() -> bool {
 pub struct VisibleApps {
     #[serde(default = "default_true")]
     pub claude: bool,
-    #[serde(
-        rename = "claude-desktop",
-        alias = "claudeDesktop",
-        alias = "claude_desktop",
-        default = "default_true"
-    )]
+    #[serde(rename = "claude-desktop", default = "default_true")]
     pub claude_desktop: bool,
     #[serde(default = "default_true")]
     pub codex: bool,
@@ -321,88 +316,10 @@ impl S3SyncSettings {
     }
 }
 
-/// 本机自动迁移状态。
-///
-/// 这里记录的是本机启动时执行过的一次性迁移；标记不随数据库同步。
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct LocalMigrations {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub codex_third_party_history_provider_bucket_v1:
-        Option<CodexThirdPartyHistoryProviderBucketMigration>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub codex_provider_template_v1: Option<CodexProviderTemplateMigration>,
-    /// 统一会话开关的官方历史迁移标记。开关关闭时会被清除，
-    /// 这样重新开启能把"关闭期间"落入 openai 桶的官方会话补迁进来。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub codex_official_history_unify_v1: Option<CodexOfficialHistoryUnifyMigration>,
-    /// 旧版官方路由桶（`cc-switch-official`）迁回 openai 桶的标记，按 Codex 目录生效。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub codex_legacy_official_history_bucket_v1: Option<CodexLegacyOfficialHistoryBucketMigration>,
-    /// 官方额度保护改成默认开启的一次性迁移：旧版每次保存都把 `enabled: false` 整块写进
-    /// settings.json，分不出「没碰过」和「主动关掉」，所以没有这个标记的设置一律打开一次。
-    /// 之后用户再关掉就以用户为准。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub codex_quota_protection_default_on_v1: Option<bool>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CodexThirdPartyHistoryProviderBucketMigration {
-    pub completed_at: String,
-    pub target_provider_id: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub source_provider_ids: Vec<String>,
-    #[serde(default)]
-    pub migrated_jsonl_files: usize,
-    #[serde(default)]
-    pub migrated_state_rows: usize,
-    #[serde(default)]
-    pub scanned_history_files: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CodexProviderTemplateMigration {
-    pub completed_at: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub migrated_provider_ids: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CodexOfficialHistoryUnifyMigration {
-    pub completed_at: String,
-    pub target_provider_id: String,
-    #[serde(default)]
-    pub migrated_jsonl_files: usize,
-    #[serde(default)]
-    pub migrated_state_rows: usize,
-    /// 迁移时的规范化 Codex 目录。标记只对同一目录生效：
-    /// 切换 codex_config_dir 后旧标记不会挡住新目录的迁移。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub codex_config_dir: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CodexLegacyOfficialHistoryBucketMigration {
-    pub completed_at: String,
-    pub target_provider_id: String,
-    #[serde(default)]
-    pub migrated_jsonl_files: usize,
-    #[serde(default)]
-    pub migrated_state_rows: usize,
-    /// 迁移时的规范化 Codex 目录，切换 codex_config_dir 后新目录照常迁移。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub codex_config_dir: Option<String>,
-}
-
 /// Used-percentage cutoffs for the Codex ChatGPT proxy. Independent windows.
 /// On by default: an account that reaches 100% makes the Codex app lock its
 /// composer (Luna Reserve), third-party models included. Unknown usage never
-/// blocks. Settings saved before the default changed are switched on once by
-/// [`LocalMigrations::codex_quota_protection_default_on_v1`].
+/// blocks. Explicitly saved choices are preserved on load.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct CodexQuotaProtection {
@@ -570,17 +487,10 @@ pub struct AppSettings {
     /// providers. Opt-in: defaults to false.
     #[serde(default)]
     pub unify_codex_session_history: bool,
-    /// User opted in (via the enable dialog checkbox) to migrate official
-    /// sessions ("openai" bucket) into the shared bucket. While set, every
-    /// launch also moves official sessions left behind since; cleared when the
-    /// toggle turns off.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub unify_codex_migrate_existing: Option<bool>,
     /// Codex 聚合模式下，合并目录里的每个模型都改用经典子 agent 工具（`multi_agent_version`
     /// 写 `"v1"`）。新版工具（v2）把派给子 agent 的任务加密，只有主 agent 那家后端解得开，
     /// 主、子 agent 不在同一家时子 agent 读不到任务。默认开（代价是没有新版工具的
-    /// followup_task 等功能）。v4.0.10–4.0.12 用的是默认关的 `codexStackClassicSubagents`，
-    /// 每次保存都会写下 `false`，分不清是不是用户关的：换了键名，旧键不再读，升级后一律按开。
+    /// followup_task 等功能）。
     #[serde(default = "default_true")]
     pub codex_stack_classic_tools: bool,
     /// Codex 聚合模式下子 agent 默认用的模型（合并目录里的 slug，`ccs-<key>/<model>`）。
@@ -602,9 +512,6 @@ pub struct AppSettings {
     /// User has confirmed the first-run welcome notice
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_run_notice_confirmed: Option<bool>,
-    /// User has confirmed the one-time "new layout" dialog shown to upgrading users
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub new_layout_notice_confirmed: Option<bool>,
     /// Highest app version whose "what's new" summary the user has seen on this device
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub whats_new_seen_version: Option<String>,
@@ -703,10 +610,6 @@ pub struct AppSettings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub s3_sync: Option<S3SyncSettings>,
 
-    // ===== WebDAV 备份设置（旧版，保留向后兼容）=====
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub webdav_backup: Option<serde_json::Value>,
-
     // ===== 备份策略设置 =====
     /// Auto-backup interval in hours (default 24, 0 = disabled)
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -725,10 +628,6 @@ pub struct AppSettings {
     /// - Linux: "gnome-terminal" | "konsole" | "xfce4-terminal" | "alacritty" | "kitty" | "ghostty"
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preferred_terminal: Option<String>,
-
-    // ===== 本机自动迁移状态 =====
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub local_migrations: Option<LocalMigrations>,
 }
 
 fn default_show_in_tray() -> bool {
@@ -776,14 +675,12 @@ impl Default for AppSettings {
             codex_quota_protection: CodexQuotaProtection::default(),
             codex_proxy_without_official_login: false,
             unify_codex_session_history: false,
-            unify_codex_migrate_existing: None,
             codex_stack_classic_tools: true,
             codex_stack_subagent_model: None,
             codex_stack_subagent_reasoning_effort: None,
             codex_stack_auto_review_model: None,
             failover_confirmed: None,
             first_run_notice_confirmed: None,
-            new_layout_notice_confirmed: None,
             whats_new_seen_version: None,
             common_config_confirmed: None,
             language: None,
@@ -815,12 +712,10 @@ impl Default for AppSettings {
             skill_storage_location: SkillStorageLocation::default(),
             webdav_sync: None,
             s3_sync: None,
-            webdav_backup: None,
             backup_interval_hours: None,
             backup_retain_count: None,
             backup_max_total_mb: None,
             preferred_terminal: None,
-            local_migrations: None,
         }
     }
 }
@@ -832,7 +727,7 @@ impl AppSettings {
     }
 
     fn settings_path() -> Option<PathBuf> {
-        // settings.json 保留用于旧版本迁移和无数据库场景
+        // 本机设置独立于可同步的数据库。
         Some(
             crate::config::get_home_dir()
                 .join(".cc-switch")
@@ -910,18 +805,7 @@ impl AppSettings {
         }
         let mut settings = loaded.settings;
         settings.normalize_paths();
-        settings.apply_load_migrations();
         settings
-    }
-
-    /// 读入时的一次性调整。只改内存里的值，下次保存时随标记一起落盘；没保存之前每次启动
-    /// 重跑一遍，结果一样。
-    fn apply_load_migrations(&mut self) {
-        let migrations = self.local_migrations.get_or_insert_with(Default::default);
-        if migrations.codex_quota_protection_default_on_v1.is_none() {
-            migrations.codex_quota_protection_default_on_v1 = Some(true);
-            self.codex_quota_protection.enabled = true;
-        }
     }
 }
 
@@ -999,12 +883,7 @@ fn parse_settings_lenient(content: &str) -> (AppSettings, bool) {
         Ok(settings) => return (settings, false),
         Err(err) => err,
     };
-    // 旧版在个别 Windows 环境下保存时文件没被截短（#8429），新内容后面残留着旧内容的尾巴；
-    // 开头那个完整的对象就是最后一次保存的内容，只取它，不因尾巴把整份设置丢掉。
-    let first = serde_json::Deserializer::from_str(content)
-        .into_iter::<serde_json::Value>()
-        .next();
-    let Some(Ok(serde_json::Value::Object(map))) = first else {
+    let Ok(serde_json::Value::Object(map)) = serde_json::from_str(content) else {
         log::warn!("设置文件不是合法的 JSON 对象，本次使用默认设置: {err}");
         return (AppSettings::default(), true);
     };
@@ -1136,7 +1015,6 @@ pub fn get_settings_for_frontend() -> AppSettings {
     if let Some(s3) = &mut settings.s3_sync {
         s3.secret_access_key.clear();
     }
-    settings.webdav_backup = None;
     settings
 }
 
@@ -1161,117 +1039,6 @@ where
     save_settings_file(&next)?;
     *guard = next;
     Ok(())
-}
-
-pub fn is_codex_third_party_history_provider_bucket_migrated() -> bool {
-    get_settings()
-        .local_migrations
-        .as_ref()
-        .and_then(|migrations| {
-            migrations
-                .codex_third_party_history_provider_bucket_v1
-                .as_ref()
-        })
-        .is_some_and(|m| m.scanned_history_files)
-}
-
-pub fn mark_codex_third_party_history_provider_bucket_migrated(
-    migration: CodexThirdPartyHistoryProviderBucketMigration,
-) -> Result<(), AppError> {
-    mutate_settings(|settings| {
-        let migrations = settings
-            .local_migrations
-            .get_or_insert_with(Default::default);
-        migrations.codex_third_party_history_provider_bucket_v1 = Some(migration);
-    })
-}
-
-pub fn is_codex_provider_template_migrated() -> bool {
-    get_settings()
-        .local_migrations
-        .as_ref()
-        .and_then(|migrations| migrations.codex_provider_template_v1.as_ref())
-        .is_some()
-}
-
-pub fn mark_codex_provider_template_migrated(
-    migration: CodexProviderTemplateMigration,
-) -> Result<(), AppError> {
-    mutate_settings(|settings| {
-        let migrations = settings
-            .local_migrations
-            .get_or_insert_with(Default::default);
-        migrations.codex_provider_template_v1 = Some(migration);
-    })
-}
-
-/// 统一会话迁移标记是否覆盖指定目录。标记里没记目录（不应出现的旧格式）
-/// 视为不匹配——重跑迁移是幂等的，宁可重迁也不漏迁。
-pub fn is_codex_official_history_unify_migrated_for_dir(codex_dir: &str) -> bool {
-    get_settings()
-        .local_migrations
-        .as_ref()
-        .and_then(|migrations| migrations.codex_official_history_unify_v1.as_ref())
-        .is_some_and(|migration| migration.codex_config_dir.as_deref() == Some(codex_dir))
-}
-
-/// 条件写入迁移完成标记：仅当此刻开关仍开启且迁移意愿仍在时才写。
-/// 检查与写入在 settings 写锁内原子完成，与关闭开关路径
-/// （`update_settings` / 清标记）串行，消除"迁移线程复查开关后、写标记前
-/// 用户恰好关闭开关"的竞态窗口。返回是否实际写入。
-pub fn mark_codex_official_history_unify_migrated_if_enabled(
-    migration: CodexOfficialHistoryUnifyMigration,
-) -> Result<bool, AppError> {
-    let mut written = false;
-    mutate_settings(|settings| {
-        if settings.unify_codex_session_history
-            && settings.unify_codex_migrate_existing.unwrap_or(false)
-        {
-            settings
-                .local_migrations
-                .get_or_insert_with(Default::default)
-                .codex_official_history_unify_v1 = Some(migration);
-            written = true;
-        }
-    })?;
-    Ok(written)
-}
-
-pub fn clear_codex_official_history_unify_migration() -> Result<(), AppError> {
-    mutate_settings(|settings| {
-        if let Some(migrations) = settings.local_migrations.as_mut() {
-            migrations.codex_official_history_unify_v1 = None;
-        }
-    })
-}
-
-pub fn is_codex_legacy_official_history_bucket_migrated_for_dir(codex_dir: &str) -> bool {
-    get_settings()
-        .local_migrations
-        .as_ref()
-        .and_then(|migrations| migrations.codex_legacy_official_history_bucket_v1.as_ref())
-        .is_some_and(|migration| migration.codex_config_dir.as_deref() == Some(codex_dir))
-}
-
-pub fn mark_codex_legacy_official_history_bucket_migrated(
-    migration: CodexLegacyOfficialHistoryBucketMigration,
-) -> Result<(), AppError> {
-    mutate_settings(|settings| {
-        settings
-            .local_migrations
-            .get_or_insert_with(Default::default)
-            .codex_legacy_official_history_bucket_v1 = Some(migration);
-    })
-}
-
-pub fn unify_codex_migrate_existing_requested() -> bool {
-    get_settings().unify_codex_migrate_existing.unwrap_or(false)
-}
-
-pub fn clear_codex_unify_migrate_existing() -> Result<(), AppError> {
-    mutate_settings(|settings| {
-        settings.unify_codex_migrate_existing = None;
-    })
 }
 
 /// 记下当前是否处于轻量模式（见 [`AppSettings::lightweight_mode`]），值没变就不写盘。
@@ -1836,10 +1603,10 @@ mod tests {
     }
 
     #[test]
-    fn visible_apps_accepts_claude_desktop_aliases() {
+    fn visible_apps_uses_the_current_claude_desktop_key() {
         let visible: VisibleApps = serde_json::from_value(serde_json::json!({
             "claude": true,
-            "claudeDesktop": false,
+            "claude-desktop": false,
             "codex": true,
             "gemini": true,
             "opencode": true,
@@ -1923,27 +1690,22 @@ mod tests {
     }
 
     #[test]
-    fn lenient_parse_keeps_first_object_when_old_tail_is_left_behind() {
-        // #8429：保存较短内容时文件没被截短，合法 JSON 后面跟着旧内容的尾巴。
-        let content = format!(
-            "{}\n}}\n  \"tail\": true\n}}",
-            serde_json::json!({
-                "claudeConfigDir": "/tmp/claude",
-                "visibleApps": { "claude-desktop": false, "gemini": false }
-            })
-        );
-        assert!(serde_json::from_str::<AppSettings>(&content).is_err());
+    fn invalid_trailing_json_is_rejected_and_preserved_as_lossy() {
+        let content = r#"{"claudeConfigDir":"/tmp/claude"} garbage"#;
+        let (settings, lossy) = parse_settings_lenient(content);
+        assert!(lossy);
+        assert!(settings.claude_config_dir.is_none());
+    }
 
-        let (settings, lossy) = parse_settings_lenient(&content);
-        assert!(
-            lossy,
-            "trailing data still counts as lossy so the file is backed up"
+    #[test]
+    fn saved_quota_protection_choice_is_not_changed_on_load() {
+        let (settings, lossy) = parse_settings_lenient(
+            r#"{"codexQuotaProtection":{"enabled":false,"fiveHourThreshold":90,"weeklyThreshold":97}}"#,
         );
-        assert_eq!(settings.claude_config_dir.as_deref(), Some("/tmp/claude"));
-        let visible = settings.visible_apps.expect("visible apps kept");
-        assert!(!visible.claude_desktop);
-        assert!(!visible.gemini);
-        assert!(visible.codex);
+        assert!(!lossy);
+        assert!(!settings.codex_quota_protection.enabled);
+        assert_eq!(settings.codex_quota_protection.five_hour_threshold, 90);
+        assert!(AppSettings::default().codex_quota_protection.enabled);
     }
 
     #[test]
@@ -1967,31 +1729,6 @@ mod tests {
         let loaded = load_settings_from_path(&path);
         assert!(loaded.lossy);
         assert!(loaded.settings.claude_config_dir.is_none());
-    }
-
-    /// 旧版存下的 `enabled: false` 分不出是不是用户关的，读入时打开一次；带了标记之后
-    /// 用户再关掉就以用户为准。
-    #[test]
-    fn quota_protection_is_switched_on_once_for_settings_saved_before_the_default() {
-        let saved_by_old_version = r#"{"codexQuotaProtection":{"enabled":false,"fiveHourThreshold":90,"weeklyThreshold":97}}"#;
-        let (mut settings, lossy) = parse_settings_lenient(saved_by_old_version);
-        assert!(!lossy);
-        settings.apply_load_migrations();
-        assert!(settings.codex_quota_protection.enabled);
-        assert_eq!(settings.codex_quota_protection.five_hour_threshold, 90);
-        assert_eq!(settings.codex_quota_protection.weekly_threshold, 97);
-
-        settings.codex_quota_protection.enabled = false;
-        let saved = serde_json::to_string(&settings).expect("serialize");
-        assert!(saved.contains("codexQuotaProtectionDefaultOnV1"), "{saved}");
-        let (mut reloaded, _) = parse_settings_lenient(&saved);
-        reloaded.apply_load_migrations();
-        assert!(!reloaded.codex_quota_protection.enabled);
-
-        let (mut fresh, _) = parse_settings_lenient("{}");
-        fresh.apply_load_migrations();
-        assert!(fresh.codex_quota_protection.enabled);
-        assert!(!fresh.codex_proxy_without_official_login);
     }
 
     #[test]

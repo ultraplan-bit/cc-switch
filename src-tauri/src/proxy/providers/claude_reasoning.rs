@@ -229,7 +229,7 @@ mod tests {
     }
 
     #[test]
-    fn managed_account_covers_declared_kinds_legacy_url_and_request_url() {
+    fn managed_account_uses_declared_identity_or_resolved_request_url() {
         for kind in ["github_copilot", "codex_oauth", "xai_oauth"] {
             let meta = Some(ProviderMeta {
                 provider_type: Some(kind.to_string()),
@@ -244,7 +244,7 @@ mod tests {
         let mut legacy = provider("p", None);
         legacy.settings_config =
             json!({ "env": { "ANTHROPIC_BASE_URL": "https://api.githubcopilot.com" } });
-        assert!(is_managed_account(&legacy, "https://relay.example.com"));
+        assert!(!is_managed_account(&legacy, "https://relay.example.com"));
 
         let plain = provider("p", None);
         assert!(is_managed_account(&plain, "https://api.githubcopilot.com"));

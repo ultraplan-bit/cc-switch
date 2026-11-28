@@ -82,7 +82,7 @@
     "disableAutoModeServer": "Disable Auto Mode Server Checks",
     "disableAutoModeServerHelp": "Gateways can't run the server-side check, so auto mode pauses once per session with a \"not eligible\" notice, then falls back to the local check after you press Enter. Checked, it uses the local check right away with no notice. Leave it unchecked on official endpoints.",
     "keyFieldsHint": "Endpoint, key, models, context window and compatibility switches follow the provider; everything else is a global Claude Code setting and applies to every provider once saved.",
-    "inactiveFieldsHint": "Saved in this provider by an older version; switching no longer applies them. Click one to add it above; after saving it applies to every provider.",
+    "inactiveFieldsHint": "These imported fields are not applied when switching connections. Select a field to add it to the configuration above.",
     "addToGlobalSettings": "Add to global settings"
   },
   "header": {
@@ -385,7 +385,6 @@
     "openclawDefaultModelSetFailed": "Failed to set default model",
     "openclawNoModels": "No models configured",
     "openclawModelNotFound": "The selected model no longer exists. Refresh and try again.",
-    "backfillWarning": "Switched successfully, but failed to save changes back to the previous provider",
     "codexAuthCleanupFailed": "Switched successfully, but auth.json could not be removed — the official login credentials are still on disk; delete auth.json from the Codex config directory to remove them",
     "omoVariantCleanupFailed": "Switched successfully, but the other OMO variant's config file (OMO / OMO Slim) could not be removed, so OpenCode may load both; delete it from the OpenCode config directory",
     "windowControlFailed": "Window control failed: {{error}}",
@@ -395,10 +394,9 @@
     "codexHistorySplit": {
       "hint": "{{count}} sessions from {{previous}} are now read-only",
       "officialBucket": "the official subscription",
-      "thirdPartyBucket": "third-party providers",
-      "migrationFinished": "Migrated {{count}} old sessions. Restart Codex to continue them.",
-      "migrationFailed": "Failed to migrate old sessions: {{error}}. CC Switch will retry on next launch."
-    }
+      "thirdPartyBucket": "third-party providers"
+    },
+    "switchWarnings": "Switched with notes:\n{{details}}"
   },
   "confirm": {
     "deleteProvider": "Delete Provider",
@@ -415,18 +413,6 @@
       "title": "Enable Failover",
       "message": "Failover is an advanced feature. Please make sure you understand how it works before enabling.\n\nWe recommend configuring provider priorities in the failover queue first.",
       "confirm": "I understand, enable"
-    },
-    "unifyCodexHistory": {
-      "title": "Unified Codex session history",
-      "message": "When enabled, the official subscription runs under the shared \"custom\" provider id, so official and third-party sessions share one group: newer Codex can continue both, and the CLI resume list shows them together.\n\nYou can also migrate your existing official sessions; if you do, CC Switch also moves any official sessions left behind on every launch (backed up to ~/.cc-switch/backups first; you can restore them when turning this off). Sessions you don't migrate stay read-only in newer Codex. Restart Codex after the migration.\n\nNote: resuming an old session across providers may fail because the other backend cannot decrypt its encrypted_content reasoning.",
-      "migrateExisting": "Also migrate existing official session history",
-      "confirm": "I understand, enable"
-    },
-    "unifyCodexHistoryOff": {
-      "title": "Turn off unified session history",
-      "message": "When turned off, official and third-party sessions split into two groups again: newer Codex can only continue the current provider's group, and the other group becomes read-only. Sessions created while this was on can't be told apart, so they stay in the third-party group.",
-      "restoreBackup": "Restore the migrated official sessions to the official group (exact restore from backup)",
-      "confirm": "Turn off"
     },
     "usage": {
       "title": "Configure Usage Query",
@@ -633,7 +619,6 @@
       "delete": "Delete",
       "deleting": "Deleting...",
       "managedAbove": "Managed in the list above",
-      "legacy": "Legacy",
       "loadFailed": "Failed to read backup usage",
       "revealFailed": "Failed to open folder",
       "deleteConfirmTitle": "Delete \"{{name}}\"?",
@@ -649,18 +634,6 @@
           "name": "Skill uninstall backups",
           "hint": "Copies kept when uninstalling skills, restorable from the Skills page. After deleting, those uninstalled skills can no longer be restored."
         },
-        "codexHistoryUnify": {
-          "name": "Codex session unify migration backups",
-          "hint": "Session copies kept when \"Unified Codex session history\" migrated existing sessions. \"Restore backup\" when turning that switch off depends on them; after deleting, migrated official sessions can no longer be moved back to their original group."
-        },
-        "codexHistoryUnifyRestore": {
-          "name": "Codex session unify restore backups",
-          "hint": "Session copies kept before \"Restore backup\" ran. CC Switch never reads them again."
-        },
-        "codexHistoryProviderMigration": {
-          "name": "Codex session group migration backups",
-          "hint": "Copies kept before session groups were migrated. CC Switch never reads them again."
-        },
         "liveFirstWrite": {
           "name": "Config first-write backups",
           "hint": "Original client config files from before CC Switch first rewrote them. After deleting, those originals are gone; the next write backs up the file as it is then."
@@ -673,29 +646,9 @@
           "name": "OpenClaw config backups",
           "hint": "Copies kept before saving OpenClaw config, pruned by Backup Retention."
         },
-        "proxyLiveBackup": {
-          "name": "Legacy routing takeover backups",
-          "hint": "Config copies moved out of the old routing takeover backups during upgrade. CC Switch never reads them again."
-        },
         "envVars": {
           "name": "Environment variable cleanup backups",
           "hint": "Original values recorded before conflicting environment variables were removed. After deleting, those values can no longer be looked up."
-        },
-        "legacyConfigBackups": {
-          "name": "Legacy config.json backups",
-          "hint": "Left by older versions; the current version no longer reads them."
-        },
-        "legacyConfigArchive": {
-          "name": "Legacy config.json archive",
-          "hint": "The old config file from before the database migration; the current version no longer reads it."
-        },
-        "legacyDbUpgrade": {
-          "name": "Legacy database upgrade backups",
-          "hint": "Copies made by older versions when upgrading the database; the current version no longer reads them."
-        },
-        "legacyToolSearch": {
-          "name": "Legacy Tool Search patch backups",
-          "hint": "Left by the removed Tool Search patch feature; the current version no longer reads them."
         }
       }
     },
@@ -744,7 +697,7 @@
       "saveAndTestSuccess": "Config saved, connection OK",
       "saveAndTestFailed": "Config saved, but connection test failed: {{error}}",
       "noRemoteData": "No sync data found on the remote server",
-      "incompatibleVersion": "Remote data is incompatible (protocol v{{protocolVersion}}, database {{dbCompatVersion}}). This client supports protocol v2 / db-v6.",
+      "incompatibleVersion": "Remote data is incompatible (protocol v{{protocolVersion}}, database {{dbCompatVersion}}). This client supports protocol v2 / db-v7.",
       "unsaved": "Unsaved",
       "saved": "Saved",
       "unsavedChanges": "Please save config first",
@@ -767,7 +720,6 @@
         "path": "Remote path",
         "dbCompat": "DB compatibility",
         "artifacts": "Contents",
-        "legacyNotice": "A legacy remote path was detected. After restoring, the next upload will write to the new v2/db-v6 path.",
         "warning": "This will overwrite all local data and skill configurations",
         "confirm": "Confirm Restore"
       },
@@ -783,7 +735,6 @@
         "path": "Remote path",
         "dbCompat": "DB compatibility",
         "warning": "This will overwrite existing sync data on the remote server",
-        "legacyNotice": "Legacy remote data was detected. This upload will write to the new v2/db-v6 path and will not overwrite the legacy path.",
         "confirm": "Confirm Upload"
       }
     },
@@ -854,7 +805,7 @@
       "autoSyncLastErrorHint": "Please check network or S3 settings. Auto sync will retry on future changes.",
       "missingBucket": "Please enter the S3 bucket",
       "noRemoteData": "No sync data found in the S3 bucket",
-      "incompatibleVersion": "Remote data is incompatible (version {{version}}). This client supports protocol v2 / db-v6.",
+      "incompatibleVersion": "Remote data is incompatible (version {{version}}). This client supports protocol v2 / db-v7.",
       "unsaved": "Unsaved",
       "saved": "Saved",
       "clear": "Clear config",
@@ -940,7 +891,7 @@
     "preserveCodexOfficialAuthOnSwitch": "Keep official login for direct switches",
     "preserveCodexOfficialAuthOnSwitchDescription": "Controls third-party switches when local routing is off. Takeover routing always preserves the Codex official login.",
     "unifyCodexSessionHistory": "Unified Codex session history",
-    "unifyCodexSessionHistoryDescription": "Official subscriptions run under the same \"custom\" provider id as third-party providers, so all sessions share one group. Newer Codex (desktop 26.1103 / CLI 0.167 and later) can only continue sessions in the current provider's group; the other group becomes read-only, and the CLI resume list only shows the current group. Turn this on if you switch between official and third-party providers. You can optionally migrate official sessions into the shared group (backed up first) and restore them from backup when you turn it off. Note: resuming an old session across providers may fail because its encrypted_content reasoning can only be decrypted by the backend that created it.",
+    "unifyCodexSessionHistoryDescription": "Only future official and third-party Codex sessions use the same provider group. Existing session records are not moved or rewritten.",
     "codexStackClassicSubagents": "Classic sub-agent tools in aggregation",
     "codexStackClassicSubagentsDescription": "Must be on when the main agent and a sub-agent use different providers, or the sub-agent cannot receive its task.",
     "codexStackClassicSubagentsForcedV2": "Codex config.toml turns on [features] multi_agent_v2, which takes precedence over this setting, so it has no effect.",
@@ -948,10 +899,6 @@
     "codexSessionCompressionDescription": "When on, Codex compresses session files that haven't changed for 7 days in the background each time it starts, which saves a lot of disk space. Codex decompresses a session automatically when you continue it. CC Switch still lists and counts compressed sessions; the list just doesn't show a preview of their last reply. This is a Codex feature still under development: Codex shows a notice on every start while it's on. Requires a recent Codex version and takes effect after restarting Codex. Turning it off stops compressing; sessions already compressed stay as they are.",
     "codexSessionCompressionUsage": "Sessions currently use {{size}}",
     "codexSessionCompressionFailed": "Failed to change the Codex session compression setting",
-    "unifyCodexHistoryRestoreCompleted": "Official session history restored from backup ({{files}} session files, {{rows}} index rows)",
-    "unifyCodexHistoryRestoreFailed": "Failed to restore official session history, please try again",
-    "unifyCodexHistoryRestoreNothing": "No restorable migration backup for the current Codex directory",
-    "unifyCodexHistoryRestoreSkippedToggleOn": "Unified session history was re-enabled; restore skipped",
     "appVisibility": {
       "title": "Homepage Display",
       "description": "Choose which apps to show on the homepage",
@@ -1147,7 +1094,12 @@
       "about": "About"
     },
     "appConfig": {
-      "configDir": "Config directory"
+      "configDir": "Config directory",
+      "selectAgent": "Agent",
+      "selectionHint": "Choose an Agent to view its settings and configuration directory.",
+      "empty": "This Agent has no dedicated application settings.",
+      "pendingDirectories": "Unsaved directories: {{apps}}",
+      "saveDirectories": "Save all directory changes"
     },
     "routing": {
       "service": "Service"
@@ -1985,7 +1937,6 @@
     "setAsDefault": "Set as default",
     "retry": "Retry",
     "copyCode": "Copy code",
-    "migrationFailed": "Legacy auth migration failed: {{error}}",
     "loadModelsFailed": "Failed to load Copilot models",
     "noPickerModels": "This GitHub account has no Copilot models available. This is typical for Copilot Free accounts; please make sure the account has Copilot Pro or a higher plan.",
     "noPickerModelsClaude": "This GitHub account has no Copilot models available. This is typical for Copilot Free accounts; please make sure the account has Copilot Pro or a higher plan. You can still type gpt-4.1 or gpt-4o into the model field manually.",
@@ -2023,7 +1974,8 @@
       "notSignedIn": "Copilot CLI isn't signed in. Run copilot and use /login, or bind an Auth Center account on this card."
     },
     "defaultCannotRemove": "Copilot's default model belongs to this provider, so it can't be removed or deleted. Pick another provider's model with /model in copilot first.",
-    "terminalNeedsAdd": "Add this provider to Copilot first so the terminal can select its model."
+    "terminalNeedsAdd": "Add this provider to Copilot first so the terminal can select its model.",
+    "storageFailed": "Cannot read account storage: {{error}}"
   },
   "codexOauth": {
     "authStatus": "Auth status",
@@ -2212,7 +2164,7 @@
     "reasoningEffortHint": "Turn on when the upstream supports thinking depth such as low/high/max. Also turns on thinking mode and maps Codex's reasoning.effort to the upstream Chat parameter.",
     "reasoningGroupTitle": "Reasoning Capability",
     "keyFieldsHint": "The endpoint, key, model, reasoning effort, context window and compatibility switches follow the provider; everything else is a global Codex setting that applies to every provider once saved.",
-    "inactiveFieldsHint": "Saved in this provider by an older version; switching no longer applies them. Click one to copy its TOML and paste it above if you need it.",
+    "inactiveFieldsHint": "These imported fields are not applied when switching connections. Copy the TOML into the configuration above if needed.",
     "inactiveFieldCopied": "Copied",
     "upstreamFormatCopilotRouteHint": "Every mode requires routing, which injects the Copilot account credentials. A protocol you pick explicitly fails for models that don't support it.",
     "maxOutputTokensWarning": "Don't exceed the real output limit of the model or gateway, or requests return 400.",
@@ -2224,7 +2176,7 @@
     "configJson": "Settings file (settings.json)",
     "configJsonHint": "Gemini CLI's settings.json (MCP servers are managed in the MCP panel)",
     "keyFieldsHint": "The endpoint, key, model name and auth type follow the provider; the other environment variables and settings.json are Gemini CLI global settings and apply to every provider after saving.",
-    "inactiveFieldsHint": "Saved in this provider by an older version; switching no longer applies them. Click one to add it above; after saving it applies to every provider.",
+    "inactiveFieldsHint": "These imported fields are not applied when switching connections. Select a field to add it to the configuration above.",
     "addToGlobalSettings": "Add to global settings"
   },
   "opencode": {
@@ -3193,7 +3145,6 @@
     "applySuccess": "Profile applied globally",
     "applyFailed": "Could not apply the profile: {{detail}}",
     "applyWarnings": "Profile applied with {{warningCount}} note(s):\n{{details}}",
-    "switchFollowWarning": "The connection was switched, but its profile was not fully applied:\n{{details}}",
     "scope": {
       "label": "Location",
       "global": "Global",
@@ -3251,10 +3202,6 @@
     "import": {
       "completedWithNotes": "Project configuration imported; review the notes"
     },
-    "migration": {
-      "pending": "Preparing existing Agent configuration…",
-      "failed": "Existing configuration migration is incomplete"
-    },
     "environment": {
       "title": "Project environment",
       "configureProject": "Configure project",
@@ -3274,6 +3221,14 @@
       "name": "Name",
       "provider": "Provider",
       "inheritProvider": "Use the current global provider",
+      "projectConnection": "Project API connection",
+      "projectConnectionInherit": "Inherit global connection",
+      "projectConnectionDirect": "Independent project connection",
+      "projectConnectionInheritHint": "Connection settings follow Claude Code’s native configuration layers. Returning to inheritance removes only connection fields managed by this feature; restart the session afterwards. This option affects project deployment only.",
+      "projectConnectionDirectHint": "Project deployment only: requests go directly to the selected provider, bypassing CC Switch local routing. Only standard API key or token connections using the Anthropic protocol are supported. Organization policies and startup overrides still apply.",
+      "projectConnectionCredentialsHint": "The address and key are written to .claude/settings.local.json and excluded from Git. Direct deployment is blocked if Git already tracks this file. Redeploy after provider changes. Returning to inheritance removes managed connection fields; restart the Claude session afterwards.",
+      "projectConnectionProviderRequired": "Select an existing provider to use an independent project connection.",
+      "projectConnectionProviderPlaceholder": "Select a project provider",
       "providerReferenceHint": "Model features use the selected provider. API addresses, keys and accounts stay with the provider. Project deployment does not switch the global connection.",
       "model": "Model",
       "resetModels": "Restore provider model settings",
@@ -3918,12 +3873,6 @@
     "clickToChange": "Click to change icon",
     "clickToSelect": "Click to select icon",
     "change": "Change icon"
-  },
-  "migration": {
-    "success": "Configuration migrated successfully",
-    "skillsSuccess": "Automatically imported {{count}} skill(s) into unified management",
-    "skillsFailed": "Failed to auto import skills",
-    "skillsFailedDescription": "Open the Skills page and click \"Import Existing\" to import manually (or restart and try again)."
   },
   "health": {
     "operational": "Operational",
@@ -5230,12 +5179,6 @@
       "marketRemoved": "Removed marketplace {{name}}",
       "marketRemoveFailed": "Couldn't remove {{name}}"
     }
-  },
-  "newLayoutNotice": {
-    "title": "CC Switch has a new look",
-    "body": "This version redesigns the interface, so a few things have moved:\n• Modes now sit at the top of each app page\n• Usage and Accounts are in the sidebar\nSee the release notes for everything that changed.",
-    "viewReleaseNotes": "View release notes",
-    "confirm": "Got it"
   },
   "whatsNew": {
     "updatedTo": "Updated to v{{version}}",

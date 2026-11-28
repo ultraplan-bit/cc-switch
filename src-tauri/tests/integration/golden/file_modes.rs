@@ -58,7 +58,6 @@ fn seed_all_providers(state: &cc_switch_lib::AppState) {
                     "ANTHROPIC_BASE_URL": "https://relay.example",
                     "ANTHROPIC_AUTH_TOKEN": "sk-relay"
                 } }),
-                None,
             ),
             official("claude-official", json!({ "env": {} })),
         ],
@@ -75,7 +74,6 @@ fn seed_all_providers(state: &cc_switch_lib::AppState) {
                     "config": "model_provider = \"custom\"\nmodel = \"relay-model\"\n\n[model_providers.custom]\nname = \"custom\"\nbase_url = \"https://relay.example/v1\"\nwire_api = \"responses\"\n",
                     "modelCatalog": { "models": [{ "model": "relay-model" }] }
                 }),
-                None,
             ),
             official(
                 "codex-official",
@@ -100,7 +98,6 @@ fn seed_all_providers(state: &cc_switch_lib::AppState) {
                     },
                     "config": {}
                 }),
-                None,
             ),
             official("gemini-official", json!({ "env": {}, "config": {} })),
         ],
@@ -112,7 +109,6 @@ fn seed_all_providers(state: &cc_switch_lib::AppState) {
         &[provider(
             "relay",
             json!({ "config": "[models]\ndefault = \"grok-4.5\"\n\n[model.\"grok-4.5\"]\nmodel = \"grok-4.5\"\nbase_url = \"https://relay.example/v1\"\nname = \"Relay\"\napi_key = \"xai-relay\"\napi_backend = \"responses\"\ncontext_window = 500000\n" }),
-            None,
         )],
         "relay",
     );

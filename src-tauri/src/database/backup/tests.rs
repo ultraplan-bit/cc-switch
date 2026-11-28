@@ -359,8 +359,8 @@ fn sql_roundtrip_preserves_project_profiles_and_scoped_state() -> Result<(), App
     {
         let conn = crate::database::lock_conn!(source.conn);
         conn.execute(
-            "INSERT INTO profiles (id, name, payload, project_path) VALUES (?1, ?2, ?3, ?4)",
-            rusqlite::params!["project-profile", "Project profile", payload, project_path],
+            "INSERT INTO profiles (id, name, payload) VALUES (?1, ?2, ?3)",
+            rusqlite::params!["project-profile", "Project profile", payload],
         )?;
     }
     source.add_profile_project(&project_path)?;
@@ -384,13 +384,10 @@ fn sql_roundtrip_preserves_project_profiles_and_scoped_state() -> Result<(), App
     assert!(target.is_current_profile_stale("claude")?);
     assert_eq!(target.get_current_profile_id("codex")?, None);
     let conn = crate::database::lock_conn!(target.conn);
-    assert_eq!(Database::get_user_version(&conn)?, 28);
-    let legacy_path: String = conn.query_row(
-        "SELECT project_path FROM profiles WHERE id = 'project-profile'",
-        [],
-        |row| row.get(0),
-    )?;
-    assert_eq!(legacy_path, project_path);
+    assert_eq!(
+        Database::get_user_version(&conn)?,
+        crate::database::SCHEMA_VERSION
+    );
     Ok(())
 }
 
@@ -479,7 +476,7 @@ fn unix_colon_named_backup_supports_list_restore_rename_and_delete() -> Result<(
     std::fs::create_dir_all(&backup_dir).map_err(|e| AppError::io(&backup_dir, e))?;
 
     // Seed a valid backup snapshot containing a sentinel provider and save it under
-    // legacy colon-containing Unix filenames (e.g. timestamped manual renames).
+    // colon-containing Unix filenames (e.g. timestamped manual renames).
     let source = Database::memory()?;
     {
         let conn = crate::database::lock_conn!(source.conn);
@@ -507,7 +504,7 @@ fn unix_colon_named_backup_supports_list_restore_rename_and_delete() -> Result<(
     let listed = Database::list_backups()?;
     assert!(
         listed.iter().any(|entry| entry.filename == colon_backup),
-        "list_backups must include legacy colon-named backup '{colon_backup}'"
+        "list_backups must include colon-named backup '{colon_backup}'"
     );
 
     // 2. restore_from_backup succeeds on colon-named Unix backup.
@@ -849,58 +846,18 @@ fn import_rejects_truncated_open_transaction_and_keeps_live_database() -> Result
 
 #[test]
 #[serial]
-fn import_still_accepts_legacy_single_row_insert_exports() -> Result<(), AppError> {
+fn import_rejects_unsupported_schema_without_changing_live_database() -> Result<(), AppError> {
     let _test_home = TestHomeGuard::new();
-    // This schema is copied from the v3.8.3 tag. Its data statements use
-    // the historical one-row-per-INSERT format and omit all newer columns.
-    let legacy = format!(
-        "{}\nPRAGMA foreign_keys=OFF;\nPRAGMA user_version=1;\nBEGIN TRANSACTION;\n{}
-             INSERT INTO providers (
-                 id, app_type, name, settings_config, meta, is_current
-             ) VALUES (
-                 'legacy-provider', 'claude', 'Legacy Provider',
-                 '{{\"anthropicApiKey\":\"sk-old\"}}', '{{}}', 1
-             );
-             INSERT INTO skills (key, installed, installed_at)
-             VALUES ('claude:legacy-skill', 1, 1700000000);
-             COMMIT;\nPRAGMA foreign_keys=ON;\n",
-        super::CC_SWITCH_SQL_EXPORT_HEADER,
-        crate::database::tests::V3_8_SCHEMA_V1_SQL,
+    let source = Database::memory()?;
+    let exported = source.export_sql_string()?;
+    let unsupported = exported.replace(
+        &format!("PRAGMA user_version={};", crate::database::SCHEMA_VERSION),
+        "PRAGMA user_version=1;",
     );
-
     let target = Database::memory()?;
-    target.import_sql_string(&legacy)?;
-
-    let conn = crate::database::lock_conn!(target.conn);
-    let user_version: i32 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, crate::database::SCHEMA_VERSION);
-    let provider: (String, String) = conn.query_row(
-        "SELECT name, settings_config FROM providers WHERE id = 'legacy-provider'",
-        [],
-        |row| Ok((row.get(0)?, row.get(1)?)),
-    )?;
-    assert_eq!(
-        provider,
-        (
-            "Legacy Provider".into(),
-            "{\"anthropicApiKey\":\"sk-old\"}".into()
-        )
-    );
-    let cost_multiplier: String = conn.query_row(
-        "SELECT cost_multiplier FROM providers WHERE id = 'legacy-provider'",
-        [],
-        |row| row.get(0),
-    )?;
-    assert_eq!(cost_multiplier, "1.0");
-    let skill_snapshot: String = conn.query_row(
-        "SELECT value FROM settings WHERE key = 'skills_ssot_migration_snapshot'",
-        [],
-        |row| row.get(0),
-    )?;
-    assert!(
-        skill_snapshot.contains("legacy-skill"),
-        "重建 skills 表时必须保留旧数据迁移快照"
-    );
+    target.set_setting("sentinel", "keep")?;
+    assert!(target.import_sql_string(&unsupported).is_err());
+    assert_eq!(target.get_setting("sentinel")?.as_deref(), Some("keep"));
     Ok(())
 }
 
@@ -2578,7 +2535,7 @@ fn maintenance_prunes_logs_even_when_backup_destination_is_invalid() -> Result<(
     })?;
     let db = Database::init()?;
     let backup_dir = crate::config::get_app_config_dir().join("backups");
-    // Initialization may create migration backups in this isolated home.
+    // Keep the isolated backup directory clear for this test.
     if backup_dir.is_dir() {
         std::fs::remove_dir_all(&backup_dir).map_err(|e| AppError::io(&backup_dir, e))?;
     }

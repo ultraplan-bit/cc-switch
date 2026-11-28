@@ -10,8 +10,7 @@ use std::time::SystemTime;
 
 use serde::Serialize;
 
-use crate::codex_history_migration;
-use crate::config::{get_app_config_dir, get_home_dir};
+use crate::config::get_app_config_dir;
 use crate::database::Database;
 use crate::error::AppError;
 use crate::live::engine::DeviceStore;
@@ -50,8 +49,6 @@ struct Category {
 fn categories() -> Vec<Category> {
     let app_dir = get_app_config_dir();
     let app_backups = app_dir.join("backups");
-    // 写入引擎与旧版接管备份按设备目录落盘（不受 app_config_dir 覆盖影响）。
-    let device_backups = get_home_dir().join(".cc-switch").join("backups");
     let env_backups = crate::services::env_manager::backup_dir();
 
     let whole = |id, dir| Category {
@@ -76,38 +73,14 @@ fn categories() -> Vec<Category> {
         },
         whole("skills", app_dir.join("skill-backups")),
         whole(
-            "codexHistoryUnify",
-            app_backups.join(codex_history_migration::OFFICIAL_UNIFY_MIGRATION_NAME),
-        ),
-        whole(
-            "codexHistoryUnifyRestore",
-            app_backups.join(codex_history_migration::OFFICIAL_UNIFY_RESTORE_BACKUP_NAME),
-        ),
-        whole(
-            "codexHistoryProviderMigration",
-            app_backups.join(codex_history_migration::MIGRATION_NAME),
-        ),
-        whole(
             "liveFirstWrite",
             DeviceStore::for_device().first_write_backup_dir(),
         ),
         whole("hermes", app_backups.join("hermes")),
         whole("openclaw", app_backups.join("openclaw")),
-        whole("proxyLiveBackup", device_backups.join("proxy-live-backup")),
         files("envVars", env_backups, |name| {
             name.starts_with("env-backup-") && name.ends_with(".json")
         }),
-        // 以下为旧版本遗留，当前版本不再读写。
-        files("legacyConfigBackups", app_backups, |name| {
-            name.starts_with("backup_") && name.ends_with(".json")
-        }),
-        files("legacyConfigArchive", app_dir.clone(), |name| {
-            name == "config.json.migrated"
-        }),
-        files("legacyDbUpgrade", app_dir.clone(), |name| {
-            name.starts_with("cc-switch.db.") && name.contains("-backup-")
-        }),
-        whole("legacyToolSearch", app_dir.join("toolsearch-backups")),
     ]
 }
 
@@ -244,11 +217,6 @@ pub fn delete_location(id: &str) -> Result<u64, AppError> {
             "备份类别 {id} 不支持整体删除"
         )));
     }
-    // 与写这些目录的操作串行：Codex 迁移 / 还原正在写备份时不能抽掉目录；
-    // Skill 卸载、恢复同样持有 Skills 状态锁。
-    let _codex_guard = id
-        .starts_with("codex")
-        .then(codex_history_migration::lock_history_op_for_backup_cleanup);
     let _skill_guard = (id == "skills").then(crate::services::skill::skill_state_write_guard);
 
     let freed = measure(&category).size;

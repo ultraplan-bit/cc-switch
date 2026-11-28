@@ -47,10 +47,6 @@ export const handlers = [
   http.post(`${TAURI_ENDPOINT}/fetch_models_dev`, () =>
     success(JSON.stringify({})),
   ),
-  http.post(`${TAURI_ENDPOINT}/get_migration_result`, () => success(false)),
-  http.post(`${TAURI_ENDPOINT}/get_skills_migration_result`, () =>
-    success(null),
-  ),
   http.post(`${TAURI_ENDPOINT}/list_profiles`, () =>
     success({
       profiles: [],

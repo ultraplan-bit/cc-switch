@@ -1359,7 +1359,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_log_usage_ignores_legacy_multiplier_and_provider_overrides(
+    async fn test_log_usage_uses_response_pricing_without_a_billing_multiplier(
     ) -> Result<(), AppError> {
         let db = Arc::new(Database::memory()?);
         let app_type = "claude";
@@ -1367,22 +1367,7 @@ mod tests {
         db.set_pricing_model_source(&AppType::Claude, "response")
             .await?;
         seed_pricing(&db)?;
-        {
-            // 旧版写下的全局倍率仍留在列里，新版不再读取
-            let conn = crate::database::lock_conn!(db.conn);
-            conn.execute(
-                "UPDATE proxy_config SET default_cost_multiplier = '1.5' WHERE app_type = ?1",
-                [app_type],
-            )
-            .map_err(|e| AppError::Database(e.to_string()))?;
-        }
-
-        // 旧版的供应商级覆盖仍在 meta 里（给旧设备往返保留），新版不再读取
-        let meta = ProviderMeta {
-            cost_multiplier: Some("2".to_string()),
-            pricing_model_source: Some("request".to_string()),
-            ..ProviderMeta::default()
-        };
+        let meta = ProviderMeta::default();
         insert_provider(&db, "provider-1", app_type, meta)?;
 
         let state = build_state(db.clone());

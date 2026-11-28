@@ -201,7 +201,7 @@ describe("SettingsPage integration", () => {
   });
 
   it.each([undefined, "/saved/claude"])(
-    "discards directory drafts after unrelated autosave with saved directory %s",
+    "preserves directory drafts after unrelated autosave with saved directory %s",
     async (savedDirectory) => {
       setSettings({ claudeConfigDir: savedDirectory });
       const resolvedDirectory = savedDirectory ?? "/home/mock/.claude";
@@ -222,7 +222,7 @@ describe("SettingsPage integration", () => {
         }),
         http.post("http://tauri.local/sync_current_providers_live", () => {
           syncLive();
-          return HttpResponse.json(true);
+          return HttpResponse.json({ success: true });
         }),
       );
       renderDialog({ section: "appConfig" });
@@ -233,7 +233,11 @@ describe("SettingsPage integration", () => {
       expect(directory).toHaveValue(resolvedDirectory);
       fireEvent.change(directory, { target: { value: "/unsaved/claude" } });
       expect(directory).toHaveValue("/unsaved/claude");
-      expect(screen.getByRole("button", { name: "common.save" })).toBeEnabled();
+      expect(
+        screen.getByRole("button", {
+          name: "settings.appConfig.saveDirectories",
+        }),
+      ).toBeEnabled();
       expect(saves).toHaveLength(0);
 
       const toggle = screen.getByRole("switch", {
@@ -244,12 +248,12 @@ describe("SettingsPage integration", () => {
         expect(getSettings().skipClaudeOnboarding).toBe(true),
       );
       expect(saves[0].claudeConfigDir).toBe(savedDirectory);
-      await waitFor(() =>
-        expect(
-          screen.queryByRole("button", { name: "common.save" }),
-        ).toBeNull(),
-      );
-      await waitFor(() => expect(directory).toHaveValue(resolvedDirectory));
+      expect(
+        screen.getByRole("button", {
+          name: "settings.appConfig.saveDirectories",
+        }),
+      ).toBeEnabled();
+      expect(directory).toHaveValue("/unsaved/claude");
 
       fireEvent.click(toggle);
       await waitFor(() =>
@@ -257,8 +261,23 @@ describe("SettingsPage integration", () => {
       );
       expect(saves).toHaveLength(2);
       expect(saves[1].claudeConfigDir).toBe(savedDirectory);
-      expect(directory).toHaveValue(resolvedDirectory);
+      expect(directory).toHaveValue("/unsaved/claude");
       expect(syncLive).not.toHaveBeenCalled();
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "settings.appConfig.saveDirectories",
+        }),
+      );
+      await waitFor(() =>
+        expect(getSettings().claudeConfigDir).toBe("/unsaved/claude"),
+      );
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("button", {
+            name: "settings.appConfig.saveDirectories",
+          }),
+        ).toBeNull(),
+      );
     },
   );
 
@@ -302,26 +321,42 @@ describe("SettingsPage integration", () => {
       expect(directory).toHaveValue("/edited/claude");
       expect(getSettings().claudeConfigDir).toBe(savedDirectory);
 
-      fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "settings.appConfig.saveDirectories",
+        }),
+      );
       await waitFor(() =>
         expect(getSettings().claudeConfigDir).toBe("/edited/claude"),
       );
       await waitFor(() => expect(toastSuccessMock).toHaveBeenCalledOnce());
       expect(directory).toHaveValue("/edited/claude");
-      expect(screen.queryByRole("button", { name: "common.save" })).toBeNull();
+      expect(
+        screen.queryByRole("button", {
+          name: "settings.appConfig.saveDirectories",
+        }),
+      ).toBeNull();
 
       fireEvent.click(
         screen.getAllByRole("button", { name: "settings.resetDefault" })[0],
       );
       expect(directory).toHaveValue("/home/mock/.claude");
       expect(getSettings().claudeConfigDir).toBe("/edited/claude");
-      fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "settings.appConfig.saveDirectories",
+        }),
+      );
       await waitFor(() =>
         expect(getSettings().claudeConfigDir).toBeUndefined(),
       );
       await waitFor(() => expect(toastSuccessMock).toHaveBeenCalledTimes(2));
       expect(directory).toHaveValue("/home/mock/.claude");
-      expect(screen.queryByRole("button", { name: "common.save" })).toBeNull();
+      expect(
+        screen.queryByRole("button", {
+          name: "settings.appConfig.saveDirectories",
+        }),
+      ).toBeNull();
     },
   );
 
@@ -352,7 +387,7 @@ describe("SettingsPage integration", () => {
     ["omp", "ompConfigDir", "settings.browsePlaceholderOmp", "/env/omp-agent"],
     ["dsh", "dshConfigDir", "settings.browsePlaceholderDsh", "/env/dsh-home"],
   ] as const)(
-    "restores backend-resolved %s default after draft discard",
+    "preserves a hidden %s directory draft through another Agent autosave",
     async (targetApp, field, placeholder, backendDefault) => {
       setSettings({ [field]: undefined });
       const saves: Settings[] = [];
@@ -370,24 +405,57 @@ describe("SettingsPage integration", () => {
           return HttpResponse.json(true);
         }),
       );
-      renderDialog({ section: "appConfig" });
+      renderDialog({ section: "appConfig", activeApp: targetApp });
       const directory = await screen.findByPlaceholderText(placeholder);
       await waitFor(() => expect(directory).toHaveValue(backendDefault));
       fireEvent.change(directory, { target: { value: `/draft/${targetApp}` } });
       expect(directory).toHaveValue(`/draft/${targetApp}`);
+      fireEvent.change(
+        screen.getByRole("combobox", {
+          name: "settings.appConfig.selectAgent",
+        }),
+        {
+          target: { value: "claude" },
+        },
+      );
       fireEvent.click(
         screen.getByRole("switch", { name: "settings.skipClaudeOnboarding" }),
       );
       await waitFor(() =>
         expect(getSettings().skipClaudeOnboarding).toBe(true),
       );
+      expect(saves[0][field]).toBeUndefined();
+      expect(
+        screen.getByRole("button", {
+          name: "settings.appConfig.saveDirectories",
+        }),
+      ).toBeEnabled();
+      fireEvent.change(
+        screen.getByRole("combobox", {
+          name: "settings.appConfig.selectAgent",
+        }),
+        {
+          target: { value: targetApp },
+        },
+      );
+      expect(screen.getByPlaceholderText(placeholder)).toHaveValue(
+        `/draft/${targetApp}`,
+      );
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "settings.appConfig.saveDirectories",
+        }),
+      );
+      await waitFor(() =>
+        expect(getSettings()[field]).toBe(`/draft/${targetApp}`),
+      );
       await waitFor(() =>
         expect(
-          screen.queryByRole("button", { name: "common.save" }),
+          screen.queryByRole("button", {
+            name: "settings.appConfig.saveDirectories",
+          }),
         ).toBeNull(),
       );
-      expect(saves[0][field]).toBeUndefined();
-      await waitFor(() => expect(directory).toHaveValue(backendDefault));
     },
   );
 

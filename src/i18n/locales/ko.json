@@ -82,7 +82,7 @@
     "disableAutoModeServer": "자동 모드 서버 검사 비활성화",
     "disableAutoModeServerHelp": "게이트웨이는 서버 측 검사를 실행할 수 없어 자동 모드가 세션마다 한 번씩 ‘사용 자격 없음’ 알림과 함께 일시 중지됩니다. Enter를 누르면 로컬 검사로 전환됩니다. 이 옵션을 켜면 알림 없이 바로 로컬 검사를 사용합니다. 공식 엔드포인트에서는 꺼 두세요.",
     "keyFieldsHint": "엔드포인트, API 키, 모델, 컨텍스트 창 및 호환성 옵션은 공급자를 전환하면 함께 바뀝니다. 나머지 필드는 Claude Code 전역 설정이며 저장하면 모든 공급자에 적용됩니다.",
-    "inactiveFieldsHint": "이전 버전에서 이 공급자에 저장한 설정으로, 이제 공급자를 전환해도 적용되지 않습니다. 항목을 선택하면 위의 전역 설정에 추가됩니다. 저장한 후에는 모든 공급자에 적용됩니다.",
+    "inactiveFieldsHint": "가져온 이 필드는 연결 전환 시 적용되지 않습니다. 필요한 필드를 위 설정에 추가하세요.",
     "addToGlobalSettings": "전역 설정에 추가"
   },
   "header": {
@@ -385,7 +385,6 @@
     "openclawDefaultModelSetFailed": "기본 모델을 설정하지 못했습니다.",
     "openclawNoModels": "이 공급자에는 설정된 모델이 없습니다.",
     "openclawModelNotFound": "선택한 모델이 더 이상 존재하지 않습니다. 새로 고침하고 다시 시도하세요.",
-    "backfillWarning": "전환은 완료되었지만 이전 공급자의 설정을 다시 저장하지 못해 수동으로 변경한 설정이 저장되지 않았을 수 있습니다.",
     "codexAuthCleanupFailed": "전환은 완료되었지만 auth.json을 삭제하지 못해 공식 로그인 자격 증명이 디스크에 남아 있습니다. 완전히 제거하려면 Codex 설정 디렉터리의 auth.json을 직접 삭제하세요.",
     "omoVariantCleanupFailed": "전환에 성공했지만 다른 OMO 변형(OMO / OMO Slim)의 설정 파일을 삭제하지 못해 OpenCode가 둘 다 불러올 수 있습니다. OpenCode 설정 디렉터리에서 직접 삭제하세요",
     "windowControlFailed": "창 제어 실패: {{error}}",
@@ -395,10 +394,9 @@
     "codexHistorySplit": {
       "hint": "{{previous}}의 기존 세션 {{count}}개가 이제 읽기 전용입니다",
       "officialBucket": "공식 구독",
-      "thirdPartyBucket": "타사 공급자",
-      "migrationFinished": "이전 세션 {{count}}개를 옮겼습니다. Codex를 다시 시작하면 이어갈 수 있습니다.",
-      "migrationFailed": "이전 세션을 옮기지 못했습니다: {{error}}. 다음에 CC Switch를 실행하면 자동으로 다시 시도합니다."
-    }
+      "thirdPartyBucket": "타사 공급자"
+    },
+    "switchWarnings": "전환이 완료되었습니다. 참고 사항:\n{{details}}"
   },
   "confirm": {
     "deleteProvider": "공급자 삭제",
@@ -415,18 +413,6 @@
       "title": "장애 조치 활성화",
       "message": "장애 조치는 고급 기능입니다. 활성화하기 전에 작동 방식을 이해했는지 확인하세요.\n\n먼저 장애 조치 대기열에서 공급자 우선 순위를 설정하는 것이 좋습니다.",
       "confirm": "확인하고 활성화하기"
-    },
-    "unifyCodexHistory": {
-      "title": "Codex 세션 기록 통합",
-      "message": "켜면 공식 구독도 공유된 custom 공급자 ID를 사용하여 공식 세션과 타사 세션이 같은 그룹에 속하게 됩니다. 최신 Codex에서는 두 종류의 세션을 모두 이어갈 수 있으며, CLI의 resume 목록에도 함께 표시됩니다.\n\n기존 공식 세션도 함께 옮길 수 있습니다. 이 옵션을 선택하면 이후 실행할 때마다 공식 그룹에 남아 있는 세션도 옮깁니다(옮기기 전에 ~/.cc-switch/backups에 자동 백업되며, 기능을 끌 때 복원할 수 있습니다). 옮기지 않은 세션은 최신 Codex에서 읽기 전용으로 남습니다. 옮긴 후 Codex를 다시 시작하세요.\n\n주의: 다른 공급자에서 이전 세션을 이어갈 때 해당 백엔드가 encrypted_content 추론 내용을 복호화하지 못해 실패할 수 있습니다.",
-      "migrateExisting": "기존 공식 세션 기록도 마이그레이션",
-      "confirm": "확인하고 활성화하기"
-    },
-    "unifyCodexHistoryOff": {
-      "title": "통합 세션 기록 끄기",
-      "message": "끄면 공식 세션과 타사 세션이 다시 두 그룹으로 나뉩니다. 최신 Codex에서는 현재 공급자 그룹의 세션만 이어갈 수 있으며, 다른 그룹은 읽기 전용이 됩니다. 이 기능이 켜져 있는 동안 생성된 세션은 출처를 구분할 수 없어 타사 그룹에 남습니다.",
-      "restoreBackup": "옮긴 공식 세션을 공식 그룹으로 복원(백업을 기준으로 정확히 복원)",
-      "confirm": "끄기"
     },
     "usage": {
       "title": "사용량 조회 설정",
@@ -633,7 +619,6 @@
       "delete": "삭제",
       "deleting": "삭제 중...",
       "managedAbove": "위 목록에서 관리됨",
-      "legacy": "이전 버전",
       "loadFailed": "백업 디스크 사용량을 읽지 못했습니다",
       "revealFailed": "폴더를 열지 못했습니다.",
       "deleteConfirmTitle": "'{{name}}'을(를) 삭제하시겠습니까?",
@@ -649,18 +634,6 @@
           "name": "스킬 제거 시 백업",
           "hint": "스킬을 제거할 때 보관한 복사본으로, 스킬 페이지에서 복원할 수 있습니다. 삭제하면 제거된 스킬을 더 이상 복원할 수 없습니다."
         },
-        "codexHistoryUnify": {
-          "name": "Codex 세션 통합 마이그레이션 백업",
-          "hint": "‘Codex 세션 기록 통합’으로 기존 세션을 옮길 때 보관한 복사본입니다. 해당 기능을 끌 때 ‘백업 복원’에 사용합니다. 삭제하면 옮긴 공식 세션을 원래 그룹으로 되돌릴 수 없습니다."
-        },
-        "codexHistoryUnifyRestore": {
-          "name": "Codex 세션 통합 복원 전 백업",
-          "hint": "\"백업 복원\"이 실행되기 전에 보관된 세션 복사본입니다. CC Switch는 더 이상 읽지 않습니다."
-        },
-        "codexHistoryProviderMigration": {
-          "name": "Codex 세션 그룹 마이그레이션 백업",
-          "hint": "세션 그룹이 마이그레이션되기 전에 보관된 복사본입니다. CC Switch는 더 이상 읽지 않습니다."
-        },
         "liveFirstWrite": {
           "name": "설정 파일 최초 저장 전 백업",
           "hint": "CC Switch가 각 클라이언트의 설정 파일을 처음 변경하기 전에 보관한 원본입니다. 삭제하면 변경 전 원본을 복구할 수 없으며, 다음 저장 시에는 그 시점의 파일을 다시 백업합니다."
@@ -673,29 +646,9 @@
           "name": "OpenClaw 설정 백업",
           "hint": "OpenClaw 설정을 저장하기 전에 보관한 복사본입니다. ‘보존할 백업 수’ 설정에 따라 오래된 백업이 자동으로 삭제됩니다."
         },
-        "proxyLiveBackup": {
-          "name": "이전 버전의 라우팅 관리 백업",
-          "hint": "업그레이드 시 이전 버전의 라우팅 관리 백업에서 옮겨 보관한 설정 복사본입니다. CC Switch는 더 이상 읽지 않습니다."
-        },
         "envVars": {
           "name": "환경 변수 정리 백업",
           "hint": "충돌하는 환경 변수가 제거되기 전에 기록된 원래 값입니다. 삭제한 후에는 해당 값을 더 이상 조회할 수 없습니다."
-        },
-        "legacyConfigBackups": {
-          "name": "레거시 config.json 백업",
-          "hint": "이전 버전에서 남았습니다. 현재 버전에서는 더 이상 읽지 않습니다."
-        },
-        "legacyConfigArchive": {
-          "name": "레거시 config.json 아카이브",
-          "hint": "데이터베이스 마이그레이션 전의 이전 설정 파일. 현재 버전에서는 더 이상 읽지 않습니다."
-        },
-        "legacyDbUpgrade": {
-          "name": "레거시 데이터베이스 업그레이드 백업",
-          "hint": "데이터베이스를 업그레이드할 때 이전 버전에서 만들어진 복사본. 현재 버전에서는 더 이상 읽지 않습니다."
-        },
-        "legacyToolSearch": {
-          "name": "레거시 Tool Search 패치 백업",
-          "hint": "제거된 Tool Search 패치 기능으로 인해 남았습니다. 현재 버전에서는 더 이상 읽지 않습니다."
         }
       }
     },
@@ -744,7 +697,7 @@
       "saveAndTestSuccess": "설정이 저장되었습니다. 연결이 정상입니다.",
       "saveAndTestFailed": "설정이 저장되었지만 연결 테스트에 실패했습니다: {{error}}",
       "noRemoteData": "원격 서버에서 동기화 데이터를 찾을 수 없습니다.",
-      "incompatibleVersion": "원격 데이터가 호환되지 않습니다(프로토콜 v{{protocolVersion}}, 데이터베이스 {{dbCompatVersion}}). 이 클라이언트는 프로토콜 v2 / db-v6을 지원합니다.",
+      "incompatibleVersion": "원격 데이터가 호환되지 않습니다(프로토콜 v{{protocolVersion}}, 데이터베이스 {{dbCompatVersion}}). 이 클라이언트는 프로토콜 v2 / db-v7을 지원합니다.",
       "unsaved": "저장되지 않음",
       "saved": "저장됨",
       "unsavedChanges": "먼저 설정을 저장하세요.",
@@ -758,7 +711,6 @@
         "path": "원격 경로",
         "dbCompat": "DB 호환성",
         "artifacts": "포함된 항목",
-        "legacyNotice": "이전 버전의 클라우드 경로가 감지되었습니다. 복원이 끝나면 다음 업로드부터 새 경로 v2/db-v6에 저장합니다.",
         "warning": "모든 로컬 데이터와 스킬 설정을 덮어씁니다",
         "confirm": "복원 확인"
       },
@@ -774,7 +726,6 @@
         "path": "원격 경로",
         "dbCompat": "DB 호환성",
         "warning": "원격 서버의 기존 동기화 데이터를 덮어쓰게 됩니다.",
-        "legacyNotice": "이전 버전의 클라우드 경로에 있는 데이터가 감지되었습니다. 이번 업로드는 새 경로 v2/db-v6에 저장하며 이전 경로는 덮어쓰지 않습니다.",
         "confirm": "업로드 확인"
       },
       "clear": "설정 지우기",
@@ -854,7 +805,7 @@
       "autoSyncLastErrorHint": "네트워크 또는 S3 설정을 확인하세요. 다음 데이터 변경 시 자동 동기화를 다시 시도합니다.",
       "missingBucket": "S3 버킷을 입력하세요.",
       "noRemoteData": "S3 버킷에 동기화 데이터가 없습니다.",
-      "incompatibleVersion": "원격 데이터가 호환되지 않습니다(버전 {{version}}). 이 클라이언트는 프로토콜 v2 / db-v6을 지원합니다.",
+      "incompatibleVersion": "원격 데이터가 호환되지 않습니다(버전 {{version}}). 이 클라이언트는 프로토콜 v2 / db-v7을 지원합니다.",
       "unsaved": "저장되지 않음",
       "saved": "저장됨",
       "clear": "설정 지우기",
@@ -940,7 +891,7 @@
     "preserveCodexOfficialAuthOnSwitch": "직접 연결 전환 시 공식 로그인 유지",
     "preserveCodexOfficialAuthOnSwitchDescription": "라우팅이 앱 설정을 관리하지 않는 상태에서 타사 공급자로 전환할 때 Codex 공식 로그인을 유지할지 정합니다. 라우팅이 앱 설정을 관리하는 동안에는 항상 공식 로그인을 유지합니다.",
     "unifyCodexSessionHistory": "Codex 세션 기록 통합",
-    "unifyCodexSessionHistoryDescription": "공식 구독도 타사 공급자와 동일한 custom 공급자 ID를 사용하여 모든 세션이 같은 그룹에 속하게 됩니다. 최신 Codex(데스크톱 26.1103 / CLI 0.167 이상)에서는 현재 공급자 그룹의 세션만 이어갈 수 있으며, 다른 그룹은 읽기 전용이 됩니다. CLI의 resume 목록에도 현재 그룹만 표시됩니다. 공식 공급자와 타사 공급자 사이를 자주 전환한다면 이 기능을 켜는 것이 좋습니다. 공식 세션을 공유 그룹으로 옮길 수 있으며(옮기기 전에 자동 백업), 기능을 끌 때 백업에서 복원할 수 있습니다. 주의: 다른 공급자에서 이전 세션을 이어갈 때 해당 백엔드가 세션의 encrypted_content 추론 내용을 복호화하지 못해 실패할 수 있습니다.",
+    "unifyCodexSessionHistoryDescription": "Only future official and third-party Codex sessions use the same provider group. Existing session records are not moved or rewritten.",
     "codexStackClassicSubagents": "통합 모드에서 기존 서브에이전트 도구 사용",
     "codexStackClassicSubagentsDescription": "주 에이전트와 서브에이전트가 서로 다른 공급자를 사용한다면 반드시 켜야 합니다. 그렇지 않으면 서브에이전트가 작업을 받지 못합니다.",
     "codexStackClassicSubagentsForcedV2": "Codex의 config.toml에서 [features] multi_agent_v2가 켜져 있습니다. 이 설정보다 우선하므로 해당 스위치는 적용되지 않습니다.",
@@ -948,10 +899,6 @@
     "codexSessionCompressionDescription": "켜면 Codex가 시작할 때마다 7일 이상 변경되지 않은 세션 파일을 백그라운드에서 압축하여 디스크 사용량을 크게 줄입니다. 해당 세션에서 대화를 이어가면 Codex가 자동으로 압축을 해제합니다. CC Switch는 압축된 세션도 목록에 표시하고 사용량 통계에 포함하지만, 목록에서 마지막 답변의 미리보기는 표시하지 않습니다. 아직 개발 중인 Codex 기능이므로 켜져 있는 동안에는 Codex를 시작할 때마다 안내가 표시됩니다. 비교적 최근 버전의 Codex가 필요하며, Codex를 다시 시작하면 적용됩니다. 끄면 더 이상 압축하지 않으며, 이미 압축된 세션은 그대로 유지됩니다.",
     "codexSessionCompressionUsage": "세션 디렉터리 사용량: {{size}}",
     "codexSessionCompressionFailed": "Codex 세션 압축 설정을 변경하지 못했습니다.",
-    "unifyCodexHistoryRestoreCompleted": "백업에서 공식 세션 기록을 복원했습니다(세션 파일 {{files}}개, 인덱스 행 {{rows}}개).",
-    "unifyCodexHistoryRestoreFailed": "공식 세션 기록을 복원하지 못했습니다. 다시 시도해 주세요.",
-    "unifyCodexHistoryRestoreNothing": "현재 Codex 디렉터리에 대한 복원 가능한 마이그레이션 백업이 없습니다.",
-    "unifyCodexHistoryRestoreSkippedToggleOn": "통합 세션 기록이 다시 활성화되었습니다. 복원을 건너뛰었습니다.",
     "appVisibility": {
       "title": "메인 페이지 표시",
       "description": "메인 페이지에 표시할 앱을 선택하세요",
@@ -1147,7 +1094,12 @@
       "about": "정보"
     },
     "appConfig": {
-      "configDir": "설정 디렉터리"
+      "configDir": "설정 디렉터리",
+      "selectAgent": "Agent",
+      "selectionHint": "Agent를 선택하여 전용 설정과 구성 디렉터리를 확인하세요.",
+      "empty": "이 Agent에는 전용 앱 설정이 없습니다.",
+      "pendingDirectories": "저장하지 않은 디렉터리: {{apps}}",
+      "saveDirectories": "모든 디렉터리 변경 저장"
     },
     "routing": {
       "service": "서비스"
@@ -1985,7 +1937,6 @@
     "setAsDefault": "기본값으로 설정",
     "retry": "다시 시도",
     "copyCode": "코드 복사",
-    "migrationFailed": "레거시 인증 마이그레이션 실패: {{error}}",
     "loadModelsFailed": "Copilot 모델을 로드하지 못했습니다.",
     "noPickerModels": "이 GitHub 계정에는 사용할 수 있는 Copilot 모델이 없습니다. Copilot Free 계정에서 흔히 발생하므로 계정에 Copilot Pro 이상 요금제가 있는지 확인하세요.",
     "noPickerModelsClaude": "이 GitHub 계정에는 사용할 수 있는 Copilot 모델이 없습니다. Copilot Free 계정에서 흔히 발생하므로 계정에 Copilot Pro 이상 요금제가 있는지 확인하세요. 모델 입력란에 gpt-4.1 또는 gpt-4o를 직접 입력해 사용할 수도 있습니다.",
@@ -2023,7 +1974,8 @@
       "notSignedIn": "Copilot CLI에 로그인되어 있지 않습니다. copilot을 실행해 /login으로 로그인하거나 이 카드에 인증 센터 계정을 연결하세요."
     },
     "defaultCannotRemove": "Copilot의 기본 모델이 이 공급자의 것이라 제거하거나 삭제할 수 없습니다. 먼저 copilot에서 /model로 다른 공급자의 모델을 선택하세요.",
-    "terminalNeedsAdd": "터미널에서 모델을 선택할 수 있도록 먼저 이 공급자를 Copilot에 추가하세요."
+    "terminalNeedsAdd": "터미널에서 모델을 선택할 수 있도록 먼저 이 공급자를 Copilot에 추가하세요.",
+    "storageFailed": "Cannot read account storage: {{error}}"
   },
   "codexOauth": {
     "authStatus": "인증 상태",
@@ -2212,7 +2164,7 @@
     "reasoningEffortHint": "업스트림이 low/high/max 같은 추론 수준을 지원할 때 켜세요. 추론 모드도 함께 켜고 Codex의 reasoning.effort를 업스트림 Chat 매개변수로 변환합니다.",
     "reasoningGroupTitle": "추론 능력",
     "keyFieldsHint": "엔드포인트, API 키, 모델, 추론 수준, 컨텍스트 창 및 호환성 옵션은 공급자를 전환하면 함께 바뀝니다. 나머지는 Codex 전역 설정이며 저장하면 모든 공급자에 적용됩니다.",
-    "inactiveFieldsHint": "이전 버전에서 이 공급자에 저장한 설정으로, 이제 공급자를 전환해도 적용되지 않습니다. 항목을 선택하여 TOML을 복사한 뒤 필요한 경우 위에 붙여 넣으세요.",
+    "inactiveFieldsHint": "가져온 이 필드는 연결 전환 시 적용되지 않습니다. 필요하면 TOML을 위 설정에 복사하세요.",
     "inactiveFieldCopied": "복사됨",
     "upstreamFormatCopilotRouteHint": "모든 모드에서 라우팅을 켜야 하며, 라우팅이 요청에 Copilot 계정 자격 증명을 추가합니다. 모델이 수동으로 선택한 프로토콜을 지원하지 않으면 오류가 발생합니다.",
     "maxOutputTokensWarning": "모델이나 게이트웨이가 실제로 지원하는 출력 한도를 초과하지 않도록 입력하세요. 초과하면 400 오류가 발생합니다.",
@@ -2224,7 +2176,7 @@
     "configJson": "설정 파일(settings.json)",
     "configJsonHint": "Gemini CLI의 settings.json(MCP 서버는 MCP 패널에서 관리됩니다)",
     "keyFieldsHint": "엔드포인트, API 키, 모델 이름 및 인증 방식은 공급자를 전환하면 함께 바뀝니다. 나머지 환경 변수와 settings.json은 Gemini CLI 전역 설정이며 저장하면 모든 공급자에 적용됩니다.",
-    "inactiveFieldsHint": "이전 버전에서 이 공급자에 저장한 설정으로, 이제 공급자를 전환해도 적용되지 않습니다. 항목을 선택하여 위에 추가한 후 저장하면 모든 공급자에 적용됩니다.",
+    "inactiveFieldsHint": "가져온 이 필드는 연결 전환 시 적용되지 않습니다. 필요한 필드를 위 설정에 추가하세요.",
     "addToGlobalSettings": "전역 설정에 추가"
   },
   "opencode": {
@@ -3193,7 +3145,6 @@
     "applySuccess": "프로필을 전역에 적용했습니다",
     "applyFailed": "프로필을 적용하지 못했습니다: {{detail}}",
     "applyWarnings": "프로필을 적용했으며 참고 사항이 {{warningCount}}개 있습니다:\n{{details}}",
-    "switchFollowWarning": "연결은 전환되었지만 해당 프로필이 완전히 적용되지 않았습니다:\n{{details}}",
     "scope": {
       "label": "사용 위치",
       "global": "전역",
@@ -3251,10 +3202,6 @@
     "import": {
       "completedWithNotes": "프로젝트 설정을 가져왔습니다. 안내를 확인하세요"
     },
-    "migration": {
-      "pending": "기존 Agent 설정을 준비하는 중…",
-      "failed": "기존 설정 마이그레이션이 완료되지 않았습니다"
-    },
     "environment": {
       "title": "프로젝트 환경",
       "configureProject": "프로젝트 구성",
@@ -3274,6 +3221,14 @@
       "name": "이름",
       "provider": "공급자",
       "inheritProvider": "현재 전역 공급자 사용",
+      "projectConnection": "프로젝트 API 연결",
+      "projectConnectionInherit": "전역 연결 상속",
+      "projectConnectionDirect": "프로젝트 독립 직접 연결",
+      "projectConnectionInheritHint": "연결은 Claude Code의 기본 설정 계층에 따라 상속됩니다. 복원 시 이 기능이 관리하는 연결 필드만 제거됩니다. 이후 세션을 다시 시작하세요. 이 옵션은 프로젝트 배포에만 적용됩니다.",
+      "projectConnectionDirectHint": "프로젝트 배포에만 적용됩니다. 요청은 CC Switch 로컬 라우팅을 거치지 않고 선택한 공급자로 직접 전송됩니다. Anthropic 프로토콜의 일반 API 키 또는 토큰 연결만 지원합니다. 조직 관리 정책과 시작 옵션의 우선순위는 계속 적용됩니다.",
+      "projectConnectionCredentialsHint": "주소와 키는 .claude/settings.local.json에 기록되며 Git 무시 목록에 추가됩니다. 이미 Git이 추적 중인 파일에는 직접 연결을 배포할 수 없습니다. 공급자 정보 변경 후 다시 배포하세요. 상속으로 복원하면 관리 중인 연결 필드가 제거됩니다. 이후 Claude 세션을 다시 시작하세요.",
+      "projectConnectionProviderRequired": "프로젝트 독립 직접 연결을 사용하려면 기존 공급자를 선택하세요.",
+      "projectConnectionProviderPlaceholder": "프로젝트 공급자 선택",
       "providerReferenceHint": "모델 기능은 선택한 공급자를 사용합니다. API 주소, 키, 계정은 공급자를 계속 참조합니다. 프로젝트 배포는 전역 연결을 전환하지 않습니다.",
       "model": "모델",
       "resetModels": "공급자 모델 설정 복원",
@@ -3918,12 +3873,6 @@
     "clickToChange": "아이콘을 변경하려면 클릭하세요.",
     "clickToSelect": "아이콘을 선택하려면 클릭하세요.",
     "change": "아이콘 변경"
-  },
-  "migration": {
-    "success": "설정이 성공적으로 마이그레이션되었습니다.",
-    "skillsSuccess": "스킬 {{count}}개를 통합 관리에 자동으로 가져왔습니다",
-    "skillsFailed": "스킬 자동 가져오기 실패",
-    "skillsFailedDescription": "스킬 페이지를 열고 \"기존 항목 가져오기\"를 클릭하여 수동으로 가져오거나 다시 시작한 후 다시 시도하세요."
   },
   "health": {
     "operational": "정상",
@@ -5230,12 +5179,6 @@
       "marketRemoved": "마켓플레이스 {{name}}을(를) 제거했습니다",
       "marketRemoveFailed": "{{name}}을(를) 제거할 수 없습니다"
     }
-  },
-  "newLayoutNotice": {
-    "title": "CC Switch의 디자인이 새로워졌습니다",
-    "body": "이번 버전에서 CC Switch의 인터페이스를 새롭게 디자인하여 자주 사용하는 기능의 위치가 바뀌었습니다:\n• 연결 모드는 각 앱 페이지 상단으로 이동했습니다\n• 사용량 통계와 인증 센터는 왼쪽 사이드바로 이동했습니다\n전체 변경 사항은 이번 버전의 릴리스 노트를 확인하세요.",
-    "viewReleaseNotes": "릴리스 노트 보기",
-    "confirm": "알겠습니다"
   },
   "whatsNew": {
     "updatedTo": "v{{version}}(으)로 업데이트됨",

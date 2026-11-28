@@ -82,7 +82,7 @@
     "disableAutoModeServer": "Serverseitige Prüfungen des Auto-Modus deaktivieren",
     "disableAutoModeServerHelp": "Gateways können die serverseitige Prüfung nicht ausführen, daher pausiert der Auto-Modus einmal pro Sitzung mit dem Hinweis „nicht berechtigt“ und greift nach Drücken der Eingabetaste auf die lokale Prüfung zurück. Bei aktivierter Option wird sofort und ohne Hinweis die lokale Prüfung verwendet. Bei offiziellen Endpunkten deaktiviert lassen.",
     "keyFieldsHint": "Endpunkt, Schlüssel, Modelle, Kontextfenster und Kompatibilitätsschalter folgen dem Anbieter; alles andere sind globale Claude-Code-Einstellungen und gilt nach dem Speichern für jeden Anbieter.",
-    "inactiveFieldsHint": "Von einer älteren Version in diesem Anbieter gespeichert; beim Wechsel werden sie nicht mehr angewendet. Klicken Sie auf einen Eintrag, um ihn oben hinzuzufügen; nach dem Speichern gilt er für jeden Anbieter.",
+    "inactiveFieldsHint": "Diese importierten Felder werden beim Verbindungswechsel nicht angewendet. Füge benötigte Felder oben hinzu.",
     "addToGlobalSettings": "Zu globalen Einstellungen hinzufügen"
   },
   "header": {
@@ -385,7 +385,6 @@
     "openclawDefaultModelSetFailed": "Standardmodell konnte nicht festgelegt werden",
     "openclawNoModels": "Keine Modelle konfiguriert",
     "openclawModelNotFound": "Das ausgewählte Modell existiert nicht mehr. Aktualisieren Sie die Ansicht und versuchen Sie es erneut.",
-    "backfillWarning": "Wechsel erfolgreich, aber die Änderungen konnten nicht im vorherigen Anbieter gespeichert werden",
     "codexAuthCleanupFailed": "Wechsel erfolgreich, aber auth.json konnte nicht entfernt werden – die Zugangsdaten der offiziellen Anmeldung liegen weiterhin auf der Festplatte; löschen Sie auth.json im Codex-Konfigurationsordner, um sie zu entfernen",
     "omoVariantCleanupFailed": "Erfolgreich gewechselt, aber die Konfigurationsdatei der anderen OMO-Variante (OMO / OMO Slim) konnte nicht entfernt werden, daher lädt OpenCode möglicherweise beide; lösche sie im OpenCode-Konfigurationsverzeichnis",
     "windowControlFailed": "Fenstersteuerung fehlgeschlagen: {{error}}",
@@ -395,10 +394,9 @@
     "codexHistorySplit": {
       "hint": "{{count}} Sitzungen von {{previous}} sind jetzt schreibgeschützt",
       "officialBucket": "dem offiziellen Abonnement",
-      "thirdPartyBucket": "Drittanbietern",
-      "migrationFinished": "{{count}} alte Sitzungen migriert. Starten Sie Codex neu, um sie fortzusetzen.",
-      "migrationFailed": "Alte Sitzungen konnten nicht migriert werden: {{error}}. CC Switch versucht es beim nächsten Start erneut."
-    }
+      "thirdPartyBucket": "Drittanbietern"
+    },
+    "switchWarnings": "Gewechselt mit Hinweisen:\n{{details}}"
   },
   "confirm": {
     "deleteProvider": "Anbieter löschen",
@@ -415,18 +413,6 @@
       "title": "Failover aktivieren",
       "message": "Failover ist eine erweiterte Funktion. Bitte stellen Sie sicher, dass Sie die Funktionsweise verstehen, bevor Sie es aktivieren.\n\nWir empfehlen, zuerst die Anbieterprioritäten in der Failover-Warteschlange zu konfigurieren.",
       "confirm": "Verstanden, aktivieren"
-    },
-    "unifyCodexHistory": {
-      "title": "Einheitlicher Codex-Sitzungsverlauf",
-      "message": "Wenn aktiviert, läuft das offizielle Abonnement unter der gemeinsamen Anbieter-ID „custom“. Offizielle und Drittanbieter-Sitzungen bilden damit eine Gruppe: Neuere Codex-Versionen können beide fortsetzen, und die Fortsetzungsliste der CLI zeigt sie gemeinsam an.\n\nSie können auch Ihre vorhandenen offiziellen Sitzungen migrieren; in diesem Fall verschiebt CC Switch bei jedem Start außerdem alle zurückgebliebenen offiziellen Sitzungen (zuvor wird in ~/.cc-switch/backups gesichert; beim Deaktivieren können Sie sie wiederherstellen). Nicht migrierte Sitzungen bleiben in neueren Codex-Versionen schreibgeschützt. Starten Sie Codex nach der Migration neu.\n\nHinweis: Das Fortsetzen einer alten Sitzung über Anbietergrenzen hinweg kann fehlschlagen, weil das andere Backend den verschlüsselten encrypted_content des Reasonings nicht entschlüsseln kann.",
-      "migrateExisting": "Auch vorhandenen offiziellen Sitzungsverlauf migrieren",
-      "confirm": "Verstanden, aktivieren"
-    },
-    "unifyCodexHistoryOff": {
-      "title": "Einheitlichen Sitzungsverlauf deaktivieren",
-      "message": "Nach dem Deaktivieren werden offizielle und Drittanbieter-Sitzungen wieder in zwei Gruppen getrennt: Neuere Codex-Versionen können nur die Gruppe des aktuellen Anbieters fortsetzen, die andere Gruppe wird schreibgeschützt. Sitzungen, die bei aktivierter Option erstellt wurden, lassen sich nicht unterscheiden und bleiben deshalb in der Drittanbieter-Gruppe.",
-      "restoreBackup": "Migrierte offizielle Sitzungen in die offizielle Gruppe zurückführen (exakte Wiederherstellung aus dem Backup)",
-      "confirm": "Deaktivieren"
     },
     "usage": {
       "title": "Nutzungsabfrage konfigurieren",
@@ -633,7 +619,6 @@
       "delete": "Löschen",
       "deleting": "Wird gelöscht …",
       "managedAbove": "In der Liste oben verwaltet",
-      "legacy": "Alt",
       "loadFailed": "Sicherungsbelegung konnte nicht gelesen werden",
       "revealFailed": "Ordner konnte nicht geöffnet werden",
       "deleteConfirmTitle": "„{{name}}“ löschen?",
@@ -649,18 +634,6 @@
           "name": "Sicherungen deinstallierter Skills",
           "hint": "Kopien, die beim Deinstallieren von Skills aufbewahrt werden und auf der Skills-Seite wiederhergestellt werden können. Nach dem Löschen lassen sich diese deinstallierten Skills nicht mehr wiederherstellen."
         },
-        "codexHistoryUnify": {
-          "name": "Sicherungen der Codex-Sitzungsvereinheitlichung",
-          "hint": "Sitzungskopien, die aufbewahrt werden, wenn „Einheitlicher Codex-Sitzungsverlauf“ vorhandene Sitzungen migriert hat. „Sicherung wiederherstellen“ beim Ausschalten dieses Schalters hängt davon ab; nach dem Löschen lassen sich migrierte offizielle Sitzungen nicht mehr in ihre ursprüngliche Gruppe zurückverschieben."
-        },
-        "codexHistoryUnifyRestore": {
-          "name": "Wiederherstellungssicherungen der Codex-Sitzungsvereinheitlichung",
-          "hint": "Sitzungskopien, die vor der Ausführung von „Sicherung wiederherstellen“ aufbewahrt werden. CC Switch liest sie nie wieder."
-        },
-        "codexHistoryProviderMigration": {
-          "name": "Sicherungen der Codex-Sitzungsgruppen-Migration",
-          "hint": "Kopien, die vor der Migration der Sitzungsgruppen aufbewahrt werden. CC Switch liest sie nie wieder."
-        },
         "liveFirstWrite": {
           "name": "Sicherungen vor dem ersten Schreiben der Konfiguration",
           "hint": "Ursprüngliche Konfigurationsdateien des Clients aus der Zeit, bevor CC Switch sie zum ersten Mal neu geschrieben hat. Nach dem Löschen sind diese Originale weg; beim nächsten Schreiben wird die Datei im dann aktuellen Zustand gesichert."
@@ -673,29 +646,9 @@
           "name": "OpenClaw-Konfigurationssicherungen",
           "hint": "Kopien, die vor dem Speichern der OpenClaw-Konfiguration aufbewahrt werden, bereinigt gemäß der Aufbewahrung von Sicherungen."
         },
-        "proxyLiveBackup": {
-          "name": "Alte Sicherungen der Routing-Übernahme",
-          "hint": "Konfigurationskopien, die beim Upgrade aus den alten Sicherungen der Routing-Übernahme verschoben wurden. CC Switch liest sie nie wieder."
-        },
         "envVars": {
           "name": "Sicherungen der Umgebungsvariablen-Bereinigung",
           "hint": "Ursprüngliche Werte, die vor dem Entfernen konfliktierender Umgebungsvariablen aufgezeichnet wurden. Nach dem Löschen lassen sich diese Werte nicht mehr nachschlagen."
-        },
-        "legacyConfigBackups": {
-          "name": "Alte config.json-Sicherungen",
-          "hint": "Von älteren Versionen hinterlassen; die aktuelle Version liest sie nicht mehr."
-        },
-        "legacyConfigArchive": {
-          "name": "Altes config.json-Archiv",
-          "hint": "Die alte Konfigurationsdatei aus der Zeit vor der Datenbankmigration; die aktuelle Version liest sie nicht mehr."
-        },
-        "legacyDbUpgrade": {
-          "name": "Alte Sicherungen von Datenbank-Upgrades",
-          "hint": "Kopien, die ältere Versionen beim Upgrade der Datenbank angelegt haben; die aktuelle Version liest sie nicht mehr."
-        },
-        "legacyToolSearch": {
-          "name": "Alte Sicherungen des Tool-Search-Patches",
-          "hint": "Von der entfernten Tool-Search-Patch-Funktion hinterlassen; die aktuelle Version liest sie nicht mehr."
         }
       }
     },
@@ -744,7 +697,7 @@
       "saveAndTestSuccess": "Konfiguration gespeichert, Verbindung OK",
       "saveAndTestFailed": "Konfiguration gespeichert, aber der Verbindungstest ist fehlgeschlagen: {{error}}",
       "noRemoteData": "Auf dem Remote-Server wurden keine Synchronisierungsdaten gefunden",
-      "incompatibleVersion": "Remote-Daten sind inkompatibel (Protokoll v{{protocolVersion}}, Datenbank {{dbCompatVersion}}). Dieser Client unterstützt Protokoll v2 / db-v6.",
+      "incompatibleVersion": "Remote-Daten sind inkompatibel (Protokoll v{{protocolVersion}}, Datenbank {{dbCompatVersion}}). Dieser Client unterstützt Protokoll v2 / db-v7.",
       "unsaved": "Nicht gespeichert",
       "saved": "Gespeichert",
       "unsavedChanges": "Bitte speichern Sie zuerst die Konfiguration",
@@ -767,7 +720,6 @@
         "path": "Remote-Pfad",
         "dbCompat": "DB-Kompatibilität",
         "artifacts": "Inhalt",
-        "legacyNotice": "Ein alter Remote-Pfad wurde erkannt. Nach der Wiederherstellung schreibt der nächste Upload in den neuen v2/db-v6-Pfad.",
         "warning": "Dadurch werden alle lokalen Daten und Skill-Konfigurationen überschrieben",
         "confirm": "Wiederherstellung bestätigen"
       },
@@ -783,7 +735,6 @@
         "path": "Remote-Pfad",
         "dbCompat": "DB-Kompatibilität",
         "warning": "Dadurch werden vorhandene Synchronisierungsdaten auf dem Remote-Server überschrieben",
-        "legacyNotice": "Alte Remote-Daten wurden erkannt. Dieser Upload schreibt in den neuen v2/db-v6-Pfad und überschreibt den alten Pfad nicht.",
         "confirm": "Upload bestätigen"
       }
     },
@@ -854,7 +805,7 @@
       "autoSyncLastErrorHint": "Bitte prüfen Sie das Netzwerk bzw. die S3-Einstellungen. Die automatische Synchronisierung wird bei künftigen Änderungen erneut versucht.",
       "missingBucket": "Bitte geben Sie den S3-Bucket ein",
       "noRemoteData": "Im S3-Bucket wurden keine Synchronisierungsdaten gefunden",
-      "incompatibleVersion": "Remote-Daten sind inkompatibel (Version {{version}}). Dieser Client unterstützt Protokoll v2 / db-v6.",
+      "incompatibleVersion": "Remote-Daten sind inkompatibel (Version {{version}}). Dieser Client unterstützt Protokoll v2 / db-v7.",
       "unsaved": "Nicht gespeichert",
       "saved": "Gespeichert",
       "clear": "Konfiguration löschen",
@@ -940,7 +891,7 @@
     "preserveCodexOfficialAuthOnSwitch": "Offizielle Anmeldung bei direkten Wechseln beibehalten",
     "preserveCodexOfficialAuthOnSwitchDescription": "Steuert Wechsel zu Drittanbietern, wenn das lokale Routing ausgeschaltet ist. Die Routing-Übernahme behält die offizielle Codex-Anmeldung immer bei.",
     "unifyCodexSessionHistory": "Einheitlicher Codex-Sitzungsverlauf",
-    "unifyCodexSessionHistoryDescription": "Offizielle Abonnements laufen unter derselben Anbieter-ID „custom“ wie Drittanbieter, sodass alle Sitzungen eine gemeinsame Gruppe bilden. Neuere Codex-Versionen (Desktop 26.1103 / CLI 0.167 und später) können Sitzungen nur in der Gruppe des aktuellen Anbieters fortsetzen; die andere Gruppe wird schreibgeschützt, und die Fortsetzungsliste der CLI zeigt nur die aktuelle Gruppe. Aktivieren Sie dies, wenn Sie zwischen offiziellen und Drittanbietern wechseln. Optional können Sie offizielle Sitzungen in die gemeinsame Gruppe migrieren (zuvor wird gesichert) und beim Ausschalten aus der Sicherung wiederherstellen. Hinweis: Das Fortsetzen einer alten Sitzung über Anbietergrenzen hinweg kann fehlschlagen, da das verschlüsselte Reasoning in encrypted_content nur vom Backend entschlüsselt werden kann, das es erzeugt hat.",
+    "unifyCodexSessionHistoryDescription": "Only future official and third-party Codex sessions use the same provider group. Existing session records are not moved or rewritten.",
     "codexStackClassicSubagents": "Klassische Sub-Agent-Tools in der Aggregation",
     "codexStackClassicSubagentsDescription": "Muss aktiviert sein, wenn der Haupt-Agent und ein Sub-Agent unterschiedliche Anbieter verwenden, sonst kann der Sub-Agent seine Aufgabe nicht empfangen.",
     "codexStackClassicSubagentsForcedV2": "Die Codex-config.toml aktiviert [features] multi_agent_v2, das Vorrang vor dieser Einstellung hat; sie hat daher keine Wirkung.",
@@ -948,10 +899,6 @@
     "codexSessionCompressionDescription": "Wenn aktiviert, komprimiert Codex bei jedem Start im Hintergrund Sitzungsdateien, die seit 7 Tagen unverändert sind, was viel Speicherplatz spart. Codex dekomprimiert eine Sitzung automatisch, wenn Sie sie fortsetzen. CC Switch listet und zählt komprimierte Sitzungen weiterhin; die Liste zeigt lediglich keine Vorschau ihrer letzten Antwort. Dies ist eine noch in Entwicklung befindliche Codex-Funktion: Codex zeigt bei jedem Start einen Hinweis an, solange sie aktiv ist. Erfordert eine aktuelle Codex-Version und wirkt nach einem Neustart von Codex. Beim Ausschalten wird nicht mehr komprimiert; bereits komprimierte Sitzungen bleiben unverändert.",
     "codexSessionCompressionUsage": "Sitzungen belegen derzeit {{size}}",
     "codexSessionCompressionFailed": "Die Einstellung zur Codex-Sitzungskomprimierung konnte nicht geändert werden",
-    "unifyCodexHistoryRestoreCompleted": "Offizieller Sitzungsverlauf aus der Sicherung wiederhergestellt ({{files}} Sitzungsdateien, {{rows}} Indexzeilen)",
-    "unifyCodexHistoryRestoreFailed": "Der offizielle Sitzungsverlauf konnte nicht wiederhergestellt werden, bitte versuchen Sie es erneut",
-    "unifyCodexHistoryRestoreNothing": "Keine wiederherstellbare Migrationssicherung für das aktuelle Codex-Verzeichnis",
-    "unifyCodexHistoryRestoreSkippedToggleOn": "Der einheitliche Sitzungsverlauf wurde erneut aktiviert; Wiederherstellung übersprungen",
     "appVisibility": {
       "title": "Anzeige auf der Startseite",
       "description": "Wählen Sie, welche Apps auf der Startseite angezeigt werden",
@@ -1147,7 +1094,12 @@
       "about": "Über"
     },
     "appConfig": {
-      "configDir": "Konfigurationsverzeichnis"
+      "configDir": "Konfigurationsverzeichnis",
+      "selectAgent": "Agent",
+      "selectionHint": "Wähle einen Agent, um seine Einstellungen und sein Konfigurationsverzeichnis anzuzeigen.",
+      "empty": "Dieser Agent hat keine eigenen Anwendungseinstellungen.",
+      "pendingDirectories": "Nicht gespeicherte Verzeichnisse: {{apps}}",
+      "saveDirectories": "Alle Verzeichnisänderungen speichern"
     },
     "routing": {
       "service": "Dienst"
@@ -1985,7 +1937,6 @@
     "setAsDefault": "Als Standard festlegen",
     "retry": "Erneut versuchen",
     "copyCode": "Code kopieren",
-    "migrationFailed": "Migration der alten Authentifizierung fehlgeschlagen: {{error}}",
     "loadModelsFailed": "Copilot-Modelle konnten nicht geladen werden",
     "noPickerModels": "Für dieses GitHub-Konto sind keine Copilot-Modelle verfügbar. Das ist bei Copilot-Free-Konten typisch; stellen Sie sicher, dass das Konto Copilot Pro oder einen höheren Tarif hat.",
     "noPickerModelsClaude": "Für dieses GitHub-Konto sind keine Copilot-Modelle verfügbar. Das ist bei Copilot-Free-Konten typisch; stellen Sie sicher, dass das Konto Copilot Pro oder einen höheren Tarif hat. Sie können gpt-4.1 oder gpt-4o weiterhin manuell in das Modellfeld eingeben.",
@@ -2023,7 +1974,8 @@
       "notSignedIn": "Die Copilot CLI ist nicht angemeldet. Führen Sie copilot aus und verwenden Sie /login, oder verknüpfen Sie ein Konto aus der Kontoverwaltung auf dieser Karte."
     },
     "defaultCannotRemove": "Das Standardmodell von Copilot gehört zu diesem Anbieter und kann daher nicht entfernt oder gelöscht werden. Wählen Sie zuerst mit /model in copilot das Modell eines anderen Anbieters.",
-    "terminalNeedsAdd": "Fügen Sie diesen Anbieter zuerst zu Copilot hinzu, damit das Terminal sein Modell auswählen kann."
+    "terminalNeedsAdd": "Fügen Sie diesen Anbieter zuerst zu Copilot hinzu, damit das Terminal sein Modell auswählen kann.",
+    "storageFailed": "Cannot read account storage: {{error}}"
   },
   "codexOauth": {
     "authStatus": "Anmeldestatus",
@@ -2212,7 +2164,7 @@
     "reasoningEffortHint": "Aktivieren, wenn der Upstream Denktiefe wie low/high/max unterstützt. Aktiviert auch den Denkmodus und ordnet das reasoning.effort von Codex dem Upstream-Chat-Parameter zu.",
     "reasoningGroupTitle": "Reasoning-Fähigkeit",
     "keyFieldsHint": "Endpunkt, Schlüssel, Modell, Reasoning-Aufwand, Kontextfenster und Kompatibilitätsschalter folgen dem Anbieter; alles andere ist eine globale Codex-Einstellung, die nach dem Speichern für jeden Anbieter gilt.",
-    "inactiveFieldsHint": "Von einer älteren Version in diesem Anbieter gespeichert; beim Wechseln werden sie nicht mehr angewendet. Klicken Sie auf einen Eintrag, um sein TOML zu kopieren und oben einzufügen, falls Sie es brauchen.",
+    "inactiveFieldsHint": "Diese importierten Felder werden beim Verbindungswechsel nicht angewendet. Kopiere bei Bedarf das TOML in die Konfiguration oben.",
     "inactiveFieldCopied": "Kopiert",
     "upstreamFormatCopilotRouteHint": "Jeder Modus erfordert Routing, das die Zugangsdaten des Copilot-Kontos einfügt. Ein ausdrücklich gewähltes Protokoll schlägt bei Modellen fehl, die es nicht unterstützen.",
     "maxOutputTokensWarning": "Überschreiten Sie nicht das tatsächliche Ausgabelimit des Modells oder Gateways, sonst geben Anfragen 400 zurück.",
@@ -2224,7 +2176,7 @@
     "configJson": "Einstellungsdatei (settings.json)",
     "configJsonHint": "settings.json der Gemini CLI (MCP-Server werden im MCP-Bereich verwaltet)",
     "keyFieldsHint": "Endpunkt, Schlüssel, Modellname und Authentifizierungstyp folgen dem Anbieter; die übrigen Umgebungsvariablen und settings.json sind globale Einstellungen der Gemini CLI und gelten nach dem Speichern für jeden Anbieter.",
-    "inactiveFieldsHint": "Von einer älteren Version in diesem Anbieter gespeichert; beim Wechsel werden sie nicht mehr angewendet. Klicken Sie auf einen Eintrag, um ihn oben hinzuzufügen; nach dem Speichern gilt er für jeden Anbieter.",
+    "inactiveFieldsHint": "Diese importierten Felder werden beim Verbindungswechsel nicht angewendet. Füge benötigte Felder oben hinzu.",
     "addToGlobalSettings": "Zu den globalen Einstellungen hinzufügen"
   },
   "opencode": {
@@ -3193,7 +3145,6 @@
     "applySuccess": "Profil global angewendet",
     "applyFailed": "Profil konnte nicht angewendet werden: {{detail}}",
     "applyWarnings": "Profil mit {{warningCount}} Hinweis(en) angewendet:\n{{details}}",
-    "switchFollowWarning": "Die Verbindung wurde gewechselt, aber ihr Profil wurde nicht vollständig angewendet:\n{{details}}",
     "scope": {
       "label": "Einsatzort",
       "global": "Global",
@@ -3251,10 +3202,6 @@
     "import": {
       "completedWithNotes": "Projektkonfiguration importiert; bitte Hinweise prüfen"
     },
-    "migration": {
-      "pending": "Vorhandene Agent-Konfiguration wird vorbereitet…",
-      "failed": "Migration vorhandener Konfiguration unvollständig"
-    },
     "environment": {
       "title": "Projektumgebung",
       "configureProject": "Projekt konfigurieren",
@@ -3274,6 +3221,14 @@
       "name": "Name",
       "provider": "Anbieter",
       "inheritProvider": "Aktuellen globalen Anbieter verwenden",
+      "projectConnection": "API-Verbindung des Projekts",
+      "projectConnectionInherit": "Globale Verbindung übernehmen",
+      "projectConnectionDirect": "Eigene Projektverbindung",
+      "projectConnectionInheritHint": "Die Verbindung folgt den nativen Konfigurationsebenen von Claude Code. Bei der Rückkehr zur Übernahme werden nur die von dieser Funktion verwalteten Verbindungsfelder entfernt. Starten Sie danach die Sitzung neu. Diese Option gilt nur für die Projektbereitstellung.",
+      "projectConnectionDirectHint": "Gilt nur für die Projektbereitstellung: Anfragen gehen direkt an den ausgewählten Anbieter, ohne das lokale Routing von CC Switch. Unterstützt werden normale API-Schlüssel oder Tokens mit dem Anthropic-Protokoll. Organisationsrichtlinien und Startparameter behalten ihren Vorrang.",
+      "projectConnectionCredentialsHint": "Adresse und Schlüssel werden in .claude/settings.local.json geschrieben und von Git ausgeschlossen. Wird die Datei bereits von Git verfolgt, ist die direkte Bereitstellung gesperrt. Nach Anbieteränderungen erneut bereitstellen. Bei Rückkehr zur Übernahme werden verwaltete Verbindungsfelder entfernt; starten Sie danach die Claude-Sitzung neu.",
+      "projectConnectionProviderRequired": "Wählen Sie einen vorhandenen Anbieter für eine eigene Projektverbindung.",
+      "projectConnectionProviderPlaceholder": "Projektanbieter auswählen",
       "providerReferenceHint": "Modellfunktionen verwenden den gewählten Anbieter. API-Adressen, Schlüssel und Konten bleiben beim Anbieter. Die Projektbereitstellung ändert die globale Verbindung nicht.",
       "model": "Modell",
       "resetModels": "Modelleinstellungen des Anbieters wiederherstellen",
@@ -3918,12 +3873,6 @@
     "clickToChange": "Klicken, um das Symbol zu ändern",
     "clickToSelect": "Klicken, um ein Symbol auszuwählen",
     "change": "Symbol ändern"
-  },
-  "migration": {
-    "success": "Konfiguration erfolgreich migriert",
-    "skillsSuccess": "{{count}} Skill(s) automatisch in die einheitliche Verwaltung importiert",
-    "skillsFailed": "Skills konnten nicht automatisch importiert werden",
-    "skillsFailedDescription": "Öffnen Sie die Skills-Seite und klicken Sie auf „Vorhandene importieren“, um sie manuell zu importieren (oder starten Sie neu und versuchen Sie es erneut)."
   },
   "health": {
     "operational": "Betriebsbereit",
@@ -5230,12 +5179,6 @@
       "marketRemoved": "Marketplace {{name}} entfernt",
       "marketRemoveFailed": "{{name}} konnte nicht entfernt werden"
     }
-  },
-  "newLayoutNotice": {
-    "title": "CC Switch hat ein neues Aussehen",
-    "body": "Diese Version gestaltet die Oberfläche neu, daher hat sich einiges verschoben:\n• Die Modi stehen jetzt oben auf jeder App-Seite\n• Nutzung und Konten befinden sich in der Seitenleiste\nAlle Änderungen finden Sie in den Versionshinweisen.",
-    "viewReleaseNotes": "Versionshinweise ansehen",
-    "confirm": "Verstanden"
   },
   "whatsNew": {
     "updatedTo": "Auf v{{version}} aktualisiert",

@@ -17,7 +17,7 @@ export function useCopilotAuth(githubDomain?: string) {
           // Managed auth status does not expose a single provider-wide token expiry.
           expires_at: null,
           default_account_id: managedAuth.defaultAccountId,
-          migration_error: managedAuth.migrationError,
+          storage_error: managedAuth.storageError,
           accounts: managedAuth.accounts as GitHubAccount[],
         }
       : undefined,

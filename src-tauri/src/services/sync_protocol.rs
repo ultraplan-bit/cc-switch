@@ -25,11 +25,10 @@ pub(crate) use super::webdav_sync::archive::{
 // ─── Protocol constants ──────────────────────────────────────
 
 /// Wire-format identifier stored in remote manifests.
-/// Retains historic "webdav" naming for backward compatibility with existing remotes.
+/// Shared wire-format name for both WebDAV and S3 transports.
 pub(crate) const PROTOCOL_FORMAT: &str = "cc-switch-webdav-sync";
 pub(crate) const PROTOCOL_VERSION: u32 = 2;
-pub(crate) const DB_COMPAT_VERSION: u32 = 6;
-pub(crate) const LEGACY_DB_COMPAT_VERSION: u32 = 5;
+pub(crate) const DB_COMPAT_VERSION: u32 = 7;
 pub(crate) const REMOTE_DB_SQL: &str = "db.sql";
 pub(crate) const REMOTE_SKILLS_ZIP: &str = "skills.zip";
 pub(crate) const REMOTE_MANIFEST: &str = "manifest.json";
@@ -152,8 +151,7 @@ pub(crate) fn io_context_localized(
 pub(crate) struct SyncManifest {
     pub format: String,
     pub version: u32,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub db_compat_version: Option<u32>,
+    pub db_compat_version: u32,
     pub device_name: String,
     pub created_at: String,
     pub artifacts: BTreeMap<String, ArtifactMeta>,
@@ -171,21 +169,6 @@ pub(crate) struct LocalSnapshot {
     pub skills_zip: Vec<u8>,
     pub manifest_bytes: Vec<u8>,
     pub manifest_hash: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RemoteLayout {
-    Current,
-    Legacy,
-}
-
-impl RemoteLayout {
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::Current => "current",
-            Self::Legacy => "legacy",
-        }
-    }
 }
 
 // ─── Snapshot building ───────────────────────────────────────
@@ -235,7 +218,7 @@ pub(crate) fn build_local_snapshot(
     let manifest = SyncManifest {
         format: PROTOCOL_FORMAT.to_string(),
         version: PROTOCOL_VERSION,
-        db_compat_version: Some(DB_COMPAT_VERSION),
+        db_compat_version: DB_COMPAT_VERSION,
         device_name: detect_system_device_name().unwrap_or_else(|| "Unknown Device".to_string()),
         created_at: Utc::now().to_rfc3339(),
         artifacts,
@@ -266,19 +249,7 @@ pub(crate) fn compute_snapshot_id(artifacts: &BTreeMap<String, ArtifactMeta>) ->
     sha256_hex(parts.join("|").as_bytes())
 }
 
-pub(crate) fn effective_db_compat_version(
-    manifest: &SyncManifest,
-    layout: RemoteLayout,
-) -> Option<u32> {
-    manifest
-        .db_compat_version
-        .or_else(|| (layout == RemoteLayout::Legacy).then_some(LEGACY_DB_COMPAT_VERSION))
-}
-
-pub(crate) fn validate_manifest_compat(
-    manifest: &SyncManifest,
-    layout: RemoteLayout,
-) -> Result<(), AppError> {
+pub(crate) fn validate_manifest_compat(manifest: &SyncManifest) -> Result<(), AppError> {
     if manifest.format != PROTOCOL_FORMAT {
         return Err(localized(
             "sync.manifest_format_incompatible",
@@ -302,37 +273,17 @@ pub(crate) fn validate_manifest_compat(
             ),
         ));
     }
-    let Some(db_compat_version) = effective_db_compat_version(manifest, layout) else {
+    let db_compat_version = manifest.db_compat_version;
+    if db_compat_version != DB_COMPAT_VERSION {
         return Err(localized(
-            "sync.manifest_db_version_missing",
-            "远端 manifest 缺少数据库兼容版本",
-            "Remote manifest is missing the database compatibility version.",
+            "sync.manifest_db_version_incompatible",
+            format!(
+                "远端数据库快照版本不兼容: db-v{db_compat_version} (本地 db-v{DB_COMPAT_VERSION})"
+            ),
+            format!(
+                "Remote database snapshot version is incompatible: db-v{db_compat_version} (local db-v{DB_COMPAT_VERSION})"
+            ),
         ));
-    };
-    match layout {
-        RemoteLayout::Current if db_compat_version != DB_COMPAT_VERSION => {
-            return Err(localized(
-                "sync.manifest_db_version_incompatible",
-                format!(
-                    "远端数据库快照版本不兼容: db-v{db_compat_version} (本地 db-v{DB_COMPAT_VERSION})"
-                ),
-                format!(
-                    "Remote database snapshot version is incompatible: db-v{db_compat_version} (local db-v{DB_COMPAT_VERSION})"
-                ),
-            ));
-        }
-        RemoteLayout::Legacy if db_compat_version > DB_COMPAT_VERSION => {
-            return Err(localized(
-                "sync.manifest_db_version_incompatible",
-                format!(
-                    "远端数据库快照版本不兼容: db-v{db_compat_version} (本地最高支持 db-v{DB_COMPAT_VERSION})"
-                ),
-                format!(
-                    "Remote database snapshot version is incompatible: db-v{db_compat_version} (local supports up to db-v{DB_COMPAT_VERSION})"
-                ),
-            ));
-        }
-        _ => {}
     }
     Ok(())
 }
@@ -659,7 +610,7 @@ mod tests {
         assert!(!ok);
     }
 
-    fn manifest_with(format: &str, version: u32, db_compat_version: Option<u32>) -> SyncManifest {
+    fn manifest_with(format: &str, version: u32, db_compat_version: u32) -> SyncManifest {
         let mut artifacts = BTreeMap::new();
         artifacts.insert("db.sql".to_string(), artifact("abc", 1));
         artifacts.insert("skills.zip".to_string(), artifact("def", 2));
@@ -676,63 +627,38 @@ mod tests {
 
     #[test]
     fn validate_manifest_compat_accepts_supported_manifest() {
-        let manifest = manifest_with(PROTOCOL_FORMAT, PROTOCOL_VERSION, Some(DB_COMPAT_VERSION));
-        assert!(validate_manifest_compat(&manifest, RemoteLayout::Current).is_ok());
+        let manifest = manifest_with(PROTOCOL_FORMAT, PROTOCOL_VERSION, DB_COMPAT_VERSION);
+        assert!(validate_manifest_compat(&manifest).is_ok());
     }
 
     #[test]
     fn validate_manifest_compat_rejects_wrong_format() {
-        let manifest = manifest_with("other-format", PROTOCOL_VERSION, Some(DB_COMPAT_VERSION));
-        assert!(validate_manifest_compat(&manifest, RemoteLayout::Current).is_err());
+        let manifest = manifest_with("other-format", PROTOCOL_VERSION, DB_COMPAT_VERSION);
+        assert!(validate_manifest_compat(&manifest).is_err());
     }
 
     #[test]
     fn validate_manifest_compat_rejects_wrong_version() {
-        let manifest = manifest_with(
-            PROTOCOL_FORMAT,
-            PROTOCOL_VERSION + 1,
-            Some(DB_COMPAT_VERSION),
-        );
-        assert!(validate_manifest_compat(&manifest, RemoteLayout::Current).is_err());
+        let manifest = manifest_with(PROTOCOL_FORMAT, PROTOCOL_VERSION + 1, DB_COMPAT_VERSION);
+        assert!(validate_manifest_compat(&manifest).is_err());
     }
 
     #[test]
-    fn validate_manifest_compat_accepts_legacy_manifest_without_db_compat() {
-        let manifest = manifest_with(PROTOCOL_FORMAT, PROTOCOL_VERSION, None);
-        assert!(validate_manifest_compat(&manifest, RemoteLayout::Legacy).is_ok());
+    fn manifest_requires_explicit_db_compat_version() {
+        let manifest = manifest_with(PROTOCOL_FORMAT, PROTOCOL_VERSION, DB_COMPAT_VERSION);
+        let mut value = serde_json::to_value(manifest).unwrap();
+        value.as_object_mut().unwrap().remove("dbCompatVersion");
+        assert!(serde_json::from_value::<SyncManifest>(value.clone()).is_err());
+        value["dbCompatVersion"] = serde_json::Value::Null;
+        assert!(serde_json::from_value::<SyncManifest>(value).is_err());
     }
 
     #[test]
-    fn validate_manifest_compat_rejects_current_manifest_with_wrong_db_compat() {
-        let manifest = manifest_with(
-            PROTOCOL_FORMAT,
-            PROTOCOL_VERSION,
-            Some(LEGACY_DB_COMPAT_VERSION),
-        );
-        assert!(validate_manifest_compat(&manifest, RemoteLayout::Current).is_err());
-    }
-
-    #[test]
-    fn validate_manifest_compat_rejects_legacy_manifest_from_newer_db_generation() {
-        let manifest = manifest_with(
-            PROTOCOL_FORMAT,
-            PROTOCOL_VERSION,
-            Some(DB_COMPAT_VERSION + 1),
-        );
-        assert!(validate_manifest_compat(&manifest, RemoteLayout::Legacy).is_err());
-    }
-
-    #[test]
-    fn effective_db_compat_version_defaults_legacy_layout_to_v5() {
-        let manifest = manifest_with(PROTOCOL_FORMAT, PROTOCOL_VERSION, None);
-        assert_eq!(
-            effective_db_compat_version(&manifest, RemoteLayout::Legacy),
-            Some(LEGACY_DB_COMPAT_VERSION)
-        );
-        assert_eq!(
-            effective_db_compat_version(&manifest, RemoteLayout::Current),
-            None
-        );
+    fn validate_manifest_compat_rejects_other_db_generations() {
+        for version in [DB_COMPAT_VERSION - 1, DB_COMPAT_VERSION + 1] {
+            let manifest = manifest_with(PROTOCOL_FORMAT, PROTOCOL_VERSION, version);
+            assert!(validate_manifest_compat(&manifest).is_err());
+        }
     }
 
     #[test]
@@ -756,7 +682,7 @@ mod tests {
 
     #[test]
     fn manifest_serialization_uses_device_name_only() {
-        let manifest = manifest_with(PROTOCOL_FORMAT, PROTOCOL_VERSION, Some(DB_COMPAT_VERSION));
+        let manifest = manifest_with(PROTOCOL_FORMAT, PROTOCOL_VERSION, DB_COMPAT_VERSION);
         let value = serde_json::to_value(&manifest).expect("serialize manifest");
         assert!(
             value.get("deviceName").is_some(),

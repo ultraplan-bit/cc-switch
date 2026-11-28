@@ -31,7 +31,7 @@ use serde_json::{json, Map, Value};
 use crate::config::{get_home_dir, stage_write};
 use crate::error::AppError;
 
-/// 旧版（PR 期间）自带模型卡用的环境变量。「打开终端」时全部清掉：进程环境里只要有
+/// 自带模型环境变量。「打开终端」时全部清掉：进程环境里只要有
 /// `COPILOT_PROVIDER_BASE_URL`，Copilot 就完全不读 `providers.json`。
 pub(crate) const BYOK_ENV_KEYS: &[&str] = &[
     "COPILOT_PROVIDER_BASE_URL",
@@ -49,9 +49,6 @@ pub(crate) const BYOK_ENV_KEYS: &[&str] = &[
 ];
 
 pub(crate) const MODEL_ENV: &str = "COPILOT_MODEL";
-pub(crate) const BASE_URL_ENV: &str = "COPILOT_PROVIDER_BASE_URL";
-pub(crate) const API_KEY_ENV: &str = "COPILOT_PROVIDER_API_KEY";
-pub(crate) const BEARER_TOKEN_ENV: &str = "COPILOT_PROVIDER_BEARER_TOKEN";
 
 /// 非空时 Copilot 改读这个路径的供应商文件。
 pub(crate) const PROVIDERS_CONFIG_ENV: &str = "COPILOT_PROVIDERS_CONFIG";
@@ -273,8 +270,7 @@ fn validate_reasoning_effort(settings: &Map<String, Value>) -> Result<(), AppErr
 }
 
 /// 保存前校验。自带模型卡（有 `provider` 节点）按 Copilot 的条目规则校验；官方卡只有
-/// `env.COPILOT_MODEL` 和推理强度。旧版的 `COPILOT_PROVIDER_*` 环境变量形状仍然放行
-/// （列表读库时会转成新形状）。
+/// `env.COPILOT_MODEL` 和推理强度。
 pub(crate) fn validate_provider(id: &str, settings: &Value) -> Result<(), AppError> {
     let obj = settings.as_object().ok_or_else(|| {
         invalid(
@@ -306,11 +302,7 @@ pub(crate) fn validate_provider(id: &str, settings: &Value) -> Result<(), AppErr
                     format!("GitHub Copilot CLI environment variable {key} must be a string"),
                 ));
             };
-            let allows_newlines = key == "COPILOT_PROVIDER_HEADERS";
-            if text
-                .chars()
-                .any(|c| c.is_control() && !(allows_newlines && matches!(c, '\n' | '\r')))
-            {
+            if text.chars().any(char::is_control) {
                 return Err(invalid(
                     "copilot.validation.env_multiline",
                     format!("GitHub Copilot CLI 环境变量 {key} 不能包含控制字符"),
@@ -1219,92 +1211,6 @@ pub(crate) fn add_and_commit<T>(
     )
 }
 
-/// 旧版（PR 期间）自带模型卡的 `{env: {COPILOT_PROVIDER_*, COPILOT_MODEL}}` 转成新形状；
-/// 不是旧形状时返回 `None`。只转形状，不写文件。
-pub(crate) fn convert_legacy_settings(settings: &Value) -> Option<Value> {
-    if is_byok_settings(settings) {
-        return None;
-    }
-    let env = settings.get("env")?;
-    let get = |key: &str| env_string(Some(env), key);
-    let base_url = get(BASE_URL_ENV)?;
-
-    let mut provider = Map::new();
-    for (env_key, key) in [
-        ("COPILOT_PROVIDER_TYPE", "type"),
-        ("COPILOT_PROVIDER_WIRE_API", "wireApi"),
-        ("COPILOT_PROVIDER_TRANSPORT", "transport"),
-    ] {
-        if let Some(value) = get(env_key) {
-            provider.insert(key.into(), json!(value));
-        }
-    }
-    provider.insert("baseUrl".into(), json!(base_url));
-    if let Some(value) = get(API_KEY_ENV) {
-        provider.insert("apiKey".into(), json!(value));
-    }
-    if let Some(value) = get(BEARER_TOKEN_ENV) {
-        provider.insert("bearerToken".into(), json!(value));
-    }
-    if let Some(version) = get("COPILOT_PROVIDER_AZURE_API_VERSION") {
-        provider.insert("azure".into(), json!({"apiVersion": version}));
-    }
-    if let Some(text) = get("COPILOT_PROVIDER_HEADERS") {
-        let headers: Map<String, Value> = text
-            .replace("\\n", "\n")
-            .lines()
-            .filter_map(|line| {
-                let (name, value) = line.split_once(':')?;
-                let name = name.trim();
-                (!name.is_empty()).then(|| (name.to_string(), json!(value.trim())))
-            })
-            .collect();
-        if !headers.is_empty() {
-            provider.insert("headers".into(), Value::Object(headers));
-        }
-    }
-
-    let model_id = get(MODEL_ENV);
-    let wire_model = get("COPILOT_PROVIDER_WIRE_MODEL");
-    let native_id = get("COPILOT_PROVIDER_MODEL_ID");
-    let mut models = Vec::new();
-    if let Some(id) = model_id
-        .clone()
-        .or_else(|| native_id.clone())
-        .or_else(|| wire_model.clone())
-    {
-        let mut model = Map::new();
-        model.insert("id".into(), json!(id));
-        if let Some(wire) = wire_model.filter(|wire| *wire != id) {
-            model.insert("wireModel".into(), json!(wire));
-        }
-        if let Some(native) = native_id.filter(|native| *native != id) {
-            model.insert("modelId".into(), json!(native));
-        }
-        for (env_key, key) in [
-            ("COPILOT_PROVIDER_MAX_PROMPT_TOKENS", "maxPromptTokens"),
-            ("COPILOT_PROVIDER_MAX_OUTPUT_TOKENS", "maxOutputTokens"),
-        ] {
-            if let Some(n) = get(env_key).and_then(|text| text.parse::<u64>().ok()) {
-                model.insert(key.into(), json!(n));
-            }
-        }
-        models.push(Value::Object(model));
-    }
-
-    let mut converted = Map::new();
-    converted.insert("provider".into(), Value::Object(provider));
-    converted.insert("models".into(), Value::Array(models));
-    if let Some(obj) = settings.as_object() {
-        for (key, value) in obj {
-            if key != "env" {
-                converted.insert(key.clone(), value.clone());
-            }
-        }
-    }
-    Some(Value::Object(converted))
-}
-
 /// 在终端里启动这张卡要用的参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CopilotLaunch {
@@ -1844,48 +1750,6 @@ mod tests {
         assert_eq!(official.reasoning_effort.as_deref(), Some("none"));
         assert_eq!(official.env.len(), BYOK_ENV_KEYS.len());
         assert!(official.env.iter().all(|(_, value)| value.is_none()));
-    }
-
-    #[test]
-    fn legacy_environment_cards_convert_to_the_new_shape() {
-        let legacy = json!({"env":{
-            "COPILOT_PROVIDER_BASE_URL":"https://relay.test/v1",
-            "COPILOT_PROVIDER_TYPE":"azure",
-            "COPILOT_PROVIDER_WIRE_API":"responses",
-            "COPILOT_PROVIDER_TRANSPORT":"websockets",
-            "COPILOT_PROVIDER_API_KEY":"sk-a",
-            "COPILOT_PROVIDER_BEARER_TOKEN":"tok",
-            "COPILOT_PROVIDER_AZURE_API_VERSION":"2024-10-21",
-            "COPILOT_PROVIDER_HEADERS":"X-A: 1\nX-B: two: parts",
-            "COPILOT_PROVIDER_WIRE_MODEL":"gpt-wire",
-            "COPILOT_PROVIDER_MODEL_ID":"gpt-native",
-            "COPILOT_PROVIDER_MAX_PROMPT_TOKENS":"1000",
-            "COPILOT_PROVIDER_MAX_OUTPUT_TOKENS":"200",
-            "COPILOT_MODEL":"gpt-5.4"
-        },"reasoningEffort":"low"});
-        let converted = convert_legacy_settings(&legacy).unwrap();
-        assert_eq!(
-            converted,
-            json!({
-                "provider": {
-                    "type":"azure","wireApi":"responses","transport":"websockets",
-                    "baseUrl":"https://relay.test/v1","apiKey":"sk-a","bearerToken":"tok",
-                    "azure":{"apiVersion":"2024-10-21"},
-                    "headers":{"X-A":"1","X-B":"two: parts"}
-                },
-                "models":[{"id":"gpt-5.4","wireModel":"gpt-wire","modelId":"gpt-native","maxPromptTokens":1000,"maxOutputTokens":200}],
-                "reasoningEffort":"low"
-            })
-        );
-        assert!(validate_provider("relay", &converted).is_ok());
-
-        let minimal = json!({"env":{"COPILOT_PROVIDER_BASE_URL":"https://r.test","COPILOT_PROVIDER_WIRE_MODEL":"w"}});
-        assert_eq!(
-            convert_legacy_settings(&minimal).unwrap()["models"],
-            json!([{"id":"w"}])
-        );
-        assert!(convert_legacy_settings(&json!({"env":{"COPILOT_MODEL":"auto"}})).is_none());
-        assert!(convert_legacy_settings(&card()).is_none());
     }
 
     #[test]

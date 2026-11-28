@@ -33,6 +33,7 @@ fn read_project_input(root: &Path, scope: ProfileScope) -> Result<ProjectInput, 
     let app = &scope.apps()[0];
     let mut input = ProjectInput {
         config: ProfileConfig {
+            claude_project_connection: Default::default(),
             follow_global_resources: false,
             native_config: None,
             provider_id: None,

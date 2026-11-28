@@ -137,11 +137,7 @@ enum LiveNow {
 impl LiveNow {
     fn of(state: &AppState, app: &AppType, mode: &ModeState) -> Result<Self, String> {
         if mode.attached {
-            // 旧版接管留下的状态没有路由记录，那时路由就是直连指针。
-            let route = match route_provider(state, app, mode)? {
-                Some(route) => Some(route),
-                None => direct_provider(state, app)?,
-            };
+            let route = route_provider(state, app, mode)?;
             Ok(Self::Proxy {
                 contract: mode.contract.clone(),
                 route,
@@ -1849,18 +1845,7 @@ pub async fn record_failover_route(
     Ok(true)
 }
 
-/// 启动时：先按旧版遗留的接管状态定下每个应用的模式（首次运行新版、降级后再升级），
-/// 再把代理模式的应用接上。要在补完上次未完成的写入之后、自动提取通用配置片段之后。
-///
-/// | `proxy_config.enabled` | 备份行或占位符 | 处理 |
-/// |---|---|---|
-/// | 1 | 无 | 代理模式，接上 |
-/// | 1 | 有 | 不回放备份，直接写代理契约；备份行转存到本机文件后删除 |
-/// | 0 | 有 | 写回直连投影 |
-/// | 0 | 无 | 直连 |
-///
-/// 有遗留物时以 `enabled` 为准（旧版是最后一个写入者）；没有时以 `live-state.json`
-/// 为准，它还没有值就按 `enabled` 定。
+/// 按本机保存的模式恢复代理连接，先完成上次未完成的写入。
 pub async fn startup(state: &AppState) {
     for app in route_mode_apps() {
         let result = match lock_settled(state, &app).await {
@@ -1878,36 +1863,8 @@ pub async fn startup(state: &AppState) {
 }
 
 async fn startup_app(state: &AppState, app: &AppType) -> Result<(), String> {
-    let had_backup = drain_legacy_backup(state, app).await;
-    let mut mode = current::mode_state(app);
-    // 新版自己接上时写的占位符不算遗留物（比如重启更新时没来得及分离）。
-    let placeholder = !mode.attached && state.proxy_service.live_has_proxy_placeholder(app);
-    let legacy = had_backup || placeholder;
-    let enabled = if *app == AppType::ClaudeDesktop {
-        // 旧版按卡片决定 Desktop 走不走路由：直连指针是模型映射卡就是在用路由。只在第一次
-        // （模式还没有值）时看。
-        let card = mode
-            .mode
-            .is_none()
-            .then(|| claude_desktop_config::legacy_mapping_card(&state.db))
-            .flatten();
-        if let Some(card) = &card {
-            adopt_legacy_desktop_card(state, &mut mode, card)?;
-        }
-        card.is_some()
-    } else {
-        state.db.get_proxy_flags_sync(app).0
-    };
-    let want_proxy = if legacy {
-        enabled
-    } else {
-        mode.mode.map_or(enabled, |mode| mode == Mode::Proxy)
-    };
-
-    if placeholder {
-        // 旧版留下的接管态：客户端里是旧契约。按「已接上」处理，下面的投影会整体换掉它。
-        mode.attached = true;
-    }
+    let mode = current::mode_state(app);
+    let want_proxy = mode.is_proxy();
 
     if want_proxy {
         let mode = ModeState {
@@ -1937,12 +1894,6 @@ async fn startup_app(state: &AppState, app: &AppType) -> Result<(), String> {
     }
 
     if mode.attached || mode.mode != Some(Mode::Direct) {
-        if placeholder {
-            log::warn!(
-                "{} 的客户端配置里有旧版接管留下的代理占位符，已写回直连配置",
-                app.as_str()
-            );
-        }
         let live_now = if mode.attached {
             LiveNow::Proxy {
                 contract: mode.contract.clone(),
@@ -1965,89 +1916,6 @@ async fn startup_app(state: &AppState, app: &AppType) -> Result<(), String> {
         )?;
     }
     Ok(())
-}
-
-/// 旧版的 Desktop 映射卡拆成新版的三样：旧版给映射卡写的一律是本地路由地址，所以客户端
-/// 已经接上（`attached`，接不上退回直连时才会把它写回去）；路由那家是这张卡；直连指针改成
-/// 官方卡（映射卡直连写不进去，退出路由时 Desktop 本来就会回到官方，指针要跟着一致）。
-/// 指针只改本机记录：`provider_for` 先读它，库里的 `is_current` 会随云同步到别的设备。
-/// 先落定模式再改指针：中途崩了，下次启动按已落定的路由模式接上，不会因为指针已经不是
-/// 映射卡而认不出旧版状态。
-fn adopt_legacy_desktop_card(
-    state: &AppState,
-    mode: &mut ModeState,
-    card: &Provider,
-) -> Result<(), String> {
-    let app = AppType::ClaudeDesktop;
-    mode.mode = Some(Mode::Proxy);
-    mode.attached = true;
-    mode.proxy_route = Some(card.id.clone());
-    commit_state(state, &app, &PendingTarget::mode(mode.clone()))?;
-    state
-        .db
-        .ensure_official_seed_by_id(
-            crate::database::CLAUDE_DESKTOP_OFFICIAL_PROVIDER_ID,
-            app.clone(),
-        )
-        .map_err(err)?;
-    crate::settings::set_current_provider(
-        &app,
-        Some(crate::database::CLAUDE_DESKTOP_OFFICIAL_PROVIDER_ID),
-    )
-    .map_err(err)?;
-    log::info!(
-        "Claude Desktop 旧版映射卡 {} 迁移为路由模式：路由到这张卡，直连指针改为官方",
-        card.id
-    );
-    Ok(())
-}
-
-/// 旧版的接管备份行：不回放，转存到本机文件后删除。留着的话，降级后旧版启动时会把这份
-/// 陈旧的快照写回客户端。
-async fn drain_legacy_backup(state: &AppState, app: &AppType) -> bool {
-    let backup = match state.db.get_live_backup(app).await {
-        Ok(Some(backup)) => backup,
-        Ok(None) => return false,
-        Err(error) => {
-            log::warn!("读取 {} 的旧接管备份失败: {error}", app.as_str());
-            return false;
-        }
-    };
-    let dir = crate::config::get_home_dir()
-        .join(".cc-switch")
-        .join("backups")
-        .join("proxy-live-backup");
-    let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%SZ");
-    let path = dir.join(format!("{}-{stamp}.json", app.as_str()));
-    let saved = serde_json::to_vec_pretty(&json!({
-        "app": app.as_str(),
-        "backedUpAt": backup.backed_up_at,
-        "originalConfig": serde_json::from_str::<Value>(&backup.original_config)
-            .unwrap_or(Value::String(backup.original_config.clone())),
-    }))
-    .map_err(err)
-    .and_then(|bytes| {
-        std::fs::create_dir_all(&dir).map_err(err)?;
-        crate::config::atomic_write_private(&path, &bytes).map_err(err)
-    });
-    match saved {
-        Ok(()) => {
-            if let Err(error) = state.db.delete_live_backup(app).await {
-                log::warn!("删除 {} 的旧接管备份失败: {error}", app.as_str());
-            } else {
-                log::info!(
-                    "{} 的旧接管备份已转存到 {} 并从数据库删除",
-                    app.as_str(),
-                    path.display()
-                );
-            }
-        }
-        Err(error) => log::warn!(
-            "转存 {} 的旧接管备份失败，保留数据库里的备份行: {error}",
-            app.as_str()
-        ),
-    }
-    true
 }
 
 /// 给前端：直连指针（代理模式下退出代理时写回的那家）。

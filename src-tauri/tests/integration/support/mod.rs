@@ -114,11 +114,49 @@ pub fn create_test_state() -> Result<AppState, Box<dyn std::error::Error>> {
     Ok(AppState::new(db))
 }
 
-/// 创建测试用的 AppState，并从 MultiAppConfig 迁移数据
+/// 使用当前 DAO 填入集成测试数据。
 pub fn create_test_state_with_config(
     config: &MultiAppConfig,
 ) -> Result<AppState, Box<dyn std::error::Error>> {
     let db = Arc::new(Database::init()?);
-    db.migrate_from_json(config)?;
+    for (name, manager) in &config.apps {
+        let app = name.parse()?;
+        for provider in manager.providers.values() {
+            db.save_provider(&app, provider)?;
+        }
+        if !manager.current.is_empty() {
+            db.set_current_provider(&app, &manager.current)?;
+        }
+    }
+    if let Some(servers) = &config.mcp.servers {
+        for server in servers.values() {
+            db.save_mcp_server(server)?;
+        }
+    }
+    for (app, prompts, snippet) in [
+        (
+            cc_switch_lib::AppType::Claude,
+            &config.prompts.claude.prompts,
+            &config.common_config_snippets.claude,
+        ),
+        (
+            cc_switch_lib::AppType::Codex,
+            &config.prompts.codex.prompts,
+            &config.common_config_snippets.codex,
+        ),
+        (
+            cc_switch_lib::AppType::Gemini,
+            &config.prompts.gemini.prompts,
+            &config.common_config_snippets.gemini,
+        ),
+    ] {
+        for prompt in prompts.values() {
+            db.save_prompt(&app, prompt)?;
+        }
+        db.set_config_snippet(&app, snippet.clone())?;
+    }
+    for repo in &config.skills.repos {
+        db.save_skill_repo(repo)?;
+    }
     Ok(AppState::new(db))
 }

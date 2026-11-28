@@ -1006,7 +1006,7 @@ fn managed_oauth_card_hints_show_account_instead_of_website() {
         Some("openai.com")
     );
 
-    // GitHub Copilot 反代卡：支持未绑定默认、authBinding、旧 githubAccountId 与旧 templateType
+    // GitHub Copilot 反代卡：支持未绑定默认账号和 authBinding。
     let copilot_proxy = |meta: serde_json::Value| -> Provider {
         serde_json::from_value(serde_json::json!({
             "id": "claude-copilot",
@@ -1036,23 +1036,6 @@ fn managed_oauth_card_hints_show_account_instead_of_website() {
                     "authProvider": "github_copilot",
                     "accountId": "gh-2"
                 }
-            })),
-            &accounts
-        )
-        .as_deref(),
-        Some("hubot")
-    );
-    assert_eq!(
-        provider_hint(
-            &AppType::Claude,
-            &copilot_proxy(serde_json::json!({
-                "usage_script": {
-                    "enabled": true,
-                    "language": "javascript",
-                    "code": "",
-                    "templateType": "github_copilot"
-                },
-                "githubAccountId": "gh-2"
             })),
             &accounts
         )

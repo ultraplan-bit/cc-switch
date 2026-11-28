@@ -16,15 +16,6 @@ export const getApiKeyFromConfig = (
       return bedrockToken;
     }
 
-    // 其次顶层 apiKey：旧版 Bedrock API Key 预设写在这里，存量行照常显示
-    if (
-      typeof config?.apiKey === "string" &&
-      config.apiKey &&
-      !config.apiKey.includes("${")
-    ) {
-      return config.apiKey;
-    }
-
     if (appType === "kimi")
       return typeof config?.provider?.api_key === "string"
         ? config.provider.api_key
@@ -113,11 +104,6 @@ export const hasApiKeyField = (
   try {
     const config = JSON.parse(jsonString);
 
-    // 顶层 apiKey：旧版 Bedrock API Key 预设
-    if (Object.prototype.hasOwnProperty.call(config, "apiKey")) {
-      return true;
-    }
-
     const env = config?.env ?? {};
 
     if (Object.prototype.hasOwnProperty.call(env, "AWS_BEARER_TOKEN_BEDROCK")) {
@@ -164,12 +150,6 @@ export const setApiKeyInConfig = (
       )
     ) {
       config.env.AWS_BEARER_TOKEN_BEDROCK = apiKey;
-      return JSON.stringify(config, null, 2);
-    }
-
-    // 顶层 apiKey：旧版 Bedrock API Key 预设的存量行，写回原处
-    if (Object.prototype.hasOwnProperty.call(config, "apiKey")) {
-      config.apiKey = apiKey;
       return JSON.stringify(config, null, 2);
     }
 

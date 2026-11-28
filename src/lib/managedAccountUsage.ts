@@ -18,19 +18,6 @@ export interface ManagedAccountUser {
   viaDefault: boolean;
 }
 
-// 没写 providerType 的旧卡按 Claude 的请求地址认（对齐后端 Provider::is_github_copilot 等）
-const BASE_URL_MARKERS: Partial<Record<ManagedAuthProvider, string>> = {
-  github_copilot: "githubcopilot.com",
-  codex_oauth: "chatgpt.com/backend-api/codex",
-};
-
-function claudeBaseUrl(provider: Provider): string {
-  const env = (provider.settingsConfig as { env?: Record<string, unknown> })
-    ?.env;
-  const value = env?.ANTHROPIC_BASE_URL;
-  return typeof value === "string" ? value : "";
-}
-
 /**
  * 供应商没指定账号时会不会用这个服务的「默认」账号（后端 forwarder 里
  * `managed_account_id_for(...)` 为空时取默认账号的那几条路径）。
@@ -49,11 +36,7 @@ function followsDefaultAccount(
   ) {
     return false;
   }
-  if (provider.meta?.providerType === authProvider) return true;
-  const marker = BASE_URL_MARKERS[authProvider];
-  return (
-    appId !== "codex" && !!marker && claudeBaseUrl(provider).includes(marker)
-  );
+  return provider.meta?.providerType === authProvider;
 }
 
 /**

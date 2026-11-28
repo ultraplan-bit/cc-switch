@@ -65,11 +65,8 @@ export function AddProviderDialog({
   modeView,
 }: AddProviderDialogProps) {
   const { t } = useTranslation();
-  const {
-    connectionsOnly,
-    pending: resolvingConnectionMode,
-    migrationError,
-  } = useProviderConnectionMode(appId, open, modeView);
+  const { connectionsOnly, pending: resolvingConnectionMode } =
+    useProviderConnectionMode(appId, open, modeView);
   // OpenCode and OpenClaw don't support universal providers
   const showUniversalTab =
     appId !== "opencode" &&
@@ -579,11 +576,6 @@ export function AddProviderDialog({
             : "pt-4"
       }
     >
-      {migrationError && (
-        <Notice tone="warning" title={t("profiles.migration.failed")}>
-          {String(migrationError)}
-        </Notice>
-      )}
       {connectionsOnly && step === "form" && (
         <Notice
           tone="neutral"

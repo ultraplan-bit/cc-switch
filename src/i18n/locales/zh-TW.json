@@ -82,7 +82,7 @@
     "disableAutoModeServer": "停用 auto mode 伺服器端檢查",
     "disableAutoModeServerHelp": "閘道不支援伺服器端檢查，auto mode 每個工作階段會先停下提示一次「不符合條件」，按 Enter 後改用本機檢查。勾選後直接用本機檢查，不再提示。官方端點不要勾選。",
     "keyFieldsHint": "位址、Key、模型、上下文視窗和相容開關隨供應商切換；其餘欄位是 Claude Code 全域設定，儲存後對所有供應商生效。",
-    "inactiveFieldsHint": "這些是舊版存進卡裡的設定，現在切換不會寫出去。點一下加入上方，儲存後對所有供應商生效。",
+    "inactiveFieldsHint": "這些匯入欄位不隨連線切換套用。可選擇加入上方設定。",
     "addToGlobalSettings": "加入全域設定"
   },
   "header": {
@@ -385,7 +385,6 @@
     "openclawDefaultModelSetFailed": "設定預設模型失敗",
     "openclawNoModels": "該供應商沒有設定模型",
     "openclawModelNotFound": "所選模型已不存在，請重新整理後再試",
-    "backfillWarning": "切換成功，但舊供應商設定回填失敗，您手動修改的設定可能未儲存",
     "codexAuthCleanupFailed": "切換成功，但未能刪除 auth.json，官方登入憑證仍留在磁碟上；如需徹底移除請手動刪除 Codex 設定目錄中的 auth.json",
     "omoVariantCleanupFailed": "切換成功，但未能刪除另一個 OMO 變體（OMO / OMO Slim）的設定檔，OpenCode 可能同時載入兩者；請在 OpenCode 設定目錄中手動刪除它",
     "windowControlFailed": "視窗控制失敗：{{error}}",
@@ -395,10 +394,9 @@
     "codexHistorySplit": {
       "hint": "之前在{{previous}}下的 {{count}} 個會話現在只能檢視",
       "officialBucket": "官方訂閱",
-      "thirdPartyBucket": "第三方供應商",
-      "migrationFinished": "已遷入 {{count}} 個舊會話，重新啟動 Codex 後即可繼續",
-      "migrationFailed": "遷入舊會話失敗：{{error}}。下次啟動 CC Switch 會自動重試"
-    }
+      "thirdPartyBucket": "第三方供應商"
+    },
+    "switchWarnings": "切換已完成，請查看提示：\n{{details}}"
   },
   "confirm": {
     "deleteProvider": "刪除供應商",
@@ -415,18 +413,6 @@
       "title": "啟用故障轉移功能",
       "message": "故障轉移是一項進階功能，啟用前請確保您已了解其運作原理。\n\n建議先在故障轉移佇列中設定好供應商優先順序。",
       "confirm": "我已了解，繼續啟用"
-    },
-    "unifyCodexHistory": {
-      "title": "統一 Codex 會話歷史",
-      "message": "開啟後，官方訂閱改用共享的 custom 供應商標識，官方與第三方的會話歸到同一組：新版 Codex 裡兩邊的會話都能繼續，CLI 的 resume 清單也會合併顯示。\n\n可選擇同時遷入現有官方會話；勾選後，之後每次啟動也會把仍留在官方組的會話遷進來（遷移前自動備份到 ~/.cc-switch/backups，關閉開關時可選擇還原）。不遷入的話，這些會話在新版 Codex 裡只能檢視。遷移完成後重新啟動 Codex 生效。\n\n注意：跨供應商繼續舊會話時，可能因對方後端無法解密 encrypted_content 推理內容而失敗。",
-      "migrateExisting": "同時遷入現有官方會話歷史",
-      "confirm": "我已了解，繼續開啟"
-    },
-    "unifyCodexHistoryOff": {
-      "title": "關閉統一會話歷史",
-      "message": "關閉後，官方訂閱與第三方的會話重新分成兩組：新版 Codex 只能繼續目前供應商那一組，另一組只能檢視。開啟期間產生的會話無法區分來源，將留在第三方那組。",
-      "restoreBackup": "把遷入的官方會話還原回官方組（按備份精確還原）",
-      "confirm": "關閉"
     },
     "usage": {
       "title": "設定用量查詢",
@@ -633,7 +619,6 @@
       "delete": "刪除",
       "deleting": "刪除中...",
       "managedAbove": "在上方清單中管理",
-      "legacy": "舊版遺留",
       "loadFailed": "讀取備份佔用失敗",
       "revealFailed": "開啟資料夾失敗",
       "deleteConfirmTitle": "刪除「{{name}}」？",
@@ -649,18 +634,6 @@
           "name": "Skill 解除安裝備份",
           "hint": "解除安裝 Skill 前留下的副本，可在 Skills 頁還原。刪除後這些已解除安裝的 Skill 無法再還原。"
         },
-        "codexHistoryUnify": {
-          "name": "Codex 工作階段統一遷移備份",
-          "hint": "開啟「統一 Codex 會話歷史」並遷入既有工作階段時留下的副本。關閉該開關時的「還原備份」依賴它，刪除後無法再把遷移過的官方工作階段還原回原分組。"
-        },
-        "codexHistoryUnifyRestore": {
-          "name": "Codex 工作階段統一還原備份",
-          "hint": "執行「還原備份」前留下的工作階段副本，CC Switch 不會再讀取。"
-        },
-        "codexHistoryProviderMigration": {
-          "name": "Codex 工作階段分組遷移備份",
-          "hint": "工作階段分組遷移前留下的副本，CC Switch 不會再讀取。"
-        },
         "liveFirstWrite": {
           "name": "設定檔首次寫入備份",
           "hint": "CC Switch 第一次改寫各用戶端設定檔前的原始檔案。刪除後無法再找回改寫前的原檔，下次寫入時會重新備份當時的檔案。"
@@ -673,29 +646,9 @@
           "name": "OpenClaw 設定備份",
           "hint": "儲存 OpenClaw 設定前的副本，依「備份保留數量」自動清理。"
         },
-        "proxyLiveBackup": {
-          "name": "舊版路由接管備份",
-          "hint": "升級時從舊版路由接管備份轉存出的設定副本，CC Switch 不會再讀取。"
-        },
         "envVars": {
           "name": "環境變數清理備份",
           "hint": "清理衝突環境變數前記錄的原值。刪除後無法再查到被清理變數的原值。"
-        },
-        "legacyConfigBackups": {
-          "name": "舊版 config.json 備份",
-          "hint": "舊版本留下的檔案，目前版本不會再讀取。"
-        },
-        "legacyConfigArchive": {
-          "name": "舊版 config.json 封存",
-          "hint": "遷移到資料庫前的舊設定檔，目前版本不會再讀取。"
-        },
-        "legacyDbUpgrade": {
-          "name": "舊版資料庫升級備份",
-          "hint": "舊版本升級資料庫時留下的副本，目前版本不會再讀取。"
-        },
-        "legacyToolSearch": {
-          "name": "舊版 Tool Search 修補備份",
-          "hint": "已移除的 Tool Search 修補功能留下的檔案，目前版本不會再讀取。"
         }
       }
     },
@@ -744,7 +697,7 @@
       "saveAndTestSuccess": "設定已儲存，連線正常",
       "saveAndTestFailed": "設定已儲存，但連線測試失敗：{{error}}",
       "noRemoteData": "雲端沒有找到同步資料",
-      "incompatibleVersion": "遠端資料版本不相容（協定 v{{protocolVersion}}，資料庫 {{dbCompatVersion}}），目前支援協定 v2 / db-v6",
+      "incompatibleVersion": "遠端資料版本不相容（協定 v{{protocolVersion}}，資料庫 {{dbCompatVersion}}），目前支援協定 v2 / db-v7",
       "unsaved": "未儲存",
       "saved": "已儲存",
       "unsavedChanges": "請先儲存設定",
@@ -767,7 +720,6 @@
         "path": "遠端路徑",
         "dbCompat": "資料庫相容層",
         "artifacts": "包含內容",
-        "legacyNotice": "檢測到舊版雲端路徑。還原完成後，下次上傳將寫入新路徑 v2/db-v6。",
         "warning": "還原將覆寫本地所有資料和技能設定",
         "confirm": "確認還原"
       },
@@ -783,7 +735,6 @@
         "path": "遠端路徑",
         "dbCompat": "資料庫相容層",
         "warning": "將覆寫雲端已有的同步資料",
-        "legacyNotice": "檢測到舊版雲端路徑資料。本次上傳將寫入新路徑 v2/db-v6，不會覆寫舊路徑。",
         "confirm": "確認上傳"
       }
     },
@@ -854,7 +805,7 @@
       "autoSyncLastErrorHint": "請檢查網路或 S3 設定，系統會在後續變更時繼續自動重試。",
       "missingBucket": "請填寫 S3 儲存桶",
       "noRemoteData": "S3 儲存桶中沒有找到同步資料",
-      "incompatibleVersion": "遠端資料版本不相容（版本 {{version}}），目前支援協議 v2 / db-v6",
+      "incompatibleVersion": "遠端資料版本不相容（版本 {{version}}），目前支援協議 v2 / db-v7",
       "unsaved": "未儲存",
       "saved": "已儲存",
       "clear": "清除設定",
@@ -940,7 +891,7 @@
     "preserveCodexOfficialAuthOnSwitch": "非接管切換時保留官方登入",
     "preserveCodexOfficialAuthOnSwitchDescription": "控制未開啟本機路由時切換第三方供應商是否保留 Codex 官方登入；路由接管期間一律保留",
     "unifyCodexSessionHistory": "統一 Codex 會話歷史",
-    "unifyCodexSessionHistoryDescription": "官方訂閱改用和第三方相同的 custom 供應商標識執行，官方與第三方的會話歸到同一組。新版 Codex（桌面版 26.1103、CLI 0.167 起）只能繼續與目前供應商同一組的會話，另一組只能檢視；CLI 的 resume 清單也只顯示目前這組。經常在官方和第三方之間切換時建議開啟。可選擇把官方組的會話遷入這一組（遷移前自動備份），關閉時可按備份還原。注意：跨供應商繼續舊會話時，對方後端可能無法解密會話中的 encrypted_content 推理內容，導致繼續失敗",
+    "unifyCodexSessionHistoryDescription": "讓之後新建的官方與第三方 Codex 會話使用同一個供應商分組。只影響後續會話，不移動或改寫既有會話記錄。",
     "codexStackClassicSubagents": "聚合模式下子 agent 用經典工具",
     "codexStackClassicSubagentsDescription": "主、子 agent 不在同一家供應商時必須開啟，否則子 agent 收不到任務。",
     "codexStackClassicSubagentsForcedV2": "Codex 的 config.toml 裡開啟了 [features] multi_agent_v2，它比這個開關優先，開關不會生效",
@@ -948,10 +899,6 @@
     "codexSessionCompressionDescription": "開啟後，Codex 每次啟動時會在背景把 7 天以上沒動過的對話檔案壓縮保存，明顯減少佔用的磁碟空間；在這些對話上繼續對話時 Codex 會自動解壓。CC Switch 照常顯示和統計壓縮過的對話，只是列表裡不顯示它們最後一則回覆的預覽。這是 Codex 還在開發中的功能，開啟後 Codex 每次啟動會顯示一條提示；需要較新版本的 Codex，重新啟動 Codex 後生效。關閉後不再壓縮，已壓縮的對話保持原樣",
     "codexSessionCompressionUsage": "對話目錄目前佔用 {{size}}",
     "codexSessionCompressionFailed": "修改 Codex 對話壓縮設定失敗",
-    "unifyCodexHistoryRestoreCompleted": "已按備份還原官方會話歷史（{{files}} 個會話檔案、{{rows}} 條索引記錄）",
-    "unifyCodexHistoryRestoreFailed": "還原官方會話歷史失敗，請重試",
-    "unifyCodexHistoryRestoreNothing": "目前 Codex 目錄沒有可恢復的遷移備份",
-    "unifyCodexHistoryRestoreSkippedToggleOn": "統一會話歷史開關已重新開啟，已跳過還原",
     "appVisibility": {
       "title": "主頁面顯示",
       "description": "選擇在主頁面顯示的應用程式",
@@ -1147,7 +1094,12 @@
       "about": "關於"
     },
     "appConfig": {
-      "configDir": "設定目錄"
+      "configDir": "設定目錄",
+      "selectAgent": "Agent",
+      "selectionHint": "選擇 Agent，查看專屬開關和設定目錄。",
+      "empty": "此 Agent 暫無專屬應用設定。",
+      "pendingDirectories": "尚未儲存的目錄：{{apps}}",
+      "saveDirectories": "儲存全部目錄變更"
     },
     "routing": {
       "service": "服務"
@@ -1985,7 +1937,6 @@
     "setAsDefault": "設為預設",
     "retry": "重試",
     "copyCode": "複製程式碼",
-    "migrationFailed": "舊驗證資料遷移失敗：{{error}}",
     "loadModelsFailed": "載入 Copilot 模型清單失敗",
     "noPickerModels": "這個 GitHub 帳號沒有可用的 Copilot 模型。Copilot Free 帳號通常如此，請確認帳號已開通 Copilot Pro 或更高方案。",
     "noPickerModelsClaude": "這個 GitHub 帳號沒有可用的 Copilot 模型。Copilot Free 帳號通常如此，請確認帳號已開通 Copilot Pro 或更高方案；也可以在模型欄位手動填寫 gpt-4.1 或 gpt-4o 先使用。",
@@ -2023,7 +1974,8 @@
       "notSignedIn": "Copilot CLI 尚未登入。請執行 copilot 並用 /login 登入，或在卡片裡綁定授權中心的帳號。"
     },
     "defaultCannotRemove": "Copilot 的預設模型屬於這一家，不能移除或刪除。請先在 copilot 裡用 /model 換成別家的模型。",
-    "terminalNeedsAdd": "請先把這一家新增到 Copilot，終端機才能選到它的模型。"
+    "terminalNeedsAdd": "請先把這一家新增到 Copilot，終端機才能選到它的模型。",
+    "storageFailed": "帳號檔案讀取失敗：{{error}}"
   },
   "codexOauth": {
     "authStatus": "驗證狀態",
@@ -2212,7 +2164,7 @@
     "reasoningEffortHint": "上游支援 low/high/max 等思考深度時開啟。會同時開啟思考模式，並把 Codex 的 reasoning.effort 轉成上游 Chat 參數。",
     "reasoningGroupTitle": "思考能力",
     "keyFieldsHint": "位址、Key、模型、推理檔位、上下文視窗和相容開關隨供應商切換；其餘是 Codex 全域設定，儲存後對所有供應商生效。",
-    "inactiveFieldsHint": "這些是舊版存進卡裡的設定，現在切換不會寫出去。點一下複製 TOML，需要時貼到上方。",
+    "inactiveFieldsHint": "這些匯入欄位不隨連線切換套用。可複製 TOML 後加入上方設定。",
     "inactiveFieldCopied": "已複製",
     "upstreamFormatCopilotRouteHint": "所有模式都需要開啟路由，由路由注入 Copilot 帳號憑證；手動指定的協定模型不支援時會報錯。",
     "maxOutputTokensWarning": "不要超過模型或閘道的真實輸出上限，否則會回傳 400。",
@@ -2224,7 +2176,7 @@
     "configJson": "設定檔 (settings.json)",
     "configJsonHint": "Gemini CLI 的 settings.json（MCP 伺服器在 MCP 面板中管理）",
     "keyFieldsHint": "位址、Key、模型名稱和認證方式隨供應商切換；其餘環境變數和 settings.json 是 Gemini CLI 全域設定，儲存後對所有供應商生效。",
-    "inactiveFieldsHint": "這些是舊版存進卡裡的設定，現在切換不會寫出去。點一下加入上方，儲存後對所有供應商生效。",
+    "inactiveFieldsHint": "這些匯入欄位不隨連線切換套用。可選擇加入上方設定。",
     "addToGlobalSettings": "加入全域設定"
   },
   "opencode": {
@@ -3193,7 +3145,6 @@
     "applySuccess": "方案已套用至全域",
     "applyFailed": "套用方案失敗：{{detail}}",
     "applyWarnings": "方案已套用，有 {{warningCount}} 則提示：\n{{details}}",
-    "switchFollowWarning": "連線已切換，但對應的設定方案未完整套用：\n{{details}}",
     "scope": {
       "label": "使用位置",
       "global": "全域",
@@ -3251,10 +3202,6 @@
     "import": {
       "completedWithNotes": "專案設定已匯入，請查看提示"
     },
-    "migration": {
-      "pending": "正在整理既有 Agent 設定…",
-      "failed": "既有設定移轉尚未完成"
-    },
     "environment": {
       "title": "專案環境",
       "configureProject": "設定專案",
@@ -3274,6 +3221,14 @@
       "name": "名稱",
       "provider": "供應商",
       "inheritProvider": "使用目前全域供應商",
+      "projectConnection": "專案 API 連線",
+      "projectConnectionInherit": "沿用全域連線",
+      "projectConnectionDirect": "專案獨立直連",
+      "projectConnectionInheritHint": "連線依 Claude Code 原生設定層級繼承。恢復時僅移除此功能管理的連線欄位，請重新啟動工作階段。此選項僅影響專案部署。",
+      "projectConnectionDirectHint": "僅影響專案部署：使用上方所選供應商直接請求，不經過 CC Switch 本機路由。僅支援 Anthropic 協定的一般 API Key 或 Token 連線，仍遵循組織管理策略與啟動參數的優先順序。",
+      "projectConnectionCredentialsHint": "網址與金鑰會寫入專案的 .claude/settings.local.json，並自動加入 Git 忽略；若此檔案已被 Git 追蹤，則無法部署獨立連線。供應商資訊更新後需重新部署；恢復沿用全域時會移除管理的連線欄位，請重新啟動 Claude 工作階段。",
+      "projectConnectionProviderRequired": "請選擇現有供應商，才能使用專案獨立直連。",
+      "projectConnectionProviderPlaceholder": "請選擇專案供應商",
       "providerReferenceHint": "模型能力沿用所選供應商；API 位址、金鑰和帳號仍引用供應商。專案部署不會切換全域連線。",
       "model": "模型",
       "resetModels": "還原供應商模型設定",
@@ -3918,12 +3873,6 @@
     "clickToChange": "點擊更換圖示",
     "clickToSelect": "點擊選擇圖示",
     "change": "更換圖示"
-  },
-  "migration": {
-    "success": "設定遷移成功",
-    "skillsSuccess": "已自動匯入 {{count}} 個技能至統一管理",
-    "skillsFailed": "自動匯入技能失敗",
-    "skillsFailedDescription": "請開啟 Skills 頁面點擊「匯入現有」手動匯入（或重新啟動後再試）。"
   },
   "health": {
     "operational": "正常",
@@ -5230,12 +5179,6 @@
       "marketRemoved": "已移除市集 {{name}}",
       "marketRemoveFailed": "移除 {{name}} 失敗"
     }
-  },
-  "newLayoutNotice": {
-    "title": "介面改版了",
-    "body": "CC Switch 這一版重新設計了介面，常用功能的位置有變化：\n• 模式移到了每個應用頁的頂部\n• 用量統計和授權中心移到了左側邊欄\n想了解全部變化，可以看看這一版的更新說明。",
-    "viewReleaseNotes": "查看更新說明",
-    "confirm": "我知道了"
   },
   "whatsNew": {
     "updatedTo": "已更新至 v{{version}}",

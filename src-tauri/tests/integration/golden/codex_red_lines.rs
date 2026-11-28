@@ -17,7 +17,7 @@
 //! | 06 | 带 Key 但没有落点、或无 Key 却会回退官方登录的配置，拒绝切换 | 本文件；已有 `..._rejects_keyless_official_auth_fallback`、`..._rejects_empty_third_party_config` |
 //! | 07 | 被拒的切换没有副作用：live 字节与 mtime、当前供应商、被拒卡的行都不变 | 本文件 |
 //! | 08 | 只有 model / MCP、没有路由的卡在保留开关打开时放行（有意保留的边界） | 已有 `provider_service_switch_codex_updates_live_and_config` |
-//! | 09 | 旧形态 `openai_base_url` 改道不进 live：Key 进非保留的路由表，顶层不留 `openai_base_url` | 本文件；已有三条 `..._normalizes_legacy_reroute_config` |
+//! | 09 | 不支持的顶层地址连接被拒绝，原文件保持不变 | 本文件 |
 //! | 10 | 归一化不覆盖用户自己的同名表 | 本文件 |
 //! | 11 | inline 写法的 `model_providers = { … }`：Key 落进 inline 表 | 本文件 |
 //! | 12 | 保留 id 大小写精确：`OpenAI`、`oss` 是合法自定义 id；不产出 `[model_providers.openai]` 这类保留表 | 本文件 |
@@ -75,7 +75,7 @@ fn codex(id: &str, key: Option<&str>, config: &str) -> Provider {
         Some(key) => json!({ "OPENAI_API_KEY": key }),
         None => json!({}),
     };
-    provider(id, json!({ "auth": auth, "config": config }), None)
+    provider(id, json!({ "auth": auth, "config": config }))
 }
 
 fn with_meta(mut provider: Provider, meta: ProviderMeta) -> Provider {
@@ -393,7 +393,7 @@ fn refused_switches_have_no_side_effects() {
 
 /// CX-09
 #[test]
-fn legacy_openai_base_url_reroute_never_reaches_live() {
+fn unsupported_top_level_connection_is_rejected_without_writes() {
     let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
     for preserve in [false, true] {
         reset_test_fs();
@@ -407,25 +407,15 @@ fn legacy_openai_base_url_reroute_never_reaches_live() {
             true,
         );
 
-        switch(&state, "legacy").expect("switch to legacy reroute card");
-
-        let doc = live_config();
-        assert_key_in_route(&doc, "https://relay.example/v1", "sk-legacy");
-        assert_ne!(
-            route(&doc)
-                .expect("route")
-                .1
-                .get("name")
-                .and_then(toml::Value::as_str),
-            Some("OpenAI"),
-            "a third-party table named OpenAI turns on Codex's OpenAI-only features"
-        );
+        let before = snapshot(&state, "legacy");
+        assert!(switch(&state, "legacy").is_err());
+        assert_eq!(snapshot(&state, "legacy"), before);
     }
 }
 
 /// CX-10
 #[test]
-fn normalization_never_overwrites_a_user_table() {
+fn switching_never_overwrites_a_user_table() {
     let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
     reset_test_fs();
     set_login_preservation(false);
@@ -435,7 +425,8 @@ fn normalization_never_overwrites_a_user_table() {
             "legacy",
             Some("sk-legacy"),
             &format!(
-                "model = \"gpt-5\"\nopenai_base_url = \"https://relay.example/v1\"\n\n{user_table}"
+                "{}\n{user_table}",
+                relay_config("relay", "https://relay.example/v1")
             ),
         )],
         false,
@@ -443,7 +434,7 @@ fn normalization_never_overwrites_a_user_table() {
     // 用户的表同时在 live 里（重构后切换以 live 为底）。
     write_home_file(".codex/config.toml", user_table);
 
-    switch(&state, "legacy").expect("switch to legacy reroute card");
+    switch(&state, "legacy").expect("switch to current custom connection");
 
     let doc = live_config();
     assert_key_in_route(&doc, "https://relay.example/v1", "sk-legacy");
@@ -503,7 +494,7 @@ fn reserved_ids_match_case_sensitively() {
 
 /// CX-13
 #[test]
-fn stale_reserved_tables_never_reach_live() {
+fn reserved_provider_table_overrides_are_rejected_without_writes() {
     let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
     for preserve in [false, true] {
         reset_test_fs();
@@ -517,12 +508,9 @@ fn stale_reserved_tables_never_reach_live() {
             true,
         );
 
-        switch(&state, "stale").expect("switch to a card carrying a stale reserved table");
-
-        assert_key_in_route(&live_config(), "https://stale.example/v1", "sk-stale");
-        if preserve {
-            assert_eq!(live_auth().as_deref(), Some(OAUTH_LOGIN));
-        }
+        let before = snapshot(&state, "stale");
+        assert!(switch(&state, "stale").is_err());
+        assert_eq!(snapshot(&state, "stale"), before);
     }
 }
 

@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 
 export interface DirectoryInputProps {
   label: string;
+  ariaLabel?: string;
   description?: string;
   value?: string;
   resolvedValue: string;
@@ -18,6 +19,7 @@ export interface DirectoryInputProps {
 
 export function DirectoryInput({
   label,
+  ariaLabel,
   description,
   value,
   resolvedValue,
@@ -46,6 +48,7 @@ export function DirectoryInput({
       ) : null}
       <div className="flex items-center gap-2">
         <Input
+          aria-label={(ariaLabel ?? label) || undefined}
           value={displayValue}
           placeholder={placeholder}
           className="text-xs"

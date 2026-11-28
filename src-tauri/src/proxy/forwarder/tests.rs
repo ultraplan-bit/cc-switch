@@ -2445,14 +2445,13 @@ fn copilot_detection_via_base_url() {
     ));
 }
 
-/// 请求路径只看 providerType 和解析后的请求 URL：旧数据的 env.ANTHROPIC_BASE_URL
-/// 让 `Provider::is_github_copilot` 为真，但这里不算。
+/// 请求路径只看 providerType 和解析后的请求 URL，不从存储的地址推断身份。
 #[test]
 fn copilot_request_detection_ignores_legacy_env_url() {
     let mut legacy = test_provider_with_type(None);
     legacy.settings_config =
         json!({ "env": { "ANTHROPIC_BASE_URL": "https://api.githubcopilot.com" } });
-    assert!(legacy.is_github_copilot());
+    assert!(!legacy.is_github_copilot());
     for app_type in [AppType::Claude, AppType::Codex] {
         assert!(!is_managed_copilot_request(
             &app_type,

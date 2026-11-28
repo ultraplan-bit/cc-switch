@@ -1,10 +1,8 @@
 //! The only place that decides which managed-account upstream a provider is.
 //!
 //! GitHub Copilot, Codex OAuth and xAI OAuth providers declare themselves in
-//! `meta.providerType`. Copilot providers saved before that field existed carry
-//! only their URL, so the URL fallback for that old data lives here and nowhere
-//! else. `tests::identity_checks_stay_in_provider_kind` fails the build when a
-//! raw `providerType` string or Copilot URL check shows up in another file.
+//! `meta.providerType`. Provider identity is explicit and independent of endpoint URLs.
+//! `tests::identity_checks_stay_in_provider_kind` keeps raw identity checks centralized.
 
 use crate::provider::Provider;
 
@@ -28,22 +26,9 @@ impl ProviderKind {
         }
     }
 
-    /// The provider's kind, counting old Copilot data that has no
-    /// `providerType` but whose `env.ANTHROPIC_BASE_URL` points at Copilot.
-    ///
-    /// The URL wins over any declared kind, matching what
-    /// `Provider::is_github_copilot` has always returned.
+    /// The declared managed-account provider kind.
     pub fn of(provider: &Provider) -> Option<Self> {
-        let declared = Self::declared(provider);
-        let legacy_copilot_url = provider
-            .settings_config
-            .pointer("/env/ANTHROPIC_BASE_URL")
-            .and_then(|value| value.as_str())
-            .is_some_and(is_copilot_url);
-        if declared == Some(Self::GitHubCopilot) || legacy_copilot_url {
-            return Some(Self::GitHubCopilot);
-        }
-        declared
+        Self::declared(provider)
     }
 }
 
@@ -89,48 +74,16 @@ mod tests {
     }
 
     #[test]
-    fn of_counts_legacy_copilot_url_without_provider_type() {
-        let legacy = provider(None, env_url("https://api.githubcopilot.com"));
-        assert_eq!(ProviderKind::of(&legacy), Some(ProviderKind::GitHubCopilot));
-
-        let other_type = provider(Some("newapi"), env_url("https://api.githubcopilot.com"));
-        assert_eq!(
-            ProviderKind::of(&other_type),
-            Some(ProviderKind::GitHubCopilot)
-        );
-
-        let plain = provider(None, env_url("https://api.anthropic.com"));
-        assert_eq!(ProviderKind::of(&plain), None);
-    }
-
-    #[test]
-    fn of_reads_only_env_base_url_for_legacy_data() {
-        // `baseUrl`, `base_url` and friends are not part of the legacy rule;
-        // call sites that also trust them say so with `is_copilot_url`.
-        let other_fields = provider(
+    fn endpoint_urls_do_not_infer_or_override_provider_identity() {
+        for declared in [
             None,
-            json!({
-                "baseUrl": "https://api.githubcopilot.com",
-                "base_url": "https://api.githubcopilot.com",
-            }),
-        );
-        assert_eq!(ProviderKind::of(&other_fields), None);
-    }
-
-    #[test]
-    fn of_lets_copilot_url_override_a_declared_oauth_kind() {
-        let codex = provider(
+            Some("newapi"),
             Some("codex_oauth"),
-            env_url("https://api.githubcopilot.com"),
-        );
-        assert_eq!(ProviderKind::of(&codex), Some(ProviderKind::GitHubCopilot));
-        assert_eq!(
-            ProviderKind::declared(&codex),
-            Some(ProviderKind::CodexOAuth)
-        );
-
-        let codex = provider(Some("codex_oauth"), env_url("https://chatgpt.com"));
-        assert_eq!(ProviderKind::of(&codex), Some(ProviderKind::CodexOAuth));
+            Some("github_copilot"),
+        ] {
+            let row = provider(declared, env_url("https://api.githubcopilot.com"));
+            assert_eq!(ProviderKind::of(&row), ProviderKind::declared(&row));
+        }
     }
 
     /// Rust files allowed to spell the raw checks: this module only.
@@ -194,8 +147,7 @@ mod tests {
         assert!(
             violations.is_empty(),
             "provider identity checked outside src/provider_kind.rs:\n  {}\n\
-             Use ProviderKind::of(provider) (or ProviderKind::declared when old \
-             URL-only data must not count). For a resolved request URL, use \
+             Use ProviderKind::of(provider). For a resolved request URL, use \
              provider_kind::is_copilot_url next to ProviderKind::of.",
             violations.join("\n  ")
         );

@@ -94,33 +94,28 @@ export function parseDeepLinkConfigPreview(
       };
     }
     if (request.app === "copilot") {
-      const native = parsed.provider !== undefined;
-      const node = native ? parsed.provider : (parsed.env ?? parsed);
+      const node = parsed.provider;
       if (!node || typeof node !== "object" || Array.isArray(node)) return null;
       const values = node as Record<string, unknown>;
       const field = (key: string) =>
         typeof values[key] === "string" ? values[key].trim() : undefined;
-      const endpoint = native ? "baseUrl" : "COPILOT_PROVIDER_BASE_URL";
-      const apiKey = native ? "apiKey" : "COPILOT_PROVIDER_API_KEY";
-      const bearer = native ? "bearerToken" : "COPILOT_PROVIDER_BEARER_TOKEN";
       const env: Record<string, string> = {};
-      const url = request.endpoint ?? field(endpoint);
-      if (url) env[endpoint] = url;
+      const url = request.endpoint ?? field("baseUrl");
+      if (url) env.baseUrl = url;
       const credentialKey =
-        request.apiKey === undefined && field(bearer) ? bearer : apiKey;
+        request.apiKey === undefined && field("bearerToken")
+          ? "bearerToken"
+          : "apiKey";
       const credential = request.apiKey ?? field(credentialKey);
       if (credential) env[credentialKey] = credential;
 
       const ids = new Set<string>();
       if (request.model?.trim()) ids.add(request.model.trim());
-      if (native && Array.isArray(parsed.models)) {
+      if (Array.isArray(parsed.models)) {
         for (const model of parsed.models) {
           if (typeof model?.id === "string" && model.id.trim())
             ids.add(model.id.trim());
         }
-      } else if (!native && !ids.size) {
-        const legacy = field("COPILOT_MODEL");
-        if (legacy) ids.add(legacy);
       }
       return { type: "copilot", env, model: [...ids].join(", ") || undefined };
     }

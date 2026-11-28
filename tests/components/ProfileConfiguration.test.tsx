@@ -76,6 +76,94 @@ beforeEach(() => {
 });
 
 describe("Profile owns Agent configuration", () => {
+  it("inherits the global connection by default and saves only the project connection choice", async () => {
+    renderWithQueryClient(
+      <ProfileEditPanel
+        profile={profile("claude", "{}")}
+        scope="claude"
+        onClose={vi.fn()}
+      />,
+    );
+    const connection = await screen.findByLabelText(
+      "profiles.editor.projectConnection",
+    );
+    expect(connection).toHaveValue("inherit");
+    fireEvent.change(connection, { target: { value: "direct" } });
+    expect(
+      screen.getByText("profiles.editor.projectConnectionCredentialsHint"),
+    ).toBeVisible();
+    fireEvent.change(screen.getByLabelText("profiles.editor.provider"), {
+      target: { value: "second" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledOnce());
+    expect(mocks.save.mock.calls[0][0].config).toMatchObject({
+      claudeProjectConnection: "direct",
+      providerId: "second",
+      model: "profile-model",
+      nativeConfig: "{}",
+    });
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it("requires an existing provider for direct access and permits returning to inheritance", async () => {
+    const snapshot = profile("claude", "{}");
+    snapshot.payload.claudeProjectConnection = "direct";
+    snapshot.payload.providers.claude = "removed-provider";
+    renderWithQueryClient(
+      <ProfileEditPanel profile={snapshot} scope="claude" onClose={vi.fn()} />,
+    );
+    const connection = await screen.findByLabelText(
+      "profiles.editor.projectConnection",
+    );
+    expect(connection).toHaveValue("direct");
+    expect(screen.getByRole("button", { name: "common.save" })).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "profiles.editor.projectConnectionProviderRequired",
+    );
+    fireEvent.change(screen.getByLabelText("profiles.editor.provider"), {
+      target: { value: "" },
+    });
+    expect(screen.getByRole("button", { name: "common.save" })).toBeDisabled();
+    fireEvent.click(
+      screen.getByRole("tab", { name: "profiles.editor.behaviorTab" }),
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "profiles.editor.projectConnectionProviderRequired",
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "profiles.editor.modelsTab" }),
+    );
+    fireEvent.change(connection, { target: { value: "inherit" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledOnce());
+    expect(mocks.save.mock.calls[0][0].config).toMatchObject({
+      claudeProjectConnection: "inherit",
+      providerId: null,
+    });
+  });
+
+  it.each(["codex", "claude-desktop"] as const)(
+    "does not expose or overwrite Claude project connection when editing %s",
+    async (scope) => {
+      const snapshot = profile(scope, scope === "codex" ? "" : "{}");
+      snapshot.payload.claudeProjectConnection = "direct";
+      renderWithQueryClient(
+        <ProfileEditPanel profile={snapshot} scope={scope} onClose={vi.fn()} />,
+      );
+      await screen.findByLabelText("profiles.editor.provider");
+      expect(
+        screen.queryByLabelText("profiles.editor.projectConnection"),
+      ).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+      await waitFor(() => expect(mocks.save).toHaveBeenCalledOnce());
+      expect(mocks.save.mock.calls[0][0].config).not.toHaveProperty(
+        "claudeProjectConnection",
+      );
+    },
+  );
+
   it("preserves models, cleared overrides and native behavior when changing only the provider reference", async () => {
     const native = JSON.stringify({
       permissions: { allow: ["Read"] },

@@ -166,7 +166,6 @@ fn codex_third_party(id: &str, base_url: &str, key: &str) -> cc_switch_lib::Prov
                 "model_provider = \"custom\"\nmodel = \"gpt-5\"\n\n[model_providers.custom]\nname = \"custom\"\nbase_url = \"{base_url}\"\nwire_api = \"responses\"\n"
             )
         }),
-        None,
     )
 }
 
@@ -222,7 +221,6 @@ fn gemini_switch_keeps_mcp_servers() {
                 "env": { "GEMINI_API_KEY": key, "GOOGLE_GEMINI_BASE_URL": url },
                 "config": {}
             }),
-            None,
         )
     };
     seed_providers(
@@ -261,7 +259,6 @@ fn claude_switch_keeps_claude_json_bytes() {
         provider(
             id,
             json!({ "env": { "ANTHROPIC_BASE_URL": url, "ANTHROPIC_AUTH_TOKEN": key } }),
-            None,
         )
     };
     let a = claude("a", "https://a.example", "sk-a");

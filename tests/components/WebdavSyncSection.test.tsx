@@ -4,7 +4,11 @@ import "@testing-library/jest-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { WebdavSyncSection } from "@/components/settings/WebdavSyncSection";
-import type { S3SyncSettings, WebDavSyncSettings } from "@/types";
+import type {
+  RemoteSnapshotInfo,
+  S3SyncSettings,
+  WebDavSyncSettings,
+} from "@/types";
 
 const toastSuccessMock = vi.fn();
 const toastErrorMock = vi.fn();
@@ -119,6 +123,18 @@ const baseS3Config: S3SyncSettings = {
   status: {},
 };
 
+const remoteSnapshot: RemoteSnapshotInfo = {
+  deviceName: "My MacBook",
+  createdAt: "2026-02-01T10:00:00Z",
+  snapshotId: "snapshot-1",
+  version: 2,
+  protocolVersion: 2,
+  dbCompatVersion: 7,
+  compatible: true,
+  artifacts: ["db.sql", "skills.zip"],
+  remotePath: "/cc-switch-sync/v2/db-v7/default",
+};
+
 function renderSection(config?: WebDavSyncSettings, s3Config?: S3SyncSettings) {
   const client = new QueryClient({
     defaultOptions: {
@@ -167,14 +183,7 @@ describe("WebdavSyncSection", () => {
       success: true,
       message: "ok",
     });
-    settingsApiMock.webdavSyncFetchRemoteInfo.mockResolvedValue({
-      deviceName: "My MacBook",
-      createdAt: "2026-02-01T10:00:00Z",
-      snapshotId: "snapshot-1",
-      version: 2,
-      compatible: true,
-      artifacts: ["db.sql", "skills.zip"],
-    });
+    settingsApiMock.webdavSyncFetchRemoteInfo.mockResolvedValue(remoteSnapshot);
     settingsApiMock.webdavSyncUpload.mockResolvedValue({ status: "uploaded" });
     settingsApiMock.webdavSyncDownload.mockResolvedValue({
       status: "downloaded",
@@ -596,6 +605,12 @@ describe("WebdavSyncSection", () => {
         1,
       );
     });
+    expect(
+      screen.getAllByText("/cc-switch-sync/v2/db-v7/default").length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByText("settings.webdavSync.confirmUpload.warning"),
+    ).toBeInTheDocument();
 
     fireEvent.click(
       screen.getByRole("button", {
@@ -608,6 +623,26 @@ describe("WebdavSyncSection", () => {
     });
     expect(toastSuccessMock).toHaveBeenCalledWith(
       "settings.webdavSync.uploadSuccess",
+    );
+  });
+
+  it("shows the current database generation in the S3 upload target", async () => {
+    settingsApiMock.s3SyncFetchRemoteInfo.mockResolvedValue({ empty: true });
+    settingsApiMock.s3SyncUpload.mockResolvedValue({ status: "uploaded" });
+    renderSection(undefined, baseS3Config);
+    fireEvent.click(
+      screen.getByRole("button", { name: "settings.s3Sync.upload" }),
+    );
+    expect(
+      await screen.findByText("my-bucket/cc-switch-sync/v2/db-v7/default"),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "settings.s3Sync.confirmUpload.confirm",
+      }),
+    );
+    await waitFor(() =>
+      expect(settingsApiMock.s3SyncUpload).toHaveBeenCalledOnce(),
     );
   });
 
@@ -716,12 +751,9 @@ describe("WebdavSyncSection", () => {
 
   it("blocks download when remote snapshot is incompatible", async () => {
     settingsApiMock.webdavSyncFetchRemoteInfo.mockResolvedValueOnce({
-      deviceName: "Legacy Machine",
-      createdAt: "2025-01-01T00:00:00Z",
-      snapshotId: "legacy-snapshot",
-      version: 1,
+      ...remoteSnapshot,
+      dbCompatVersion: 6,
       compatible: false,
-      artifacts: ["db.sql"],
     });
     renderSection(baseConfig);
 

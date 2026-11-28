@@ -297,7 +297,6 @@ describe("Codex Copilot provider form", () => {
           authProvider: "github_copilot",
           accountId: "copilot-account",
         },
-        githubAccountId: "copilot-account",
         codexCopilotApiFormat: "openai_responses",
       }),
     );
@@ -378,30 +377,12 @@ describe("Codex Copilot provider form", () => {
       accountId: "copilot-secondary",
     },
     {
-      name: "a legacy GitHub account binding",
-      meta: { githubAccountId: "copilot-secondary" },
-      accountId: "copilot-secondary",
-    },
-    {
-      name: "a managed binding ahead of a conflicting legacy account",
-      meta: {
-        authBinding: {
-          source: "managed_account",
-          authProvider: "github_copilot",
-          accountId: "copilot-secondary",
-        },
-        githubAccountId: "copilot-account",
-      },
-      accountId: "copilot-secondary",
-    },
-    {
-      name: "an explicit default binding ahead of a stale legacy account",
+      name: "an explicit default binding",
       meta: {
         authBinding: {
           source: "managed_account",
           authProvider: "github_copilot",
         },
-        githubAccountId: "copilot-secondary",
       },
       accountId: null,
     },
@@ -428,7 +409,7 @@ describe("Codex Copilot provider form", () => {
       authProvider: "github_copilot",
       ...(accountId ? { accountId } : {}),
     });
-    expect(saved.meta?.githubAccountId).toBe(accountId ?? undefined);
+    expect(saved.meta).not.toHaveProperty("githubAccountId");
     expect(saved.meta?.providerType).toBe("github_copilot");
     expect(saved.meta?.codexCopilotApiFormat).toBe("openai_responses");
     const settings = JSON.parse(saved.settingsConfig);
@@ -453,7 +434,11 @@ describe("Codex Copilot provider form", () => {
     copilotAuthState.isStatusError = status.isStatusError;
     const onSubmit = renderForm({
       providerType: "github_copilot",
-      githubAccountId: "copilot-secondary",
+      authBinding: {
+        source: "managed_account",
+        authProvider: "github_copilot",
+        accountId: "copilot-secondary",
+      },
     });
     fireEvent.click(screen.getByRole("button", { name: "save" }));
 
@@ -580,7 +565,7 @@ requires_openai_auth = true`;
     const saved = onSubmit.mock.calls[0][0];
     expect(saved.meta?.providerType).toBeUndefined();
     expect(saved.meta?.authBinding).toBeUndefined();
-    expect(saved.meta?.githubAccountId).toBeUndefined();
+    expect(saved.meta).not.toHaveProperty("githubAccountId");
     expect(saved.meta?.apiFormat).toBe("openai_chat");
     expect(JSON.parse(saved.settingsConfig).auth).toEqual({
       OPENAI_API_KEY: "sk-self-hosted",

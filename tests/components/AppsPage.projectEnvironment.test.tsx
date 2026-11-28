@@ -115,8 +115,6 @@ beforeEach(() => {
     installed = true;
   });
   mocks.invoke.mockImplementation(async (command: string) => {
-    if (command === "migrate_legacy_agent_profiles")
-      return { profiles: [], warnings: [] };
     if (command === "list_profiles")
       return {
         profiles: [profile],

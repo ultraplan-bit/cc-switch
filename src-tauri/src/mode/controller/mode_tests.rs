@@ -1,6 +1,5 @@
 //! 双模式的验收：进入 / 退出只动关键字段和独有字段；契约相同的换路由不碰客户端文件；
-//! 代理路由和直连指针互相独立；每一步崩溃都能按 pending 补完；旧版遗留的接管状态
-//! 在启动时迁移掉。
+//! 代理路由和直连指针互相独立；每一步崩溃都能按 pending 补完，启动按当前本机模式恢复。
 use super::*;
 use crate::database::Database;
 use crate::live::engine::DeviceStore;
@@ -845,67 +844,6 @@ async fn a_crash_while_leaving_proxy_mode_is_finished_on_startup() {
 
 #[tokio::test]
 #[serial]
-async fn startup_moves_legacy_takeover_state_over_to_the_modes() {
-    for enabled in [true, false] {
-        let home = Home::new();
-        seed_settings(
-            r#"{"env":{"ANTHROPIC_BASE_URL":"http://127.0.0.1:15721","ANTHROPIC_AUTH_TOKEN":"PROXY_MANAGED"},"hooks":{}}"#,
-        );
-        let state = state_with(
-            AppType::Claude,
-            &[claude("a", "https://a.example", json!({}))],
-            "a",
-        )
-        .await;
-        state
-            .db
-            .save_live_backup(
-                &AppType::Claude,
-                r#"{"env":{"ANTHROPIC_BASE_URL":"https://stale.example"}}"#,
-            )
-            .await
-            .unwrap();
-        state
-            .db
-            .set_proxy_flags_sync(&AppType::Claude, enabled, false)
-            .unwrap();
-
-        startup(&state).await;
-
-        assert!(
-            state
-                .db
-                .get_live_backup(&AppType::Claude)
-                .await
-                .unwrap()
-                .is_none(),
-            "the old version would replay a leftover backup row after a downgrade"
-        );
-        let drained = home.dir.path().join(".cc-switch/backups/proxy-live-backup");
-        assert_eq!(
-            fs::read_dir(&drained).unwrap().count(),
-            1,
-            "kept aside as a file"
-        );
-        let migrated = mode(&AppType::Claude);
-        let live = settings();
-        assert_eq!(live["hooks"], json!({}));
-        if enabled {
-            assert!(migrated.is_proxy() && migrated.attached);
-            let proxy_url = state.proxy_service.build_proxy_urls().await.unwrap().0;
-            assert_eq!(live["env"]["ANTHROPIC_BASE_URL"], proxy_url.as_str());
-            exit(&state, &AppType::Claude).await.unwrap();
-        } else {
-            assert_eq!(migrated.mode, Some(Mode::Direct));
-            assert_eq!(live["env"]["ANTHROPIC_BASE_URL"], "https://a.example");
-            assert_eq!(live["env"]["ANTHROPIC_AUTH_TOKEN"], "sk-a");
-            assert!(!state.proxy_service.is_running().await);
-        }
-    }
-}
-
-#[tokio::test]
-#[serial]
 async fn gemini_proxy_contract_keeps_the_other_env_lines() {
     let _home = Home::new();
     let env_path = crate::gemini_config::get_gemini_env_path();
@@ -1614,11 +1552,10 @@ async fn codex_a_profile_selecting_the_built_in_openai_allows_the_official_card(
 
 #[tokio::test]
 #[serial]
-async fn codex_migration_retires_only_tables_cc_switch_wrote() {
+async fn codex_switch_preserves_unmanaged_native_route_tables() {
     let _home = Home::new();
     set_preservation(true);
-    // 旧版按行的 id 整份写进来的表：a（id 和地址都对得上 a 的行）、b 的地址被用户改过、
-    // 被 profile 引用的 c、代理占位残留、用户自己的 ollama_local。
+    // 除当前 custom 表以外的原生路由表不由本次切换管理。
     let live = r#"model_provider = "a"
 model = "gpt-a"
 
@@ -1655,21 +1592,13 @@ model_provider = "c"
     ProviderService::switch(&state, AppType::Codex, "b").expect("switch to b");
     let text = codex_text();
     let providers = codex_doc()["model_providers"].as_table().unwrap().clone();
-    assert!(!providers.contains_key("a"), "provably ours: {text}");
-    assert!(
-        !providers.contains_key("deepseek"),
-        "placeholder leftover: {text}"
-    );
-    assert!(
-        providers.contains_key("b"),
-        "address differs, not provably ours"
-    );
-    assert!(providers.contains_key("c"), "a profile still selects it");
-    assert!(
-        providers.contains_key("ollama_local"),
-        "the user's own table"
-    );
-    assert!(!text.contains("sk-a"), "{text}");
+    for id in ["a", "b", "c", "deepseek", "ollama_local"] {
+        let original = live.parse::<toml::Table>().unwrap();
+        assert_eq!(
+            providers[id], original["model_providers"][id],
+            "{id}: {text}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -3411,10 +3340,6 @@ async fn codex_add_dialog_saves_key_fields_to_the_row_and_global_edits_to_live()
         c_config.contains("gpt-c") && !c_config.contains("approval_policy"),
         "{c_config}"
     );
-    assert_eq!(
-        c.meta.as_ref().and_then(|meta| meta.common_config_enabled),
-        Some(true)
-    );
 }
 
 /// 新增对话框的底已经套了预设：预设带的独有字段归新供应商，live 里用户自己写的不归它。
@@ -4352,162 +4277,6 @@ async fn claude_desktop_stack_mode_lists_the_members_after_the_default() {
     assert_eq!(profile["inferenceModels"], json!(["claude-sonnet-5"]));
     assert_eq!(profile["modelDiscoveryEnabled"], json!(true));
     assert!(settled_stack(&desktop).unwrap().is_member("other"));
-}
-
-#[tokio::test]
-#[serial]
-async fn claude_desktop_on_a_mapping_card_starts_in_route_mode_after_upgrade() {
-    let home = Home::new();
-    let _dirs = DesktopDirs::under(&home);
-    seed_settings(USER_SETTINGS);
-    let state = state_with(
-        AppType::Claude,
-        &[claude("a", "https://a.example", json!({}))],
-        "a",
-    )
-    .await;
-    let desktop = AppType::ClaudeDesktop;
-    state
-        .db
-        .save_provider(&desktop, &desktop_card("map", true))
-        .expect("save mapping card");
-    crate::settings::set_current_provider(&desktop, Some("map")).expect("desktop current");
-
-    startup(&state).await;
-
-    let mode = current::mode_state(&desktop);
-    assert!(mode.is_proxy() && mode.attached);
-    assert_eq!(mode.proxy_route.as_deref(), Some("map"));
-    assert!(state.proxy_service.is_running().await);
-    // 映射卡直连写不进去：直连指针改成官方，退出路由后显示的就是 Desktop 实际在用的。
-    let official = crate::database::CLAUDE_DESKTOP_OFFICIAL_PROVIDER_ID;
-    assert_eq!(
-        current::direct_provider(&state.db, &desktop)
-            .unwrap()
-            .map(|provider| provider.id)
-            .as_deref(),
-        Some(official)
-    );
-
-    // 第二次启动按已定下的模式接上，不再看卡片。
-    exit(&state, &desktop).await.expect("exit desktop");
-    assert_eq!(in_use(&state, &desktop).as_deref(), Some(official));
-    assert!(desktop_profile().get("inferenceGatewayApiKey").is_none());
-    startup(&state).await;
-    assert!(!current::is_proxy(&desktop));
-    assert!(!state.proxy_service.is_running().await);
-}
-
-#[tokio::test]
-#[serial]
-async fn claude_desktop_old_mapping_card_can_be_deleted_after_routing_elsewhere() {
-    let home = Home::new();
-    let _dirs = DesktopDirs::under(&home);
-    seed_settings(USER_SETTINGS);
-    let state = state_with(
-        AppType::Claude,
-        &[claude("a", "https://a.example", json!({}))],
-        "a",
-    )
-    .await;
-    let desktop = AppType::ClaudeDesktop;
-    for card in [desktop_card("map", true), desktop_card("other", true)] {
-        state
-            .db
-            .save_provider(&desktop, &card)
-            .expect("save desktop card");
-    }
-    // 旧版：映射卡同时是本地指针和 DB 的 is_current。
-    state
-        .db
-        .set_current_provider(&desktop, "map")
-        .expect("db current");
-    crate::settings::set_current_provider(&desktop, Some("map")).expect("desktop current");
-
-    startup(&state).await;
-    enter_with_route(&state, &desktop, false, Some("other"))
-        .await
-        .expect("route to other");
-
-    // 映射卡已经不是直连指针、也不在路由上，界面上可删，后端也要放行（#8506）。
-    crate::services::ProviderService::delete(&state, desktop.clone(), "map")
-        .expect("delete old mapping card");
-    assert!(state
-        .db
-        .get_provider_by_id("map", &desktop)
-        .unwrap()
-        .is_none());
-    // 直连指针和路由那家照旧删不掉。
-    for id in [
-        crate::database::CLAUDE_DESKTOP_OFFICIAL_PROVIDER_ID,
-        "other",
-    ] {
-        assert!(
-            crate::services::ProviderService::delete(&state, desktop.clone(), id).is_err(),
-            "{id} should stay protected"
-        );
-    }
-}
-
-#[tokio::test]
-#[serial]
-async fn claude_desktop_upgrade_that_cannot_attach_points_desktop_back_at_official() {
-    let home = Home::new();
-    let _dirs = DesktopDirs::under(&home);
-    seed_settings(USER_SETTINGS);
-    let state = state_with(
-        AppType::Claude,
-        &[claude("a", "https://a.example", json!({}))],
-        "a",
-    )
-    .await;
-    let desktop = AppType::ClaudeDesktop;
-    state
-        .db
-        .save_provider(&desktop, &desktop_card("map", true))
-        .expect("save mapping card");
-    crate::settings::set_current_provider(&desktop, Some("map")).expect("desktop current");
-    // 旧版给映射卡写的配置：指着本地路由。
-    let old = crate::claude_desktop_config::route_profile(
-        &state.db,
-        &desktop_card("map", true),
-        "http://127.0.0.1:15721",
-        &[],
-    )
-    .expect("old profile");
-    crate::claude_desktop_config::run(
-        &state.db,
-        op::APPLY,
-        Some(crate::claude_desktop_config::DesktopTarget::Profile(&old)),
-        PendingTarget::default(),
-    )
-    .expect("old version writes the mapping card");
-    assert!(desktop_profile().get("inferenceGatewayApiKey").is_some());
-
-    // 端口被占，路由起不来。
-    let busy = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
-    let mut proxy = state.db.get_global_proxy_config().await.expect("busy port");
-    proxy.listen_port = busy.local_addr().unwrap().port();
-    state
-        .db
-        .update_global_proxy_config(proxy)
-        .await
-        .expect("busy port");
-
-    startup(&state).await;
-
-    let mode = current::mode_state(&desktop);
-    assert!(!mode.is_proxy() && !mode.attached);
-    assert!(!state.proxy_service.is_running().await);
-    // Desktop 不再指着起不来的本地路由，界面上的当前供应商也是官方。
-    assert!(desktop_profile().get("inferenceGatewayApiKey").is_none());
-    assert_eq!(
-        in_use(&state, &desktop).as_deref(),
-        Some(crate::database::CLAUDE_DESKTOP_OFFICIAL_PROVIDER_ID)
-    );
-    assert!(take_startup_attach_failures()
-        .iter()
-        .any(|failure| failure.app_type == desktop.as_str()));
 }
 
 #[tokio::test]

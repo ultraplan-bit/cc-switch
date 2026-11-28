@@ -101,9 +101,6 @@ export const useAddProviderMutation = (appId: AppId) => {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["providers", appId] });
-      await queryClient.invalidateQueries({
-        queryKey: ["profile-configuration", appId],
-      });
 
       if (appId === "opencode") {
         await queryClient.invalidateQueries({

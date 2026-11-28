@@ -1503,49 +1503,43 @@ struct CopilotLinkConfig<'a> {
 
 impl<'a> CopilotLinkConfig<'a> {
     fn parse(config: &'a serde_json::Value) -> Result<Self, AppError> {
-        let native = config.get("provider");
-        let node = native
-            .or_else(|| config.get("env"))
-            .unwrap_or(config)
-            .as_object()
+        let node = config
+            .get("provider")
+            .and_then(serde_json::Value::as_object)
             .ok_or_else(|| {
                 AppError::InvalidInput("Copilot CLI provider config must be an object".into())
             })?;
-        let get = |field, legacy| {
-            node.get(if native.is_some() { field } else { legacy })
+        let get = |field| {
+            node.get(field)
                 .and_then(serde_json::Value::as_str)
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
         };
         let mut models = Vec::new();
-        if native.is_some() {
-            if let Some(entries) = config.get("models") {
-                let entries = entries.as_array().ok_or_else(|| {
-                    AppError::InvalidInput("Copilot CLI models must be an array".into())
-                })?;
-                for entry in entries {
-                    let id = entry
-                        .get("id")
-                        .and_then(serde_json::Value::as_str)
-                        .map(str::trim)
-                        .filter(|id| !id.is_empty() && !has_dynamic_reference(id, false))
-                        .ok_or_else(|| {
-                            AppError::InvalidInput(
-                                "Each Copilot CLI model needs a literal model ID".into(),
-                            )
-                        })?;
-                    if !models.contains(&id) {
-                        models.push(id);
-                    }
+        if let Some(entries) = config.get("models") {
+            let entries = entries.as_array().ok_or_else(|| {
+                AppError::InvalidInput("Copilot CLI models must be an array".into())
+            })?;
+            for entry in entries {
+                let id = entry
+                    .get("id")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::trim)
+                    .filter(|id| !id.is_empty() && !has_dynamic_reference(id, false))
+                    .ok_or_else(|| {
+                        AppError::InvalidInput(
+                            "Each Copilot CLI model needs a literal model ID".into(),
+                        )
+                    })?;
+                if !models.contains(&id) {
+                    models.push(id);
                 }
             }
-        } else if let Some(id) = get("id", "COPILOT_MODEL") {
-            models.push(id);
         }
         Ok(Self {
-            endpoint: get("baseUrl", "COPILOT_PROVIDER_BASE_URL"),
-            api_key: get("apiKey", "COPILOT_PROVIDER_API_KEY"),
-            bearer_token: get("bearerToken", "COPILOT_PROVIDER_BEARER_TOKEN"),
+            endpoint: get("baseUrl"),
+            api_key: get("apiKey"),
+            bearer_token: get("bearerToken"),
             models,
         })
     }

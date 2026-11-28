@@ -18,6 +18,7 @@ use crate::services::profile::{resource_label, ProfilePayload, ProfileScope, NO_
 use crate::services::skill::SkillService;
 use crate::store::AppState;
 
+pub(crate) mod connection;
 mod import;
 mod native;
 pub(crate) use native::capture_native_config;
@@ -76,6 +77,8 @@ pub struct ProjectStatus {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ProjectManifest {
+    #[serde(default)]
+    claude_connection_hashes: BTreeMap<String, String>,
     #[serde(default)]
     native_config_hashes: BTreeMap<String, String>,
     version: u8,
@@ -751,7 +754,6 @@ impl ProjectProfileService {
     ) -> Result<ProjectDeployResult, AppError> {
         let project_path = crate::services::profile::normalize_project_path(project_path)?
             .ok_or_else(|| AppError::InvalidInput("请选择项目目录".to_string()))?;
-        state.db.seed_profile_projects_from_legacy()?;
         if !state.db.is_profile_project(&project_path)? {
             return Err(AppError::InvalidInput("请先登记项目目录".into()));
         }
@@ -793,6 +795,7 @@ impl ProjectProfileService {
         let previous_settings_file = manifest.claude_settings_file.clone();
         let previous_model_settings_hashes = manifest.model_settings_hashes.clone();
         let previous_native_hashes = manifest.native_config_hashes.clone();
+        let previous_connection_hashes = manifest.claude_connection_hashes.clone();
         let previous_catalog_hash = manifest.codex_model_catalog_hash.clone();
         let previous_catalog_pointer_hash = manifest.codex_model_catalog_pointer_hash.clone();
         if app == AppType::Claude {
@@ -803,7 +806,6 @@ impl ProjectProfileService {
         let mut changed = Vec::new();
         let mcp_ids = payload.mcp.get(&app).and_then(Option::as_ref);
         let skill_ids = payload.skills.get(&app).and_then(Option::as_ref);
-        let native_config = payload.native_config.get(&app).and_then(Option::as_deref);
         let aliases = payload
             .project_aliases
             .get(&app)
@@ -812,9 +814,33 @@ impl ProjectProfileService {
             .resource_names
             .get(&app)
             .expect("validated profile app");
-        let desired_model = desired_project_model(state, &payload, &app, &mut warnings)?;
-        let desired_model_settings =
+        let direct_provider = if connection::is_direct(&payload, &app) {
+            connection::ensure_untracked(&project_root)?;
+            Some(connection::provider(state, &payload)?)
+        } else {
+            None
+        };
+        let direct_native = direct_provider
+            .as_ref()
+            .map(|provider| connection::native_behavior(&project_root, &payload, provider))
+            .transpose()?;
+        let native_config = direct_native
+            .as_deref()
+            .or_else(|| payload.native_config.get(&app).and_then(Option::as_deref));
+        let mut desired_model = desired_project_model(state, &payload, &app, &mut warnings)?;
+        let mut desired_model_settings =
             desired_project_model_settings(state, &payload, &app, &mut warnings)?;
+        if app == AppType::Claude
+            && direct_provider.is_none()
+            && !manifest.claude_connection_hashes.is_empty()
+            && desired_model.is_none()
+        {
+            // A previously pinned provider is no longer the global connection.
+            // Drop only its managed models along with its connection credentials.
+            desired_model = Some(None);
+            desired_model_settings = Some(BTreeMap::new());
+            warnings.push("恢复全局连接时，已撤下与当前全局供应商不匹配的托管项目模型。".into());
+        }
         let desired_catalog = desired_codex_model_catalog(state, &payload, &app, &mut warnings)?;
         let desired_instruction = desired_instruction(state, &payload, &app, &mut warnings)?;
         if app == AppType::Codex
@@ -844,11 +870,19 @@ impl ProjectProfileService {
                 || desired_model_settings.is_some()
                 || skill_ids.is_some()
                 || mcp_ids.is_some()
-                || native_config.is_some())
+                || native_config.is_some()
+                || direct_provider.is_some()
+                || !manifest.claude_connection_hashes.is_empty())
         {
             Some(ClaudeSettingsDocument::open(&project_root)?)
         } else {
             None
+        };
+
+        let connection_ops = if let Some(settings) = settings_doc.as_ref() {
+            connection::plan(direct_provider.as_ref(), settings, &manifest)?
+        } else {
+            Vec::new()
         };
 
         let (model_path, current_model) = match app {
@@ -1011,6 +1045,11 @@ impl ProjectProfileService {
                     .iter()
                     .filter_map(|op| op.operation.conflict.clone()),
             )
+            .chain(
+                connection_ops
+                    .iter()
+                    .filter_map(|op| op.operation.conflict.clone()),
+            )
             .collect::<Vec<_>>();
         if !conflicts.is_empty() && resolution.is_none() {
             return Ok(ProjectDeployResult::NeedsResolution {
@@ -1027,7 +1066,39 @@ impl ProjectProfileService {
         let original_manifest = read_optional(&manifest_file)?;
         let mut skill_undo = Vec::new();
         let mut file_undo = Vec::new();
+        // Address, authentication and model must remain a coherent connection.
+        let keep_connection = !connection_ops.is_empty()
+            && matches!(resolution, Some(ConflictResolution::KeepCurrent))
+            && (connection_ops
+                .iter()
+                .any(|op| op.operation.conflict.is_some())
+                || model_op.as_ref().is_some_and(|op| op.conflict.is_some())
+                || env_model_op
+                    .as_ref()
+                    .is_some_and(|op| op.conflict.is_some())
+                || model_setting_ops
+                    .iter()
+                    .any(|op| op.operation.conflict.is_some()));
+        if keep_connection {
+            warnings.push(
+                "已保留项目现有连接与模型；供应商地址、凭据和模型未更新，请处理冲突后重新应用。"
+                    .into(),
+            );
+        }
         let deployment = (|| {
+            if !keep_connection && !connection_ops.is_empty() {
+                if direct_provider.is_some() {
+                    connection::ensure_ignored(&project_root, &mut file_undo, &mut changed)?;
+                }
+                connection::stage(
+                    &connection_ops,
+                    settings_doc
+                        .as_mut()
+                        .expect("connection requires Claude settings"),
+                    &mut manifest,
+                    &mut changed,
+                )?;
+            }
             apply_skill_ops(
                 &project_root,
                 &mut manifest,
@@ -1038,10 +1109,12 @@ impl ProjectProfileService {
                 &mut skill_undo,
             )?;
 
-            if model_op.is_some()
-                || env_model_op.is_some()
-                || !model_setting_ops.is_empty()
-                || catalog_op.is_some()
+            if !keep_connection
+                && (model_op.is_some()
+                    || env_model_op.is_some()
+                    || !model_setting_ops.is_empty()
+                    || catalog_op.is_some()
+                    || !connection_ops.is_empty())
             {
                 apply_model_op(
                     &project_root,
@@ -1121,7 +1194,8 @@ impl ProjectProfileService {
             // Persist the active selection before the last project write, so a
             // failure can restore it together with the original ownership manifest.
             manifest.profile_id = Some(profile_id.to_string());
-            manifest.profile_scope_hash = Some(profile_scope_hash(&payload, scope));
+            manifest.profile_scope_hash =
+                (!keep_connection).then(|| profile_scope_hash(&payload, scope));
             save_manifest(&project_root, app_name, &manifest)?;
             if let Some(doc) = mcp_doc.take() {
                 if doc.save(&project_root)? {
@@ -1149,6 +1223,7 @@ impl ProjectProfileService {
                 manifest.claude_settings_file = previous_settings_file;
                 manifest.model_settings_hashes = previous_model_settings_hashes;
                 manifest.native_config_hashes = previous_native_hashes;
+                manifest.claude_connection_hashes = previous_connection_hashes;
                 manifest.codex_model_catalog_hash = previous_catalog_hash;
                 manifest.codex_model_catalog_pointer_hash = previous_catalog_pointer_hash;
                 if let Err(restore_error) = save_manifest(&project_root, app_name, &manifest) {
@@ -1178,18 +1253,7 @@ fn manifest_matches_payload(
     payload: &ProfilePayload,
     scope: ProfileScope,
 ) -> bool {
-    let app = &scope.apps()[0];
-    match &manifest.profile_scope_hash {
-        Some(hash) => {
-            hash == &profile_scope_hash(payload, scope)
-                || (payload.model_settings.get(app).is_some_and(Option::is_none)
-                    && payload.model_catalog.get(app).is_some_and(Option::is_none)
-                    && hash == &legacy_profile_scope_hash(payload, scope))
-        }
-        // Old deployments have no revision. An explicit model
-        // marks an edited/new snapshot that must be applied.
-        None => payload.models.get(app).is_some_and(Option::is_none),
-    }
+    manifest.profile_scope_hash.as_ref() == Some(&profile_scope_hash(payload, scope))
 }
 
 fn profile_scope_hash(payload: &ProfilePayload, scope: ProfileScope) -> String {
@@ -1203,6 +1267,11 @@ fn profile_scope_hash(payload: &ProfilePayload, scope: ProfileScope) -> String {
         "skills": normalized_scope_ids(payload, app, false),
         "prompt": payload.prompts.get(app),
     });
+    if scope == ProfileScope::Claude {
+        snapshot["claudeProjectConnection"] =
+            serde_json::to_value(payload.claude_project_connection)
+                .expect("serializable connection mode");
+    }
     if let Some(aliases) = payload.project_aliases.get(app) {
         if !aliases.mcp.is_empty() || !aliases.skills.is_empty() {
             snapshot["projectAliases"] =
@@ -1212,18 +1281,6 @@ fn profile_scope_hash(payload: &ProfilePayload, scope: ProfileScope) -> String {
     if let Some(Some(native)) = payload.native_config.get(app) {
         snapshot["nativeConfig"] = Value::String(native.clone());
     }
-    text_hash(&snapshot.to_string())
-}
-
-fn legacy_profile_scope_hash(payload: &ProfilePayload, scope: ProfileScope) -> String {
-    let app = &scope.apps()[0];
-    let snapshot = serde_json::json!({
-        "provider": payload.providers.get(app),
-        "model": payload.models.get(app),
-        "mcp": normalized_scope_ids(payload, app, true),
-        "skills": normalized_scope_ids(payload, app, false),
-        "prompt": payload.prompts.get(app),
-    });
     text_hash(&snapshot.to_string())
 }
 
@@ -1247,6 +1304,10 @@ pub(crate) fn desired_project_model(
     app: &AppType,
     warnings: &mut Vec<String>,
 ) -> Result<Option<Option<String>>, AppError> {
+    if connection::is_direct(payload, app) {
+        return connection::model(payload, &connection::provider(state, payload)?)
+            .map(|model| Some(Some(model)));
+    }
     let selected = payload.models.get(app).and_then(Option::as_deref);
     if let Some(model) = selected {
         if model.is_empty() {
@@ -1414,6 +1475,24 @@ fn desired_project_model_settings(
     app: &AppType,
     warnings: &mut Vec<String>,
 ) -> Result<Option<BTreeMap<String, String>>, AppError> {
+    if connection::is_direct(payload, app) {
+        let provider = connection::provider(state, payload)?;
+        let model = connection::model(payload, &provider)?;
+        let mut settings =
+            crate::services::profile::provider_model_settings(state, app, &provider.id)?
+                .ok_or_else(|| AppError::InvalidInput("供应商的项目模型设置不可读".into()))?;
+        settings.extend(payload.model_settings.claude.clone().unwrap_or_default());
+        for key in crate::services::profile::CLAUDE_PROFILE_MODEL_KEYS {
+            let value = settings.entry((*key).to_string()).or_default();
+            if key.ends_with("_MODEL") {
+                if value.is_empty() {
+                    *value = model.clone();
+                }
+                connection::validate_model(value)?;
+            }
+        }
+        return Ok(Some(settings));
+    }
     let Some(profile_settings) = payload.model_settings.get(app).and_then(Option::as_ref) else {
         return Ok(None);
     };
@@ -3475,6 +3554,24 @@ fn apply_instruction_op(
 fn rollback_project_files(undo: &[ProjectFileUndo]) -> Vec<String> {
     let mut errors = Vec::new();
     for operation in undo.iter().rev() {
+        if !errors.is_empty()
+            && operation
+                .path
+                .file_name()
+                .is_some_and(|name| name == ".gitignore")
+            && operation
+                .path
+                .parent()
+                .and_then(Path::file_name)
+                .is_some_and(|name| name == ".claude")
+        {
+            // An externally edited settings file may still contain the new key.
+            // Keep its Git protection when any preceding rollback was incomplete.
+            errors.push(
+                "部分项目文件未能回滚，已保留 .claude/.gitignore 中的凭据文件忽略规则".into(),
+            );
+            continue;
+        }
         let current = match read_optional(&operation.path) {
             Ok(current) => current,
             Err(error) => {
@@ -3617,7 +3714,10 @@ fn read_optional(path: &Path) -> Result<Option<Vec<u8>>, AppError> {
 
 fn write_if_unchanged(path: &Path, expected: Option<&str>, bytes: &[u8]) -> Result<(), AppError> {
     ensure_regular_target(path)?;
-    let staged = crate::config::stage_write(path, bytes, None, false)?;
+    let private = path
+        .file_name()
+        .is_some_and(|name| name == "settings.local.json");
+    let staged = crate::config::stage_write(path, bytes, private.then_some(0o600), private)?;
     if staged.target() != path {
         staged.discard();
         return Err(AppError::InvalidInput(format!(
@@ -3947,7 +4047,7 @@ fn load_manifest(root: &Path, app: &str) -> Result<ProjectManifest, AppError> {
             ..ProjectManifest::default()
         });
     };
-    let mut manifest: ProjectManifest = serde_json::from_slice(&bytes)
+    let manifest: ProjectManifest = serde_json::from_slice(&bytes)
         .map_err(|err| AppError::Config(format!("解析项目部署清单失败: {err}")))?;
     if manifest.version != 1
         || manifest.project_root != root.to_string_lossy()
@@ -3957,13 +4057,9 @@ fn load_manifest(root: &Path, app: &str) -> Result<ProjectManifest, AppError> {
     }
     if app == "claude" && manifest.claude_settings_file.as_deref() != Some(CLAUDE_PROJECT_SETTINGS)
     {
-        // Older hashes describe the shared settings file. They cannot claim
-        // ownership of an existing personal project file at the new path.
-        manifest.model_hash = None;
-        manifest.claude_env_model_hash = None;
-        manifest.model_settings_hashes.clear();
-        manifest.claude_skill_overrides.clear();
-        manifest.claude_mcp_denials.clear();
+        return Err(AppError::Config(
+            "项目部署清单的 Claude 设置路径无效".into(),
+        ));
     }
     let app_type = match app {
         "claude" => AppType::Claude,
@@ -4202,6 +4298,7 @@ mod tests {
         profile.payload = serde_json::to_string(&payload).unwrap();
         state.db.save_profile(&profile).unwrap();
         let config = ProfileConfig {
+            claude_project_connection: Default::default(),
             follow_global_resources: false,
             native_config: None,
             provider_id: None,
@@ -4334,6 +4431,7 @@ mod tests {
             &profile.id,
             ProfileScope::Claude,
             ProfileConfig {
+                claude_project_connection: Default::default(),
                 native_config: None,
                 mcp_ids: vec![],
                 skill_ids: vec![],
@@ -4376,6 +4474,7 @@ mod tests {
             &profile.id,
             ProfileScope::Claude,
             crate::services::profile::ProfileConfig {
+                claude_project_connection: Default::default(),
                 follow_global_resources: false,
                 native_config: None,
                 provider_id: None,
@@ -4445,16 +4544,7 @@ mod tests {
         .unwrap_err();
         assert!(error.to_string().contains("请先登记项目目录"));
         assert!(second.path().read_dir().unwrap().next().is_none());
-        // Existing manifests remain readable before a Profile ID has been recorded.
-        fs::write(
-            manifest_path(&root, "claude").unwrap(),
-            serde_json::to_vec(&serde_json::json!({
-                "version":1, "projectRoot":root.to_string_lossy(), "app":"claude",
-                "mcpServers":{}, "skills":{}
-            }))
-            .unwrap(),
-        )
-        .unwrap();
+        // A registered directory has no deployment until the user applies a Profile.
         assert!(test_projects::deployed_scopes(&a).is_empty());
         test_projects::deploy(&state, &a.id, ProfileScope::Claude, None).unwrap();
         test_projects::deploy(&state, &b.id, ProfileScope::Codex, None).unwrap();
@@ -4668,48 +4758,6 @@ mod tests {
 
     #[test]
     #[serial]
-    fn old_profile_scope_hash_keeps_deployment_marker_after_model_settings_upgrade() {
-        let (_home, state) = test_state();
-        let project = tempfile::tempdir().unwrap();
-        let root = project.path().canonicalize().unwrap();
-        seed_profile(
-            &state,
-            &root,
-            ProfileScope::Claude,
-            Some(vec![]),
-            Some(vec![]),
-        );
-        let mut profile = state.db.get_profile("profile").unwrap().unwrap();
-        let mut payload: ProfilePayload = serde_json::from_str(&profile.payload).unwrap();
-        payload.models.claude = Some("legacy-model".into());
-        payload.model_settings.claude = None;
-        let payload_value = serde_json::to_value(&payload).unwrap();
-        let mut legacy_value = payload_value;
-        legacy_value
-            .as_object_mut()
-            .unwrap()
-            .remove("modelSettings");
-        profile.payload = serde_json::to_string(&legacy_value).unwrap();
-        state.db.save_profile(&profile).unwrap();
-
-        let manifest = ProjectManifest {
-            version: 1,
-            project_root: root.to_string_lossy().into_owned(),
-            app: "claude".into(),
-            claude_settings_file: Some(CLAUDE_PROJECT_SETTINGS.into()),
-            profile_id: Some(profile.id.clone()),
-            profile_scope_hash: Some(legacy_profile_scope_hash(&payload, ProfileScope::Claude)),
-            ..ProjectManifest::default()
-        };
-        save_manifest(&root, "claude", &manifest).unwrap();
-        assert_eq!(
-            test_projects::deployed_scopes(&profile),
-            vec![ProfileScope::Claude]
-        );
-    }
-
-    #[test]
-    #[serial]
     fn switching_project_profiles_removes_only_the_previous_managed_model_and_prompt() {
         let (_home, state) = test_state();
         for scope in [ProfileScope::Claude, ProfileScope::Codex] {
@@ -4901,6 +4949,7 @@ mod tests {
                 "profile",
                 ProfileScope::Codex,
                 ProfileConfig {
+                    claude_project_connection: Default::default(),
                     follow_global_resources: false,
                     native_config: None,
                     provider_id: None,
@@ -5001,6 +5050,7 @@ mod tests {
             ProfileService::duplicate(&state, &imported.id, "Copy", ProfileScope::Codex).unwrap();
         test_projects::bind(&copied.id, target.path());
         let mut config = ProfileConfig {
+            claude_project_connection: Default::default(),
             follow_global_resources: false,
             native_config: None,
             provider_id: None,
@@ -5543,201 +5593,18 @@ mod tests {
     }
 
     #[test]
-    #[serial]
-    fn claude_local_manifest_missing_env_hash_upgrades_and_clears_only_owned_fields() {
-        let (_home, state) = test_state();
+    fn manifest_rejects_a_different_claude_settings_target_without_writing() {
         let project = tempfile::tempdir().unwrap();
         let root = project.path().canonicalize().unwrap();
-        seed_model_profile(&state, &root, ProfileScope::Claude);
-        fs::create_dir_all(root.join(".claude")).unwrap();
-        fs::write(
-            root.join(".claude/settings.local.json"),
-            "{\"model\":\"test-model\",\"env\":{\"USER_FLAG\":\"keep\"}}",
-        )
-        .unwrap();
-        let mut legacy = load_manifest(&root, "claude").unwrap();
-        legacy.model_hash = Some(text_hash("test-model"));
-        let mut legacy_json = serde_json::to_value(&legacy).unwrap();
-        legacy_json
-            .as_object_mut()
-            .unwrap()
-            .remove("claudeEnvModelHash");
-        let manifest_file = manifest_path(&root, "claude").unwrap();
-        fs::write(&manifest_file, serde_json::to_vec(&legacy_json).unwrap()).unwrap();
-        test_projects::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
         let mut manifest = load_manifest(&root, "claude").unwrap();
-        assert_eq!(manifest.model_hash, Some(text_hash("test-model")));
-        assert_eq!(
-            manifest.claude_env_model_hash,
-            Some(text_hash("test-model"))
-        );
-        let mut doc = ClaudeSettingsDocument::open(&root).unwrap();
-        let model = plan_model_op(
-            ".claude/settings.local.json",
-            Some(None),
-            doc.model(),
-            &manifest,
-        )
-        .unwrap();
-        let env = plan_model_field_op(
-            ".claude/settings.local.json#env.ANTHROPIC_MODEL",
-            Some(None),
-            doc.env_model(),
-            manifest.claude_env_model_hash.as_ref(),
-        )
-        .unwrap();
-        apply_model_op(
-            &root,
-            &AppType::Claude,
-            "claude",
-            Some(&model),
-            Some(&env),
-            &[],
-            None,
-            None,
-            Some(&mut doc),
-            None,
-            &mut manifest,
-            &mut vec![],
-            &mut vec![],
-        )
-        .unwrap();
-        assert_eq!(doc.model(), None);
-        assert_eq!(doc.env_model(), None);
-        assert_eq!(doc.root["env"]["USER_FLAG"], "keep");
-        assert_eq!(manifest.model_hash, None);
-        assert_eq!(manifest.claude_env_model_hash, None);
-    }
+        manifest.claude_settings_file = Some(".claude/settings.json".into());
+        save_manifest(&root, "claude", &manifest).unwrap();
+        let path = manifest_path(&root, "claude").unwrap();
+        let before = fs::read(&path).unwrap();
 
-    #[test]
-    #[serial]
-    fn claude_old_shared_manifest_cannot_claim_personal_settings() {
-        let (_home, state) = test_state();
-        for old_settings_file in [None, Some(".claude/settings.json")] {
-            let project = tempfile::tempdir().unwrap();
-            let root = project.path().canonicalize().unwrap();
-            seed_model_profile(&state, &root, ProfileScope::Claude);
-            let mut profile = state.db.get_profile("profile").unwrap().unwrap();
-            let mut payload: ProfilePayload = serde_json::from_str(&profile.payload).unwrap();
-            payload.mcp.claude = None;
-            payload.skills.claude = None;
-            payload.prompts.claude = None;
-            profile.payload = serde_json::to_string(&payload).unwrap();
-            state.db.save_profile(&profile).unwrap();
-
-            fs::create_dir_all(root.join(".claude")).unwrap();
-            let shared_path = root.join(".claude/settings.json");
-            let shared = b"{\"model\":\"old-shared-model\",\"userField\":true}".to_vec();
-            fs::write(&shared_path, &shared).unwrap();
-            let personal_path = root.join(CLAUDE_PROJECT_SETTINGS);
-            let personal = b"{\"model\":\"personal-model\",\"env\":{\"ANTHROPIC_MODEL\":\"personal-model\",\"USER_FLAG\":\"keep\"},\"userField\":true}".to_vec();
-            fs::write(&personal_path, &personal).unwrap();
-
-            let mut old = load_manifest(&root, "claude").unwrap();
-            old.claude_settings_file = old_settings_file.map(str::to_string);
-            // Even matching old hashes cannot own fields at the new path.
-            old.model_hash = Some(text_hash("personal-model"));
-            old.claude_env_model_hash = Some(text_hash("personal-model"));
-            old.model_settings_hashes.insert(
-                format!("{CLAUDE_PROJECT_SETTINGS}#env.ANTHROPIC_DEFAULT_SONNET_MODEL"),
-                text_hash("personal-sonnet"),
-            );
-            old.claude_skill_overrides.insert(
-                "manual-skill".into(),
-                ManagedSkill {
-                    id: "skill-id".into(),
-                    hash: text_hash("off"),
-                },
-            );
-            old.claude_mcp_denials
-                .insert("manual-mcp".into(), text_hash("manual-mcp"));
-            old.mcp_servers
-                .insert("managed-mcp".into(), "mcp-hash".into());
-            old.skills.insert(
-                ".claude/skills/managed".into(),
-                ManagedSkill {
-                    id: "managed-skill".into(),
-                    hash: "skill-hash".into(),
-                },
-            );
-            old.instruction_hash = Some("instruction-hash".into());
-            old.profile_id = Some(profile.id.clone());
-            old.profile_scope_hash = Some(profile_scope_hash(&payload, ProfileScope::Claude));
-            let mut old_json = serde_json::to_value(&old).unwrap();
-            if old_settings_file.is_none() {
-                old_json
-                    .as_object_mut()
-                    .unwrap()
-                    .remove("claudeSettingsFile");
-            }
-            let manifest_file = manifest_path(&root, "claude").unwrap();
-            let old_bytes = serde_json::to_vec(&old_json).unwrap();
-            fs::write(&manifest_file, &old_bytes).unwrap();
-
-            let loaded = load_manifest(&root, "claude").unwrap();
-            assert_eq!(loaded.claude_settings_file.as_deref(), old_settings_file);
-            assert_eq!(loaded.model_hash, None);
-            assert_eq!(loaded.claude_env_model_hash, None);
-            assert!(loaded.model_settings_hashes.is_empty());
-            assert!(loaded.claude_skill_overrides.is_empty());
-            assert!(loaded.claude_mcp_denials.is_empty());
-            assert_eq!(loaded.mcp_servers, old.mcp_servers);
-            assert_eq!(loaded.skills[".claude/skills/managed"].hash, "skill-hash");
-            assert_eq!(loaded.instruction_hash, old.instruction_hash);
-            assert!(test_projects::deployed_scopes(&profile).is_empty());
-
-            let ProjectDeployResult::NeedsResolution { conflicts, .. } =
-                test_projects::deploy(&state, "profile", ProfileScope::Claude, None).unwrap()
-            else {
-                panic!("existing personal settings must require explicit resolution")
-            };
-            assert_eq!(conflicts.len(), 2);
-            assert!(conflicts
-                .iter()
-                .any(|conflict| conflict.path == ".claude/settings.local.json#model"));
-            assert!(
-                conflicts
-                    .iter()
-                    .any(|conflict| conflict.path
-                        == ".claude/settings.local.json#env.ANTHROPIC_MODEL")
-            );
-            assert_eq!(fs::read(&personal_path).unwrap(), personal);
-            assert_eq!(fs::read(&shared_path).unwrap(), shared);
-            assert_eq!(fs::read(&manifest_file).unwrap(), old_bytes);
-
-            test_projects::deploy(
-                &state,
-                "profile",
-                ProfileScope::Claude,
-                Some(ConflictResolution::Overwrite),
-            )
-            .unwrap();
-            let deployed = load_manifest(&root, "claude").unwrap();
-            assert_eq!(
-                deployed.claude_settings_file.as_deref(),
-                Some(CLAUDE_PROJECT_SETTINGS)
-            );
-            assert_eq!(deployed.model_hash, Some(text_hash("test-model")));
-            assert_eq!(
-                deployed.claude_env_model_hash,
-                Some(text_hash("test-model"))
-            );
-            assert_eq!(
-                test_projects::deployed_scopes(&profile),
-                vec![ProfileScope::Claude]
-            );
-
-            payload.models.claude = Some(String::new());
-            profile.payload = serde_json::to_string(&payload).unwrap();
-            state.db.save_profile(&profile).unwrap();
-            test_projects::deploy(&state, "profile", ProfileScope::Claude, None).unwrap();
-            let personal_doc = ClaudeSettingsDocument::open(&root).unwrap();
-            assert_eq!(personal_doc.model(), None);
-            assert_eq!(personal_doc.env_model(), None);
-            assert_eq!(personal_doc.root["env"]["USER_FLAG"], "keep");
-            assert_eq!(personal_doc.root["userField"], true);
-            assert_eq!(fs::read(&shared_path).unwrap(), shared);
-        }
+        assert!(load_manifest(&root, "claude").is_err());
+        assert_eq!(fs::read(path).unwrap(), before);
+        assert!(!root.join(CLAUDE_PROJECT_SETTINGS).exists());
     }
 
     #[test]

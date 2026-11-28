@@ -49,7 +49,7 @@ vi.mock("@/components/settings/auth/AccountQuota", async (importOriginal) => {
 const baseAuth = () => ({
   accounts: [],
   defaultAccountId: null,
-  migrationError: null,
+  storageError: null,
   isStatusSuccess: true,
   isStatusError: false,
   hasAnyAccount: false,

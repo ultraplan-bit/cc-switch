@@ -48,13 +48,7 @@ pub(crate) fn detect_gemini_auth_type(provider: &Provider) -> GeminiAuthType {
         }
     }
 
-    // Priority 2: Check Google Official (name matching)
-    let name_lower = provider.name.to_ascii_lowercase();
-    if name_lower == "google" || name_lower.starts_with("google ") {
-        return GeminiAuthType::GoogleOfficial;
-    }
-
-    // Priority 3: Check PackyCode keywords
+    // Check PackyCode service keywords
     if contains_packycode_keyword(&provider.name) {
         return GeminiAuthType::Packycode;
     }
@@ -95,4 +89,34 @@ fn contains_packycode_keyword(value: &str) -> bool {
 /// This is a convenience wrapper around `detect_gemini_auth_type`.
 pub(crate) fn is_google_official_gemini(provider: &Provider) -> bool {
     detect_gemini_auth_type(provider) == GeminiAuthType::GoogleOfficial
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::provider::ProviderMeta;
+    use serde_json::json;
+
+    #[test]
+    fn google_name_does_not_select_official_authentication() {
+        let mut provider = Provider::with_id(
+            "custom".into(),
+            "Google API key".into(),
+            json!({"env":{"GEMINI_API_KEY":"custom-key"}}),
+            None,
+        );
+        provider.category = Some("custom".into());
+        assert!(!super::super::gemini_direct::is_official(&provider));
+        provider.name = "Google".into();
+        assert!(!super::super::gemini_direct::is_official(&provider));
+
+        provider.category = Some("official".into());
+        assert!(super::super::gemini_direct::is_official(&provider));
+        provider.category = None;
+        provider.meta = Some(ProviderMeta {
+            partner_promotion_key: Some("google-official".into()),
+            ..Default::default()
+        });
+        assert!(super::super::gemini_direct::is_official(&provider));
+    }
 }

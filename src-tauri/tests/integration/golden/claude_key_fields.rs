@@ -68,7 +68,7 @@ fn switch_and_check(state: &AppState, target: &str) {
     );
 }
 
-fn relay(id: &str, common_config: Option<bool>) -> Provider {
+fn relay(id: &str) -> Provider {
     provider(
         id,
         json!({
@@ -80,7 +80,6 @@ fn relay(id: &str, common_config: Option<bool>) -> Provider {
                 "CLAUDE_CODE_SUBAGENT_MODEL": format!("{id}-subagent")
             }
         }),
-        common_config,
     )
 }
 
@@ -94,9 +93,8 @@ fn third_party_to_third_party_replaces_every_key_field() {
             "ANTHROPIC_BASE_URL": "https://b.example",
             "ANTHROPIC_API_KEY": "sk-b"
         } }),
-        None,
     );
-    let state = setup(&[relay("a", None), b], "a");
+    let state = setup(&[relay("a"), b], "a");
 
     switch_and_check(&state, "b");
     switch_and_check(&state, "a");
@@ -107,7 +105,7 @@ fn third_party_to_third_party_replaces_every_key_field() {
 fn model_picked_in_client_does_not_follow_the_switch() {
     let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
     reset_test_fs();
-    let state = setup(&[relay("a", None), relay("b", None)], "a");
+    let state = setup(&[relay("a"), relay("b")], "a");
     let mut live = read_home_json(LIVE);
     live["model"] = json!("a-picked-model");
     write_home_file(LIVE, &live.to_string());
@@ -128,11 +126,8 @@ fn bedrock_to_official_leaves_no_provider_keys() {
                 "AWS_REGION": "us-west-2",
                 "AWS_BEARER_TOKEN_BEDROCK": "bedrock-key",
                 "ANTHROPIC_MODEL": "us.anthropic.claude-sonnet-4-5-v1:0"
-            },
-            // 旧版 Bedrock API Key 预设写在顶层的 Key。
-            "apiKey": "legacy-bedrock-key"
+            }
         }),
-        None,
     );
     let state = setup(
         &[bedrock, official("claude-official", json!({ "env": {} }))],
@@ -143,46 +138,14 @@ fn bedrock_to_official_leaves_no_provider_keys() {
     let live = read_home_json(LIVE);
     assert!(floor_view(&live).is_empty(), "official live: {live:#}");
 
-    // 按计划改变：旧 Bedrock API Key 行顶层的 `apiKey` 投影成
-    // `env.AWS_BEARER_TOKEN_BEDROCK`（`env` 里已有就以它为准），不再写进 live 顶层。
-    ProviderService::switch(&state, AppType::Claude, "bedrock").expect("switch back");
+    // 切回 Bedrock 时恢复当前格式的 env 凭据和协议配置。
+    switch_and_check(&state, "bedrock");
     let live = read_home_json(LIVE);
     assert_eq!(
         live["env"]["AWS_BEARER_TOKEN_BEDROCK"],
         json!("bedrock-key")
     );
     assert!(live.get("apiKey").is_none(), "live: {live:#}");
-}
-
-/// 只在顶层 `apiKey` 里存着 Key 的存量 Bedrock 行：切过去后 Key 出现在 Claude Code
-/// 真正读取的 `AWS_BEARER_TOKEN_BEDROCK` 里，行本身不改写。
-#[test]
-fn legacy_bedrock_api_key_row_is_projected_to_the_bearer_env() {
-    let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
-    reset_test_fs();
-    let legacy = provider(
-        "bedrock",
-        json!({
-            "env": { "CLAUDE_CODE_USE_BEDROCK": "1", "AWS_REGION": "us-west-2" },
-            "apiKey": "legacy-bedrock-key"
-        }),
-        None,
-    );
-    let state = setup(&[relay("a", None), legacy.clone()], "a");
-
-    ProviderService::switch(&state, AppType::Claude, "bedrock").expect("switch");
-    let live = read_home_json(LIVE);
-    assert_eq!(
-        live["env"]["AWS_BEARER_TOKEN_BEDROCK"],
-        json!("legacy-bedrock-key")
-    );
-    assert!(live.get("apiKey").is_none(), "live: {live:#}");
-    let row = state
-        .db
-        .get_provider_by_id("bedrock", &AppType::Claude)
-        .expect("query")
-        .expect("row");
-    assert_eq!(row.settings_config, legacy.settings_config);
 }
 
 #[test]
@@ -198,9 +161,8 @@ fn vertex_to_third_party_leaves_no_vertex_keys() {
             "GOOGLE_APPLICATION_CREDENTIALS": "/Users/me/gcp.json",
             "VERTEX_REGION_CLAUDE_4_0_OPUS": "europe-west1"
         } }),
-        None,
     );
-    let state = setup(&[vertex, relay("b", None)], "vertex");
+    let state = setup(&[vertex, relay("b")], "vertex");
 
     switch_and_check(&state, "b");
     switch_and_check(&state, "vertex");
@@ -219,9 +181,8 @@ fn api_key_helper_does_not_outlive_its_provider() {
                 "CLAUDE_CODE_API_KEY_HELPER_TTL_MS": "600000"
             }
         }),
-        None,
     );
-    let state = setup(&[helper, relay("b", None)], "helper");
+    let state = setup(&[helper, relay("b")], "helper");
 
     switch_and_check(&state, "b");
     switch_and_check(&state, "helper");
@@ -234,7 +195,7 @@ fn official_roundtrip_through_third_party() {
     let state = setup(
         &[
             official("claude-official", json!({ "env": {} })),
-            relay("b", None),
+            relay("b"),
         ],
         "claude-official",
     );
@@ -244,13 +205,13 @@ fn official_roundtrip_through_third_party() {
     assert!(floor_view(&read_home_json(LIVE)).is_empty());
 }
 
-/// 两家都勾选通用配置时，片段只共享非关键字段，关键字段照样逐家替换；
+/// 关键字段逐家替换；
 /// live 里与供应商无关的功能开关（同在 `CLAUDE_CODE_USE_` 前缀下）来回切换后值不变。
 #[test]
-fn common_config_opt_in_keeps_key_fields_per_provider() {
+fn switching_keeps_global_settings_and_replaces_connection_fields() {
     let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
     reset_test_fs();
-    let state = setup(&[relay("a", Some(true)), relay("b", Some(true))], "a");
+    let state = setup(&[relay("a"), relay("b")], "a");
     let mut live = read_home_json(LIVE);
     live["env"]["CLAUDE_CODE_USE_POWERSHELL_TOOL"] = json!("1");
     live["env"]["CLAUDE_CODE_USE_NATIVE_FILE_SEARCH"] = json!("1");
@@ -269,11 +230,9 @@ fn common_config_opt_in_keeps_key_fields_per_provider() {
     assert_eq!(live["includeCoAuthoredBy"], json!(false));
 }
 
-/// 两家都勾选通用配置时，协议选择器、`AWS_*` 和顶层 `model` 不进共享片段，不会跟着切换
-/// 带给下一家。旧版曾经会：从 Bedrock 切到官方后，官方的 live 里仍有
-/// `CLAUDE_CODE_USE_BEDROCK=1`，Claude Code 继续走 Bedrock。
+/// 切换时撤下上一家专有的协议选择器、`AWS_*` 和顶层 `model`。
 #[test]
-fn common_config_opt_in_does_not_carry_key_fields_to_the_next_provider() {
+fn switching_does_not_carry_key_fields_to_the_next_provider() {
     let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
     reset_test_fs();
     let bedrock = provider(
@@ -284,13 +243,8 @@ fn common_config_opt_in_does_not_carry_key_fields_to_the_next_provider() {
             "AWS_BEARER_TOKEN_BEDROCK": "bedrock-key",
             "ANTHROPIC_MODEL": "us.anthropic.claude-sonnet-4-5-v1:0"
         } }),
-        Some(true),
     );
-    let mut claude_official = official("claude-official", json!({ "env": {} }));
-    claude_official.meta = Some(cc_switch_lib::ProviderMeta {
-        common_config_enabled: Some(true),
-        ..Default::default()
-    });
+    let claude_official = official("claude-official", json!({ "env": {} }));
     let state = setup(&[bedrock, claude_official], "bedrock");
     let mut live = read_home_json(LIVE);
     live["model"] = json!("picked-on-bedrock");

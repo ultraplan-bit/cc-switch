@@ -48,7 +48,6 @@ export interface ClaudeDesktopProviderPreset extends PresetFamilyFields {
   apiKeyUrl?: string;
   category?: ProviderCategory;
   isPartner?: boolean;
-  primePartner?: boolean; // 旧版的置顶合作伙伴标记；v7 起界面不再读取，新预设不写
   partnerPromotionKey?: string;
 
   baseUrl: string;
@@ -202,7 +201,6 @@ export const claudeDesktopProviderPresets: ClaudeDesktopProviderPreset[] = [
     family: "kimi",
     planKey: "payg",
     regionKey: "cn",
-    primePartner: true,
     websiteUrl: "https://platform.kimi.com",
     category: "cn_official",
     baseUrl: "https://api.moonshot.cn/anthropic",
@@ -246,7 +244,6 @@ export const claudeDesktopProviderPresets: ClaudeDesktopProviderPreset[] = [
     family: "kimi",
     planKey: "coding",
     regionKey: "cn",
-    primePartner: true,
     websiteUrl: "https://www.kimi.com/code/",
     category: "cn_official",
     baseUrl: "https://api.kimi.com/coding/",

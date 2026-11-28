@@ -4,47 +4,38 @@ import { useProviderConnectionMode } from "@/components/providers/useProviderCon
 
 const state = vi.hoisted(() => ({
   isPending: true,
-  isFetching: true,
-  isSuccess: false,
   mode: "direct",
 }));
-vi.mock("@/lib/query/profiles", () => ({
-  useProfileConfiguration: () => state,
-}));
 vi.mock("@/lib/query/proxy", () => ({
-  useAppMode: () => ({ isPending: false, data: { mode: state.mode } }),
+  useAppMode: () => ({
+    isPending: state.isPending,
+    data: state.isPending ? undefined : { mode: state.mode },
+  }),
 }));
 
 describe("provider connection mode", () => {
   beforeEach(() =>
     Object.assign(state, {
       isPending: true,
-      isFetching: true,
-      isSuccess: false,
       mode: "direct",
     }),
   );
-  it("waits for migration and freezes editing mode across refetches", () => {
+  it("waits for the app mode and freezes editing mode for each open session", () => {
     const { result, rerender } = renderHook(
       ({ open }) => useProviderConnectionMode("claude", open),
       { initialProps: { open: true } },
     );
     expect(result.current.pending).toBe(true);
-    Object.assign(state, {
-      isPending: false,
-      isFetching: false,
-      isSuccess: true,
-    });
+    state.isPending = false;
     rerender({ open: true });
     expect(result.current).toMatchObject({
       pending: false,
       connectionsOnly: true,
     });
-    Object.assign(state, { isFetching: true, isSuccess: false });
+    state.mode = "stack";
     rerender({ open: true });
     expect(result.current.connectionsOnly).toBe(true);
     rerender({ open: false });
-    Object.assign(state, { isFetching: false });
     rerender({ open: true });
     expect(result.current).toMatchObject({
       pending: false,
@@ -54,12 +45,28 @@ describe("provider connection mode", () => {
   it("retains aggregation inventory editing", () => {
     Object.assign(state, {
       isPending: false,
-      isFetching: false,
-      isSuccess: true,
       mode: "stack",
     });
     const { result } = renderHook(() =>
       useProviderConnectionMode("codex", true),
+    );
+    expect(result.current).toMatchObject({
+      pending: false,
+      connectionsOnly: false,
+    });
+  });
+  it("uses an explicit mode without waiting for the app query", () => {
+    const { result } = renderHook(() =>
+      useProviderConnectionMode("codex", true, "direct"),
+    );
+    expect(result.current).toMatchObject({
+      pending: false,
+      connectionsOnly: true,
+    });
+  });
+  it("does not wait or enable connection-only editing for other apps", () => {
+    const { result } = renderHook(() =>
+      useProviderConnectionMode("gemini", true),
     );
     expect(result.current).toMatchObject({
       pending: false,

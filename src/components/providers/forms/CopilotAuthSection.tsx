@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Notice } from "@/components/ui/notice";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   Select,
@@ -93,7 +92,7 @@ export const CopilotAuthSection: React.FC<CopilotAuthSectionProps> = ({
   const {
     accounts,
     defaultAccountId,
-    migrationError,
+    storageError,
     isStatusSuccess,
     isStatusError,
     pollingState,
@@ -109,6 +108,17 @@ export const CopilotAuthSection: React.FC<CopilotAuthSectionProps> = ({
     cancelAuth,
     refetchStatus,
   } = useCopilotAuth(effectiveGithubDomain);
+  const statusFailed = isStatusError || Boolean(storageError);
+  const statusReady = isStatusSuccess && !storageError;
+  const statusErrorText = storageError
+    ? t("copilot.storageFailed", {
+        error: storageError,
+        defaultValue: `账号文件读取失败：${storageError}`,
+      })
+    : t(
+        "copilot.statusLoadFailed",
+        "无法加载 GitHub Copilot 账号状态，请重试。",
+      );
   const accountUsers = useManagedAccountUsers(
     "github_copilot",
     defaultAccountId,
@@ -129,7 +139,7 @@ export const CopilotAuthSection: React.FC<CopilotAuthSectionProps> = ({
       mode !== "select" ||
       !selectedAccountId ||
       !onAccountSelect ||
-      !isStatusSuccess
+      !statusReady
     ) {
       return;
     }
@@ -137,7 +147,7 @@ export const CopilotAuthSection: React.FC<CopilotAuthSectionProps> = ({
     if (!accounts.some((account) => account.id === selectedAccountId)) {
       onAccountSelect(null);
     }
-  }, [accounts, isStatusSuccess, mode, onAccountSelect, selectedAccountId]);
+  }, [accounts, statusReady, mode, onAccountSelect, selectedAccountId]);
 
   const confirmRemove = () => {
     const target = removeTarget;
@@ -151,18 +161,13 @@ export const CopilotAuthSection: React.FC<CopilotAuthSectionProps> = ({
     }
   };
 
-  const statusErrorBanner = isStatusError && (
+  const statusErrorBanner = statusFailed && (
     <div
       role="alert"
       className="flex items-center gap-2 rounded-md border border-transparent bg-danger-soft px-3 py-2 text-sm text-danger-text"
     >
       <AlertTriangle className="h-4 w-4 shrink-0" />
-      <span className="min-w-0 flex-1">
-        {t(
-          "copilot.statusLoadFailed",
-          "无法加载 GitHub Copilot 账号状态，请重试。",
-        )}
-      </span>
+      <span className="min-w-0 flex-1">{statusErrorText}</span>
       <Button
         type="button"
         variant="outline"
@@ -184,7 +189,7 @@ export const CopilotAuthSection: React.FC<CopilotAuthSectionProps> = ({
   );
 
   if (mode === "select") {
-    const accountSelect = isStatusSuccess && onAccountSelect && (
+    const accountSelect = statusReady && onAccountSelect && (
       <div className="space-y-2">
         <Label className="text-sm text-fg-2">
           {t("copilot.githubAccount", "GitHub 账号")}
@@ -224,7 +229,7 @@ export const CopilotAuthSection: React.FC<CopilotAuthSectionProps> = ({
     return (
       <div className={`space-y-4 ${className || ""}`}>
         {statusErrorBanner}
-        {!isStatusSuccess && !isStatusError && (
+        {!statusReady && !statusFailed && (
           <div className="flex items-center gap-2 text-sm text-fg-2">
             <Loader2 className="h-4 w-4 animate-spin" />
             {t("copilot.statusLoading", "正在加载...")}
@@ -423,22 +428,9 @@ export const CopilotAuthSection: React.FC<CopilotAuthSectionProps> = ({
       })}
       helpSide={helpSide}
       accounts={rows}
-      status={isStatusError ? "error" : isStatusSuccess ? "ready" : "loading"}
-      statusErrorText={t("copilot.statusLoadFailed", {
-        defaultValue: "无法加载 GitHub Copilot 账号状态，请重试。",
-      })}
+      status={statusFailed ? "error" : statusReady ? "ready" : "loading"}
+      statusErrorText={statusErrorText}
       onRetryStatus={() => void refetchStatus()}
-      notice={
-        migrationError ? (
-          <Notice
-            tone="warning"
-            title={t("copilot.migrationFailed", {
-              error: migrationError,
-              defaultValue: `旧认证数据迁移失败：${migrationError}`,
-            })}
-          />
-        ) : undefined
-      }
       emptyText={t("authCenter.empty", {
         defaultValue: "还没有登录 {{service}} 账号。",
         service: "GitHub Copilot",

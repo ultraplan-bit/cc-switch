@@ -280,9 +280,9 @@ describe("useProviderActions", () => {
     ]);
   });
 
-  it("still reports an uncoded warning as a failed backfill", async () => {
+  it("shows the details of other switch warnings", async () => {
     switchProviderMutateAsync.mockResolvedValueOnce({
-      warnings: ["omo_variant_cleanup_failed:omo-a", "backfill: boom"],
+      warnings: ["omo_variant_cleanup_failed:omo-a", "extra switch detail"],
     });
     const { wrapper } = createWrapper();
     const { result } = renderHook(() => useProviderActions("opencode"), {
@@ -295,25 +295,7 @@ describe("useProviderActions", () => {
     });
     expect(toastWarningMock.mock.calls.map(([message]) => message)).toEqual([
       "切换成功，但未能删除另一个 OMO 变体（OMO / OMO Slim）的配置文件，OpenCode 可能同时加载两者；请在 OpenCode 配置目录中手动删除它",
-      "切换成功，但旧供应商配置回填失败，您手动修改的配置可能未保存",
-    ]);
-  });
-
-  it("reports default profile warnings separately after a connection switch", async () => {
-    switchProviderMutateAsync.mockResolvedValueOnce({
-      warnings: ["profile_follow:Missing instructions"],
-    });
-    const { wrapper } = createWrapper();
-    const { result } = renderHook(() => useProviderActions("claude"), {
-      wrapper,
-    });
-    await act(async () => {
-      await result.current.switchProvider(
-        createProvider({ category: "custom" }),
-      );
-    });
-    expect(toastWarningMock.mock.calls.map(([message]) => message)).toEqual([
-      "profiles.switchFollowWarning",
+      "切换已完成，请查看提示：\nextra switch detail",
     ]);
   });
 

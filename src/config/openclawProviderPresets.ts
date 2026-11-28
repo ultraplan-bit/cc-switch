@@ -29,7 +29,6 @@ export interface OpenClawProviderPreset extends PresetFamilyFields {
   settingsConfig: OpenClawProviderConfig;
   isOfficial?: boolean;
   isPartner?: boolean;
-  primePartner?: boolean; // 旧版的置顶合作伙伴标记；v7 起界面不再读取，新预设不写
   partnerPromotionKey?: string;
   category?: ProviderCategory;
   /** Template variable definitions */
@@ -663,7 +662,6 @@ export const openclawProviderPresets: OpenClawProviderPreset[] = [
     family: "kimi",
     planKey: "payg",
     regionKey: "cn",
-    primePartner: true,
     websiteUrl: "https://platform.kimi.com",
     apiKeyUrl: "https://platform.kimi.com/console/api-keys",
     settingsConfig: {
@@ -735,7 +733,6 @@ export const openclawProviderPresets: OpenClawProviderPreset[] = [
     family: "kimi",
     planKey: "coding",
     regionKey: "cn",
-    primePartner: true,
     websiteUrl: "https://www.kimi.com/code/",
     apiKeyUrl: "https://platform.kimi.com/console/api-keys",
     settingsConfig: {

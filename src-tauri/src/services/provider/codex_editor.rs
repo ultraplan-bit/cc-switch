@@ -26,7 +26,7 @@ use crate::live::engine::{read_current, LiveFile};
 use crate::live::floor;
 use crate::live::patch::toml::parse;
 use crate::live::project::codex::{
-    is_keyless_fallback, CodexProjection, Route, RowInput, OFFICIAL_PROXY_ROUTE_ID, ROUTE_ID,
+    is_keyless_fallback, CodexProjection, Route, RowInput, ROUTE_ID,
 };
 use crate::mode::operation::{AppWrite, FileChange};
 use crate::mode::state::{op, PendingTarget};
@@ -59,8 +59,7 @@ fn entries(doc: &DocumentMut, skip_routes: &[&str]) -> Vec<Entry> {
         if key == "model_providers" {
             if let Some(providers) = item.as_table_like() {
                 for (id, table) in providers.iter() {
-                    if id == ROUTE_ID || id == OFFICIAL_PROXY_ROUTE_ID || skip_routes.contains(&id)
-                    {
+                    if id == ROUTE_ID || skip_routes.contains(&id) {
                         continue;
                     }
                     entries.push(Entry {
@@ -191,7 +190,7 @@ fn with_pending_key(settings: &Value) -> Option<Value> {
 }
 
 /// 编辑器显示用的投影。新增对话框一打开就投影自定义模板，选第三方预设也会投影，这时 Key
-/// 还没填：行里的 `requires_openai_auth = true`（或顶层 `openai_base_url`）会被切换的
+/// 还没填：行里的 `requires_openai_auth = true`会被切换的
 /// 安全闸拒绝。显示不该拒：Key 本来就不在 TOML 里显示，填没填显示都一样。只对这一个错误
 /// 按占位 Key 再投影一次；再投影也不行就报原来的错。安全闸留在写 live 的地方（切换、编辑
 /// 当前供应商、重写代理契约），它们用的都是真实的行。
@@ -408,7 +407,7 @@ pub(crate) fn plan_save(
 }
 
 /// 把编辑器里的关键字段、独有字段存回行：行的 `config` 里这两类键换成编辑器的，其余内容
-/// 原样保留（降级后旧版会整份使用这些行）；`auth`、模型目录等表单字段取编辑器的。
+/// 原样保留；`auth`、模型目录等表单字段取编辑器的。
 fn store_into_row(
     stored_row: Option<&Value>,
     edited: &Value,
@@ -642,40 +641,6 @@ mod tests {
         assert!(
             !text.contains("approval_policy"),
             "global settings go to live, not the row: {text}"
-        );
-    }
-
-    /// #8039：顶层 base_url 的旧形态行原样保存，地址不能丢，归一成 custom 表。
-    #[test]
-    fn saving_a_top_level_base_url_row_keeps_the_address() {
-        let stored = json!({
-            "auth": { "OPENAI_API_KEY": "sk-relay" },
-            "config": "base_url = \"https://relay.example.com/v1\"\nmodel = \"gpt-a\"\nwire_api = \"responses\"\n"
-        });
-        let plan = plan_save(
-            Some(&stored),
-            &stored,
-            &stored,
-            &Origin::row(&stored).unwrap(),
-            false,
-            false,
-            ConflictPolicy::Refuse,
-        )
-        .unwrap();
-        let text = plan.row_settings["config"].as_str().unwrap();
-        let parsed: toml::Table = toml::from_str(text).unwrap();
-        assert_eq!(parsed["model_provider"].as_str(), Some("custom"));
-        assert_eq!(
-            parsed["model_providers"]["custom"]["base_url"].as_str(),
-            Some("https://relay.example.com/v1")
-        );
-        assert!(parsed.get("base_url").is_none(), "{text}");
-        assert!(parsed.get("wire_api").is_none(), "{text}");
-        assert_eq!(parsed["model"].as_str(), Some("gpt-a"));
-        assert_eq!(
-            crate::codex_config::extract_codex_base_url(text).as_deref(),
-            Some("https://relay.example.com/v1"),
-            "the proxy still finds the address"
         );
     }
 }

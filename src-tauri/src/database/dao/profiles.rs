@@ -15,8 +15,6 @@ const CURRENT_PROFILE_ID_KEY_PREFIX: &str = "current_profile_id_";
 const CURRENT_PROFILE_STALE_KEY_PREFIX: &str = "current_profile_stale_";
 /// JSON array of normalized project directories any Profile can be deployed to.
 const PROFILE_PROJECTS_KEY: &str = "profile_projects_v1";
-const PROFILE_PROJECTS_SEEDED_KEY: &str = "profile_projects_v1_seeded";
-const PROFILE_LEGACY_BINDINGS_KEY: &str = "profile_projects_v1_legacy_bindings";
 
 fn current_profile_key(scope: &str) -> String {
     format!("{CURRENT_PROFILE_ID_KEY_PREFIX}{scope}")
@@ -75,55 +73,6 @@ pub struct Profile {
 }
 
 impl Database {
-    pub(crate) fn save_migrated_profile(
-        &self,
-        profile: &Profile,
-        marker: &str,
-    ) -> Result<(), AppError> {
-        let conn = lock_conn!(self.conn);
-        let transaction = conn
-            .unchecked_transaction()
-            .map_err(|error| AppError::Database(error.to_string()))?;
-        let marked: bool = transaction
-            .query_row(
-                "SELECT EXISTS(SELECT 1 FROM settings WHERE key = ?1)",
-                [marker],
-                |row| row.get(0),
-            )
-            .map_err(|error| AppError::Database(error.to_string()))?;
-        if !marked {
-            transaction.execute("INSERT INTO profiles (id,name,payload,sort_order,created_at,updated_at) VALUES (?1,?2,?3,?4,?5,?6)", params![profile.id,profile.name,profile.payload,profile.sort_order,profile.created_at,profile.updated_at]).map_err(|error| AppError::Database(error.to_string()))?;
-            transaction
-                .execute(
-                    "INSERT INTO settings (key,value) VALUES (?1,?2)",
-                    params![marker, profile.id],
-                )
-                .map_err(|error| AppError::Database(error.to_string()))?;
-        }
-        transaction
-            .commit()
-            .map_err(|error| AppError::Database(error.to_string()))
-    }
-
-    pub(crate) fn backfill_profile_native_config(
-        &self,
-        profile: &Profile,
-        previous: &str,
-    ) -> Result<(), AppError> {
-        let conn = lock_conn!(self.conn);
-        let count = conn
-            .execute(
-                "UPDATE profiles SET payload = ?2 WHERE id = ?1 AND payload = ?3",
-                params![profile.id, profile.payload, previous],
-            )
-            .map_err(|error| AppError::Database(error.to_string()))?;
-        if count != 1 {
-            return Err(AppError::Config(
-                "Profile 在迁移期间发生变化，请重试".into(),
-            ));
-        }
-        Ok(())
-    }
     /// 获取所有项目（按 sort_order 优先、created_at 兜底排序）
     pub fn get_all_profiles(&self) -> Result<Vec<Profile>, AppError> {
         let conn = lock_conn!(self.conn);
@@ -181,8 +130,7 @@ impl Database {
         }
     }
 
-    /// 保存配置方案（插入或更新全部受管字段）。旧的 project_path 列不再读写，
-    /// 只由 [`Database::seed_profile_projects_from_legacy`] 一次性迁入项目登记表。
+    /// 保存配置方案（插入或更新全部受管字段）。
     pub fn save_profile(&self, profile: &Profile) -> Result<(), AppError> {
         let conn = lock_conn!(self.conn);
         conn.execute(
@@ -246,46 +194,6 @@ impl Database {
             .map_err(|error| AppError::Database(error.to_string()))
     }
 
-    /// Replace only the payload when it still equals `previous`; `updated_at`
-    /// is kept so maintenance rewrites do not look like user edits.
-    pub(crate) fn replace_profile_payload_if_unchanged(
-        &self,
-        id: &str,
-        payload: &str,
-        previous: &str,
-    ) -> Result<bool, AppError> {
-        let conn = lock_conn!(self.conn);
-        let count = conn
-            .execute(
-                "UPDATE profiles SET payload = ?2 WHERE id = ?1 AND payload = ?3",
-                params![id, payload, previous],
-            )
-            .map_err(|error| AppError::Database(error.to_string()))?;
-        Ok(count == 1)
-    }
-
-    /// Settings whose key starts with `prefix`, as (key suffix, value).
-    pub(crate) fn get_settings_with_prefix(
-        &self,
-        prefix: &str,
-    ) -> Result<Vec<(String, String)>, AppError> {
-        let conn = lock_conn!(self.conn);
-        let mut statement = conn
-            .prepare("SELECT key, value FROM settings WHERE substr(key, 1, ?2) = ?1 ORDER BY key")
-            .map_err(|error| AppError::Database(error.to_string()))?;
-        let rows = statement
-            .query_map(params![prefix, prefix.chars().count() as i64], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-            })
-            .map_err(|error| AppError::Database(error.to_string()))?;
-        let mut result = Vec::new();
-        for row in rows {
-            let (key, value) = row.map_err(|error| AppError::Database(error.to_string()))?;
-            result.push((key[prefix.len()..].to_string(), value));
-        }
-        Ok(result)
-    }
-
     pub(crate) fn is_profile_project(&self, path: &str) -> Result<bool, AppError> {
         Ok(self
             .get_profile_projects()?
@@ -337,82 +245,6 @@ impl Database {
             projects.retain(|known| !same_project_path(known, path));
             projects.len() != before
         })
-    }
-
-    /// Directory bindings written by versions where a Profile belonged to one
-    /// project, as (profile id, path). Kept after seeding so a later migration
-    /// step can still find the project a legacy Profile was captured from.
-    pub(crate) fn legacy_profile_project_bindings(
-        &self,
-    ) -> Result<Vec<(String, String)>, AppError> {
-        Ok(self
-            .get_setting(PROFILE_LEGACY_BINDINGS_KEY)?
-            .and_then(|raw| serde_json::from_str(&raw).ok())
-            .unwrap_or_default())
-    }
-
-    /// One-time move of legacy per-Profile directory bindings into the project
-    /// registry. Deployment status survives because project manifests record the
-    /// Profile id. Returns whether this call performed the move.
-    pub(crate) fn seed_profile_projects_from_legacy(&self) -> Result<bool, AppError> {
-        let conn = lock_conn!(self.conn);
-        let transaction = conn
-            .unchecked_transaction()
-            .map_err(|error| AppError::Database(error.to_string()))?;
-        if read_setting(&transaction, PROFILE_PROJECTS_SEEDED_KEY)?.is_some() {
-            return Ok(false);
-        }
-        let mut projects =
-            parse_project_registry(read_setting(&transaction, PROFILE_PROJECTS_KEY)?)?;
-        let mut bindings = Vec::<(String, String)>::new();
-        {
-            let mut statement = transaction
-                .prepare(
-                    "SELECT id, project_path FROM profiles
-                     WHERE project_path IS NOT NULL AND project_path <> ''
-                     ORDER BY sort_order IS NULL, sort_order, created_at, id",
-                )
-                .map_err(|error| AppError::Database(error.to_string()))?;
-            let rows = statement
-                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
-                .map_err(|error| AppError::Database(error.to_string()))?;
-            for row in rows {
-                let (id, path): (String, String) =
-                    row.map_err(|error| AppError::Database(error.to_string()))?;
-                push_project(&mut projects, &path);
-                bindings.push((id, path));
-            }
-        }
-        for (key, value) in [
-            (
-                PROFILE_PROJECTS_KEY,
-                serde_json::to_string(&projects)
-                    .map_err(|error| AppError::Config(error.to_string()))?,
-            ),
-            (
-                PROFILE_LEGACY_BINDINGS_KEY,
-                serde_json::to_string(&bindings)
-                    .map_err(|error| AppError::Config(error.to_string()))?,
-            ),
-            (PROFILE_PROJECTS_SEEDED_KEY, "1".to_string()),
-        ] {
-            transaction
-                .execute(
-                    "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
-                    params![key, value],
-                )
-                .map_err(|error| AppError::Database(error.to_string()))?;
-        }
-        transaction
-            .execute(
-                "UPDATE profiles SET project_path = NULL WHERE project_path IS NOT NULL",
-                [],
-            )
-            .map_err(|error| AppError::Database(error.to_string()))?;
-        transaction
-            .commit()
-            .map_err(|error| AppError::Database(error.to_string()))?;
-        Ok(true)
     }
 
     /// 删除项目，返回是否实际删除了记录
@@ -560,59 +392,6 @@ mod tests {
     }
 
     #[test]
-    fn legacy_project_bindings_move_into_the_registry_once() -> Result<(), AppError> {
-        let db = Database::memory()?;
-        db.save_profile(&sample("bound", "Bound", Some(1)))?;
-        db.save_profile(&sample("same", "Same directory", Some(2)))?;
-        db.save_profile(&sample("unbound", "Unbound", None))?;
-        {
-            let conn = lock_conn!(db.conn);
-            conn.execute(
-                "UPDATE profiles SET project_path = '/projects/demo' WHERE id IN ('bound','same')",
-                [],
-            )
-            .unwrap();
-        }
-        // Saving a Profile again must not drop a binding that was not migrated yet.
-        db.save_profile(&sample("bound", "Bound renamed", Some(1)))?;
-        db.add_profile_project("/projects/known")?;
-        assert!(db.legacy_profile_project_bindings()?.is_empty());
-
-        assert!(db.seed_profile_projects_from_legacy()?);
-        assert_eq!(
-            db.get_profile_projects()?,
-            vec!["/projects/known".to_string(), "/projects/demo".to_string()]
-        );
-        assert_eq!(
-            db.legacy_profile_project_bindings()?,
-            vec![
-                ("bound".to_string(), "/projects/demo".to_string()),
-                ("same".to_string(), "/projects/demo".to_string())
-            ]
-        );
-        let remaining: i64 = {
-            let conn = lock_conn!(db.conn);
-            conn.query_row(
-                "SELECT COUNT(*) FROM profiles WHERE project_path IS NOT NULL",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap()
-        };
-        assert_eq!(remaining, 0);
-        assert_eq!(db.get_profile("bound")?.unwrap().name, "Bound renamed");
-
-        // A removed project is not resurrected by a second seeding attempt.
-        db.remove_profile_project("/projects/demo")?;
-        assert!(!db.seed_profile_projects_from_legacy()?);
-        assert_eq!(
-            db.get_profile_projects()?,
-            vec!["/projects/known".to_string()]
-        );
-        Ok(())
-    }
-
-    #[test]
     fn project_registry_deduplicates_like_the_platform() -> Result<(), AppError> {
         let db = Database::memory()?;
         assert!(db.get_profile_projects()?.is_empty());
@@ -676,19 +455,6 @@ mod tests {
         db.update_profile_config_record(&sample("a", "A edited", None), "claude")?;
         assert!(db.is_current_profile_stale("claude")?);
         assert_eq!(db.get_current_profile_id("claude")?, Some("a".to_string()));
-        Ok(())
-    }
-
-    #[test]
-    fn settings_prefix_lookup_is_literal() -> Result<(), AppError> {
-        let db = Database::memory()?;
-        db.set_setting("marker_claude_one", "1")?;
-        db.set_setting("marker_claude-desktop_two", "2")?;
-        db.set_setting("markerXclaude_three", "3")?;
-        assert_eq!(
-            db.get_settings_with_prefix("marker_claude_")?,
-            vec![("one".to_string(), "1".to_string())]
-        );
         Ok(())
     }
 

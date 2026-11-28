@@ -183,8 +183,6 @@ export interface ProviderMeta {
   billingMultiplier?: string;
   // 自定义端点：以 URL 为键，值为端点信息
   custom_endpoints?: Record<string, CustomEndpoint>;
-  // 是否在切换/同步到 live 时应用通用配置片段
-  commonConfigEnabled?: boolean;
   // Claude Desktop 3P 配置写入模式
   claudeDesktopMode?: "direct" | "proxy";
   // Claude Desktop 本地路由模式：Claude-safe route -> upstream model
@@ -245,8 +243,6 @@ export interface ProviderMeta {
   opencodeConfigFormat?: "v1" | "v2";
   // 供应商类型（用于识别 Copilot 等特殊供应商）
   providerType?: string;
-  // GitHub Copilot 关联账号 ID（旧字段，保留兼容读取）
-  githubAccountId?: string;
   // Stack 模式下这家 Claude Code 供应商发布的模型；没有时按模型映射发布，空列表什么都不发布
   stackModels?: ClaudeStackModel[];
 }
@@ -356,8 +352,6 @@ export interface S3SyncSettings {
   status?: WebDavSyncStatus;
 }
 
-export type RemoteSnapshotLayout = "current" | "legacy";
-
 // 远端快照信息（下载前预览）
 export interface RemoteSnapshotInfo {
   deviceName: string;
@@ -365,10 +359,9 @@ export interface RemoteSnapshotInfo {
   snapshotId: string;
   version: number;
   protocolVersion: number;
-  dbCompatVersion?: number | null;
+  dbCompatVersion: number;
   compatible: boolean;
   artifacts: string[];
-  layout: RemoteSnapshotLayout;
   remotePath: string;
 }
 
@@ -459,8 +452,6 @@ export interface Settings {
   // Run official Codex under the shared "custom" provider id so future
   // sessions share one resume-history bucket with third-party providers
   unifyCodexSessionHistory?: boolean;
-  // User opted in (enable dialog checkbox) to migrate existing official sessions
-  unifyCodexMigrateExisting?: boolean;
   // Codex aggregation: every catalog row uses the classic (v1) sub-agent tools,
   // so a sub-agent on another provider can read its task (on by default)
   codexStackClassicTools?: boolean;
@@ -475,8 +466,6 @@ export interface Settings {
   failoverConfirmed?: boolean;
   // User has confirmed the first-run welcome notice
   firstRunNoticeConfirmed?: boolean;
-  // User has confirmed the one-time "new layout" dialog shown to upgrading users
-  newLayoutNoticeConfirmed?: boolean;
   // Highest app version whose "what's new" summary the user has seen on this device
   whatsNewSeenVersion?: string;
   // User has confirmed the auto-sync traffic warning
@@ -551,17 +540,6 @@ export interface Settings {
   // Windows: "cmd" | "powershell" | "wt"
   // Linux: "gnome-terminal" | "konsole" | "xfce4-terminal" | "alacritty" | "kitty" | "ghostty"
   preferredTerminal?: string;
-
-  // ===== 本机自动迁移状态 =====
-  localMigrations?: {
-    codexThirdPartyHistoryProviderBucketV1?: {
-      completedAt: string;
-      targetProviderId: string;
-      sourceProviderIds?: string[];
-      migratedJsonlFiles?: number;
-      migratedStateRows?: number;
-    };
-  };
 }
 
 /** 原文 UTF-16 坐标，左闭右开；不得切开代理对。 */

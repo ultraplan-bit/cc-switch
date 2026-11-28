@@ -12,9 +12,7 @@
 //!   提示词照常共享）；Key 和地址只经子进程环境传入。
 //!
 //! 真实的 `~/.gemini/antigravity-cli/settings.json` 一律不写，直接敲 `agy` 永远是官方登录，
-//! 模型由 agy 自己的 `/model` 管。唯一的例外是撤掉 #8268 测试版留下的 `modelProvider`：
-//! 测试版还装过包装脚本、改过 shell 启动文件，启动时由 [`remove_legacy_launcher`] 只删带
-//! 标记的内容。
+//! 模型由 agy 自己的 `/model` 管。
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -22,7 +20,7 @@ use std::process::Command;
 
 use serde_json::{json, Value};
 
-use crate::config::{atomic_write_private, get_app_config_dir, get_home_dir, write_text_file};
+use crate::config::{atomic_write_private, get_app_config_dir, get_home_dir};
 use crate::error::AppError;
 use crate::live::patch::json::JsonPatch;
 use crate::live::patch::{KeyPath, LivePatch};
@@ -157,34 +155,6 @@ fn key_profile_patch(projection: &AgyProjection) -> JsonPatch {
         None => patch.remove.push(model),
     }
     patch
-}
-
-/// 撤掉 #8268 测试版写进真实 `settings.json` 的 `modelProvider`，模型和其余键不动。
-/// 这是 CC Switch 对真实 `settings.json` 唯一的写入。
-pub(crate) fn release_model_provider(
-    db: &crate::database::Database,
-) -> Result<crate::mode::operation::OperationReport, AppError> {
-    use crate::live::engine::LiveFile;
-    use crate::mode::operation::{AppWrite, FileChange};
-    use crate::mode::state::{op, PendingTarget};
-    let write = AppWrite::begin(db, "agy")?;
-    let path = settings_path();
-    if !path.exists() {
-        return write.run(op::APPLY, &[], PendingTarget::default());
-    }
-    let pre = fs::read(&path).map_err(|e| AppError::io(&path, e))?;
-    let mut patch = JsonPatch::default();
-    patch.remove.push(KeyPath::new(&["modelProvider"]));
-    // 先验证：文件坏了就停。
-    patch.apply(&path, Some(&pre)).map_err(AppError::from)?;
-    write.run(
-        op::APPLY,
-        &[FileChange {
-            file: LiveFile::private(path),
-            patch: &patch,
-        }],
-        PendingTarget::default(),
-    )
 }
 
 /// 在终端里启动这张卡要用的参数。
@@ -344,7 +314,6 @@ pub(crate) fn background_command(bin: &Path) -> tokio::process::Command {
 
 /// 定位真实的 `agy`：先 PATH，再常见安装目录，最后问一次登录 shell。
 /// 从 Dock / Finder 启动时 PATH 只有系统目录，所以后两步不可省。
-/// 旧版测试装的包装脚本永远不会被返回。
 pub(crate) fn real_agy_bin() -> Option<PathBuf> {
     let path_var = std::env::var_os("PATH").unwrap_or_default();
     // install.ps1 installs to %LOCALAPPDATA%\agy\bin, which a GUI process's PATH may lack.
@@ -398,7 +367,7 @@ fn resolve_real_agy(
 }
 
 fn is_real_binary(path: &Path) -> bool {
-    if !path.is_file() || legacy::is_wrapper(path) {
+    if !path.is_file() {
         return false;
     }
     #[cfg(unix)]
@@ -442,102 +411,6 @@ fn login_shell_agy() -> Option<PathBuf> {
     let text = String::from_utf8(output.stdout).ok()?;
     let path = PathBuf::from(text.lines().rev().find(|l| !l.trim().is_empty())?.trim());
     path.is_absolute().then_some(path)
-}
-
-/// 撤掉 #8268 测试版装的启动器：`bin/agy` 包装脚本、带 Key 的 `env` 文件和各 shell
-/// 启动文件里的 PATH 片段。只动带标记的内容。返回是否清掉过 `env`（说明当时可能写过
-/// `modelProvider`，调用方要按新规则重写一次 settings.json）。
-pub(crate) fn remove_legacy_launcher() -> Result<bool, AppError> {
-    legacy::remove(&agy_dir(), &get_home_dir())
-}
-
-mod legacy {
-    use super::*;
-
-    pub(super) const WRAPPER_MARK: &str = "cc-switch-agy-wrapper";
-    pub(super) const PATH_MARK: &str = "cc-switch agy wrapper";
-
-    pub(super) fn remove(agy_dir: &Path, home: &Path) -> Result<bool, AppError> {
-        let bin_dir = agy_dir.join("bin");
-        let wrapper = bin_dir.join("agy");
-        if wrapper.is_file() && is_wrapper(&wrapper) {
-            fs::remove_file(&wrapper).map_err(|e| AppError::io(&wrapper, e))?;
-        }
-        // 目录为空才会删除；里面有别的东西时保持原样。
-        let _ = fs::remove_dir(&bin_dir);
-        let env = agy_dir.join("env");
-        let had_env = is_marked_env(&env);
-        if had_env {
-            fs::remove_file(&env).map_err(|e| AppError::io(&env, e))?;
-        }
-        let block = path_entry_block(&bin_dir);
-        for profile in shell_profiles(home) {
-            remove_path_entry(&profile, &block)?;
-        }
-        Ok(had_env)
-    }
-
-    pub(super) fn is_wrapper(path: &Path) -> bool {
-        head_contains(path, WRAPPER_MARK)
-    }
-
-    fn is_marked_env(path: &Path) -> bool {
-        path.is_file() && head_contains(path, &format!("# {PATH_MARK}"))
-    }
-
-    fn head_contains(path: &Path, mark: &str) -> bool {
-        use std::io::Read;
-        let mut prefix = [0; 256];
-        fs::File::open(path)
-            .and_then(|mut file| file.read(&mut prefix))
-            .map(|len| String::from_utf8_lossy(&prefix[..len]).contains(mark))
-            .unwrap_or(false)
-    }
-
-    /// 可能被写入过 PATH 片段的所有 shell 配置文件。
-    fn shell_profiles(home: &Path) -> Vec<PathBuf> {
-        [
-            ".zshenv",
-            ".zprofile",
-            ".zshrc",
-            ".zlogin",
-            ".bashrc",
-            ".bash_profile",
-            ".bash_login",
-            ".profile",
-        ]
-        .into_iter()
-        .map(|name| home.join(name))
-        .collect()
-    }
-
-    pub(super) fn path_entry_block(bin_dir: &Path) -> String {
-        format!(
-            "\n# {PATH_MARK}\nexport PATH={}:\"$PATH\"\n",
-            shell_quote(&bin_dir.to_string_lossy())
-        )
-    }
-
-    /// 只删我们那个目录对应的整块，其余字节不动；只剩这块的文件当初是我们建的，整个删掉。
-    fn remove_path_entry(profile: &Path, block: &str) -> Result<(), AppError> {
-        if !profile.is_file() {
-            return Ok(());
-        }
-        let existing = fs::read_to_string(profile).map_err(|e| AppError::io(profile, e))?;
-        if !existing.contains(block) {
-            return Ok(());
-        }
-        let next = existing.replace(block, "");
-        if next.is_empty() {
-            fs::remove_file(profile).map_err(|e| AppError::io(profile, e))
-        } else {
-            write_text_file(profile, &next)
-        }
-    }
-
-    fn shell_quote(value: &str) -> String {
-        format!("'{}'", value.replace('\'', r"'\''"))
-    }
 }
 
 #[cfg(test)]
@@ -876,103 +749,6 @@ mod integration_tests {
         assert!(agy_direct::is_official(&imported));
     }
 
-    /// 造一份 #8268 测试版留下的现场。
-    fn legacy_install(home: &Path) -> PathBuf {
-        let bin = agy_dir().join("bin");
-        fs::create_dir_all(&bin).unwrap();
-        fs::write(
-            bin.join("agy"),
-            format!("#!/bin/sh\n# {}\nexec agy \"$@\"\n", legacy::WRAPPER_MARK),
-        )
-        .unwrap();
-        fs::write(
-            agy_dir().join("env"),
-            format!("# {}\nGEMINI_API_KEY='fixture'\n", legacy::PATH_MARK),
-        )
-        .unwrap();
-        let block = legacy::path_entry_block(&bin);
-        fs::write(
-            home.join(".zshenv"),
-            format!("# user\nexport KEEP=1\n{block}"),
-        )
-        .unwrap();
-        fs::write(home.join(".zshrc"), &block).unwrap();
-        fs::write(
-            home.join(".profile"),
-            format!("# user without newline{block}"),
-        )
-        .unwrap();
-        bin
-    }
-
-    #[test]
-    #[serial]
-    fn legacy_launcher_cleanup_removes_only_marked_content() {
-        let home = HomeGuard::new();
-        let bin = legacy_install(home.path());
-        assert!(remove_legacy_launcher().unwrap());
-        assert!(!bin.exists());
-        assert!(!agy_dir().join("env").exists());
-        assert_eq!(
-            fs::read_to_string(home.path().join(".zshenv")).unwrap(),
-            "# user\nexport KEEP=1\n"
-        );
-        assert!(!home.path().join(".zshrc").exists(), "file we created");
-        assert_eq!(
-            fs::read_to_string(home.path().join(".profile")).unwrap(),
-            "# user without newline"
-        );
-        // Idempotent.
-        assert!(!remove_legacy_launcher().unwrap());
-    }
-
-    #[test]
-    #[serial]
-    fn legacy_cleanup_never_touches_unmanaged_files() {
-        let home = HomeGuard::new();
-        let bin = agy_dir().join("bin");
-        fs::create_dir_all(&bin).unwrap();
-        fs::write(bin.join("agy"), "#!/bin/sh\necho user script\n").unwrap();
-        fs::write(agy_dir().join("env"), "GEMINI_API_KEY=mine\n").unwrap();
-        let foreign = format!(
-            "export PATH=\"$HOME/x:$PATH\"\n# my own note about {}\n\n# {}\nexport PATH='/some/other/bin':\"$PATH\"\n",
-            legacy::PATH_MARK,
-            legacy::PATH_MARK
-        );
-        fs::write(home.path().join(".zshenv"), &foreign).unwrap();
-        assert!(!remove_legacy_launcher().unwrap());
-        assert!(bin.join("agy").exists());
-        assert!(agy_dir().join("env").exists());
-        assert_eq!(
-            fs::read_to_string(home.path().join(".zshenv")).unwrap(),
-            foreign
-        );
-    }
-
-    #[test]
-    #[serial]
-    fn legacy_migration_rewrites_settings_back_to_login_mode() {
-        let home = HomeGuard::new();
-        legacy_install(home.path());
-        fs::write(
-            settings_path(),
-            r#"{"modelProvider":"gemini","model":"Gemini 3.1 Pro (High)"}"#,
-        )
-        .unwrap();
-        let db = Database::memory().unwrap();
-        agy_direct::migrate_legacy_launcher(&db).unwrap();
-        let doc = read_json(&settings_path());
-        assert!(doc.get("modelProvider").is_none());
-        assert_eq!(doc["model"], "Gemini 3.1 Pro (High)");
-        assert!(!agy_dir().join("env").exists());
-
-        // Without a legacy install nothing is touched, not even a stray modelProvider.
-        let untouched = r#"{"modelProvider":"gemini"}"#;
-        fs::write(settings_path(), untouched).unwrap();
-        agy_direct::migrate_legacy_launcher(&db).unwrap();
-        assert_eq!(fs::read_to_string(settings_path()).unwrap(), untouched);
-    }
-
     fn fake_agy(dir: &Path) -> PathBuf {
         fs::create_dir_all(dir).unwrap();
         let path = dir.join("agy");
@@ -1007,23 +783,15 @@ mod integration_tests {
     }
 
     #[test]
-    fn resolver_skips_legacy_wrappers_and_non_executables() {
+    fn resolver_skips_non_executables() {
         let tmp = tempfile::tempdir().unwrap();
         let home = tmp.path().join("home");
-        let wrapper_dir = tmp.path().join("wrapper");
-        fs::create_dir_all(&wrapper_dir).unwrap();
-        fs::write(
-            wrapper_dir.join("agy"),
-            format!("#!/bin/sh\n# {}\n", legacy::WRAPPER_MARK),
-        )
-        .unwrap();
-        fs::set_permissions(wrapper_dir.join("agy"), fs::Permissions::from_mode(0o755)).unwrap();
         let plain = tmp.path().join("plain");
         fs::create_dir_all(&plain).unwrap();
         fs::write(plain.join("agy"), "binary").unwrap();
         let real_dir = tmp.path().join("real");
         let real = fake_agy(&real_dir);
-        let path = std::env::join_paths([&wrapper_dir, &plain, &real_dir]).unwrap();
+        let path = std::env::join_paths([&plain, &real_dir]).unwrap();
         assert_eq!(resolve_real_agy(&path, &home, &[], false), Some(real));
     }
 }

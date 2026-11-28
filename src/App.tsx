@@ -10,7 +10,6 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "@/lib/toast";
-import { invoke } from "@tauri-apps/api/core";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ExternalLink,
@@ -51,11 +50,6 @@ import {
   useTrayNavigation,
 } from "@/hooks/useTrayNavigation";
 import { useTauriEvent } from "@/hooks/useTauriEvent";
-import {
-  CODEX_UNIFY_MIGRATION_FINISHED_EVENT,
-  showCodexUnifyMigrationFinished,
-  type CodexUnifyMigrationFinished,
-} from "@/utils/codexHistorySplitHint";
 import { useLastValidValue } from "@/hooks/useLastValidValue";
 import {
   extractErrorMessage,
@@ -85,7 +79,6 @@ import {
 import { Sidebar } from "@/components/shell/Sidebar";
 import { useUpdate } from "@/contexts/UpdateContext";
 import { AutoUpdatePrompt } from "@/components/AutoUpdatePrompt";
-import { NewLayoutDialog } from "@/components/shell/NewLayoutDialog";
 import {
   AppPageHeader,
   WindowControlsContext,
@@ -240,7 +233,7 @@ function App() {
   const [currentView, setCurrentView] = useState<View>(readStoredView);
   const [settingsSection, setSettingsSection] =
     useState<SettingsSection>("general");
-  const [appConfigScrollTarget, setAppConfigScrollTarget] = useState<AppId>();
+  const [appConfigTarget, setAppConfigTarget] = useState<AppId>();
   // 进设置前停留的页面：设置目录里的「← 返回」回到这里
   const settingsReturnViewRef = useRef<View>("providers");
   const [openclawConfigTab, setOpenclawConfigTab] =
@@ -588,9 +581,6 @@ function App() {
 
   useTauriEvent("universal-provider-synced", async () => {
     await queryClient.invalidateQueries({ queryKey: ["providers"] });
-    await queryClient.invalidateQueries({
-      queryKey: ["profile-configuration"],
-    });
     await queryClient.invalidateQueries({ queryKey: ["profiles"] });
     try {
       await providersApi.updateTrayMenu();
@@ -600,10 +590,6 @@ function App() {
   });
 
   // 开启统一会话历史后的后台迁入跑完了：提示用户现在可以重启 Codex
-  useTauriEvent<CodexUnifyMigrationFinished>(
-    CODEX_UNIFY_MIGRATION_FINISHED_EVENT,
-    (payload) => showCodexUnifyMigrationFinished(payload, t),
-  );
 
   // 应用项目后刷新相关缓存（providers 由既有 provider-switched 监听承接；
   // proxy 状态由后端直接改 DB，不走 mutation，必须显式刷新）
@@ -863,52 +849,6 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const checkMigration = async () => {
-      try {
-        const migrated = await invoke<boolean>("get_migration_result");
-        if (migrated) {
-          toast.success(
-            t("migration.success", { defaultValue: "配置迁移成功" }),
-            { closeButton: true },
-          );
-        }
-      } catch (error) {
-        console.error("[App] Failed to check migration result:", error);
-      }
-    };
-
-    checkMigration();
-  }, [t]);
-
-  useEffect(() => {
-    const checkSkillsMigration = async () => {
-      try {
-        const result = await invoke<{ count: number; error?: string } | null>(
-          "get_skills_migration_result",
-        );
-        if (result?.error) {
-          toast.error(t("migration.skillsFailed"), {
-            description: t("migration.skillsFailedDescription"),
-            closeButton: true,
-          });
-          console.error("[App] Skills SSOT migration failed:", result.error);
-          return;
-        }
-        if (result && result.count > 0) {
-          toast.success(t("migration.skillsSuccess", { count: result.count }), {
-            closeButton: true,
-          });
-          await queryClient.invalidateQueries({ queryKey: ["skills"] });
-        }
-      } catch (error) {
-        console.error("[App] Failed to check skills migration result:", error);
-      }
-    };
-
-    checkSkillsMigration();
-  }, [t, queryClient]);
-
-  useEffect(() => {
     const checkEnvOnSwitch = async () => {
       try {
         if (
@@ -1026,7 +966,7 @@ function App() {
       settingsReturnViewRef.current = currentViewRef.current;
     }
     setSettingsSection(section);
-    setAppConfigScrollTarget(appConfigTarget);
+    setAppConfigTarget(appConfigTarget);
     setCurrentView("settings");
   };
 
@@ -2001,8 +1941,9 @@ function App() {
     if (currentView === "settings") {
       return (
         <SettingsPage
+          activeApp={activeApp}
           section={settingsSection}
-          appConfigScrollTarget={appConfigScrollTarget}
+          appConfigTarget={appConfigTarget}
           onImportSuccess={handleImportSuccess}
           onOpenApps={() => setCurrentView("apps")}
           onOpenApp={selectApp}
@@ -2030,7 +1971,7 @@ function App() {
           onSelectApp={selectApp}
           onSelectPage={openPageFromNav}
           onSelectSettingsSection={(section) => {
-            setAppConfigScrollTarget(undefined);
+            setAppConfigTarget(undefined);
             setSettingsSection(section);
           }}
           onExitSettings={exitSettings}
@@ -2178,7 +2119,6 @@ function App() {
 
       <DeepLinkImportDialog />
       <FirstRunNoticeDialog />
-      <NewLayoutDialog />
       <WhatsNewNotice />
     </WindowControlsContext.Provider>
   );

@@ -35,7 +35,7 @@ pub(crate) fn settings_file() -> LiveFile {
     LiveFile::shared(get_gemini_settings_path())
 }
 
-/// 官方卡（Google 登录）：分类是官方，或按名称、推广标记认出来的 Google 官方。
+/// 官方卡（Google 登录）：分类为官方，或明确标有 Google 官方预设。
 pub(crate) fn is_official(provider: &Provider) -> bool {
     provider.has_official_category() || is_google_official_gemini(provider)
 }

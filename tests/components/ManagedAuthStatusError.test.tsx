@@ -6,12 +6,13 @@ import { CopilotAuthSection } from "@/components/providers/forms/CopilotAuthSect
 const authMocks = vi.hoisted(() => ({
   refetchCodex: vi.fn(),
   refetchCopilot: vi.fn(),
+  storageError: null as string | null,
 }));
 
 const failedStatus = (refetchStatus: () => void) => ({
   accounts: [],
   defaultAccountId: null,
-  migrationError: null,
+  storageError: null,
   isStatusSuccess: false,
   isStatusError: true,
   hasAnyAccount: false,
@@ -39,7 +40,16 @@ vi.mock("@/components/providers/forms/hooks/useCodexOauth", () => ({
 }));
 
 vi.mock("@/components/providers/forms/hooks/useCopilotAuth", () => ({
-  useCopilotAuth: () => failedStatus(authMocks.refetchCopilot),
+  useCopilotAuth: () => ({
+    ...failedStatus(authMocks.refetchCopilot),
+    ...(authMocks.storageError
+      ? {
+          storageError: authMocks.storageError,
+          isStatusSuccess: true,
+          isStatusError: false,
+        }
+      : {}),
+  }),
 }));
 
 // 「N 个供应商在用」要读供应商列表（React Query）；这里不关心，给空
@@ -49,6 +59,7 @@ vi.mock("@/components/providers/forms/hooks/useManagedAccountUsers", () => ({
 
 describe("managed auth status failures", () => {
   beforeEach(() => {
+    authMocks.storageError = null;
     authMocks.refetchCodex.mockResolvedValue(undefined);
     authMocks.refetchCopilot.mockResolvedValue(undefined);
   });
@@ -89,6 +100,34 @@ describe("managed auth status failures", () => {
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
     expect(onAccountSelect).not.toHaveBeenCalled();
 
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(authMocks.refetchCopilot).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a bound Copilot account when the status response reports unreadable storage", () => {
+    authMocks.storageError = "Unsupported Copilot account format";
+    const onAccountSelect = vi.fn();
+    render(
+      <CopilotAuthSection
+        mode="select"
+        selectedAccountId="acct-existing"
+        onAccountSelect={onAccountSelect}
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(authMocks.storageError);
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(onAccountSelect).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(authMocks.refetchCopilot).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers storage retry in the auth center before adding an account", () => {
+    authMocks.storageError = "Unreadable account file";
+    render(<CopilotAuthSection mode="manage" />);
+    expect(screen.getByText(/Unreadable account file/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "添加账号" }),
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "重试" }));
     expect(authMocks.refetchCopilot).toHaveBeenCalledTimes(1);
   });

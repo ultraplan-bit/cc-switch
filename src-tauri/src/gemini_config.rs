@@ -1,4 +1,4 @@
-use crate::config::{get_home_dir, write_text_file};
+use crate::config::get_home_dir;
 use crate::error::AppError;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -90,103 +90,6 @@ pub fn read_gemini_env() -> Result<HashMap<String, String>, AppError> {
     let content = fs::read_to_string(&path).map_err(|e| AppError::io(&path, e))?;
 
     Ok(parse_env_file(&content))
-}
-
-/// 从 .env 原文中按「键名 + 值」双匹配删除若干行，其余内容逐字保留
-///
-/// 不走 `parse_env_file` → `serialize_env_file` 的往返：那对函数会丢掉注释、空行、
-/// 无法识别的行和重复定义，并按键名重排整个文件。全量投影时这无所谓（本来就要重写
-/// 整份），但用来做**定向**清理就等于顺手把用户手写的东西一起删了。
-///
-/// 按值匹配而非按键名：只清掉扩散出去的那一份，用户自己写的同名不同值的行保留。
-/// 同一个键有重复定义时也只删命中的那条，被它遮住的上一条会重新生效——这正是想要的
-/// 结果，因为遮住它的恰恰是泄漏值。
-///
-/// 返回 `None` 表示没有任何一行命中，调用方据此跳过写盘。
-pub fn remove_env_entries_preserving_layout(
-    content: &str,
-    doomed: &HashMap<String, String>,
-) -> Option<String> {
-    let mut removed = false;
-    let mut kept: Vec<&str> = Vec::new();
-
-    for line in content.split('\n') {
-        let trimmed = line.trim();
-        // 与 parse_env_file 同一口径：dotenv 把 `export KEY=VALUE` 读作 `KEY=VALUE`，
-        // 漏掉前缀会让带 export 的泄漏行永远匹配不上、清不掉
-        let entry = trimmed.strip_prefix("export ").unwrap_or(trimmed);
-        let hit = !trimmed.is_empty()
-            && !trimmed.starts_with('#')
-            && entry.split_once('=').is_some_and(|(key, value)| {
-                doomed.get(key.trim()).is_some_and(|doomed_value| {
-                    doomed_value == value.trim() || doomed_value == env_value(value)
-                })
-            });
-
-        if hit {
-            removed = true;
-        } else {
-            kept.push(line);
-        }
-    }
-
-    removed.then(|| kept.join("\n"))
-}
-
-/// 从 `~/.gemini/.env` 中定向删除「键=值」完全匹配的行，返回是否真的改了文件
-pub fn remove_gemini_env_entries(doomed: &HashMap<String, String>) -> Result<bool, AppError> {
-    let path = get_gemini_env_path();
-    if !path.exists() {
-        return Ok(false);
-    }
-
-    let content = fs::read_to_string(&path).map_err(|e| AppError::io(&path, e))?;
-    match remove_env_entries_preserving_layout(&content, doomed) {
-        Some(cleaned) => {
-            write_gemini_env_text_atomic(&cleaned)?;
-            Ok(true)
-        }
-        None => Ok(false),
-    }
-}
-
-/// 写入 Gemini .env 文件（原子操作，内容逐字落盘）
-///
-/// 与 `write_gemini_env_atomic` 共用目录/文件权限处理，区别只在于内容不经
-/// `serialize_env_file` 归一化——供保序的定向删除使用。
-pub fn write_gemini_env_text_atomic(content: &str) -> Result<(), AppError> {
-    let path = get_gemini_env_path();
-
-    // 确保目录存在
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| AppError::io(parent, e))?;
-
-        // 设置目录权限为 700（仅所有者可读写执行）
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(parent)
-                .map_err(|e| AppError::io(parent, e))?
-                .permissions();
-            perms.set_mode(0o700);
-            fs::set_permissions(parent, perms).map_err(|e| AppError::io(parent, e))?;
-        }
-    }
-
-    write_text_file(&path, content)?;
-
-    // 设置文件权限为 600（仅所有者可读写）
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&path)
-            .map_err(|e| AppError::io(&path, e))?
-            .permissions();
-        perms.set_mode(0o600);
-        fs::set_permissions(&path, perms).map_err(|e| AppError::io(&path, e))?;
-    }
-
-    Ok(())
 }
 
 /// 从 .env 格式转换为 Provider.settings_config (JSON Value)
@@ -536,47 +439,5 @@ KEY_WITH-DASH=value";
         });
 
         assert!(validate_gemini_settings(&settings).is_err());
-    }
-
-    #[test]
-    fn test_remove_env_entries_matches_export_prefixed_lines() {
-        // dotenv（与 parse_env_file 一致）把 `export KEY=VALUE` 读作 KEY=VALUE；
-        // 定向清理必须同样剥掉前缀，否则 export 形式的泄漏行永远清不掉
-        let content = "# comment\nexport GEMINI_API_KEY=leaked\nGEMINI_API_KEY=keep_me\n";
-        let mut doomed = HashMap::new();
-        doomed.insert("GEMINI_API_KEY".to_string(), "leaked".to_string());
-
-        let result = remove_env_entries_preserving_layout(content, &doomed).unwrap();
-
-        assert_eq!(
-            result, "# comment\nGEMINI_API_KEY=keep_me\n",
-            "export 行应命中并删除，无前缀的同名不同值行保留"
-        );
-    }
-
-    #[test]
-    fn test_remove_env_entries_export_without_hit_is_none() {
-        let content = "export GEMINI_API_KEY=other\n";
-        let mut doomed = HashMap::new();
-        doomed.insert("GEMINI_API_KEY".to_string(), "leaked".to_string());
-
-        assert!(remove_env_entries_preserving_layout(content, &doomed).is_none());
-    }
-
-    #[test]
-    fn test_remove_env_entries_matches_parsed_values_and_preserves_other_lines() {
-        let content = "# keep\r\nexport GEMINI_API_KEY=\"leaked\" # imported\r\nGEMINI_API_KEY='keep_me'\r\nEDITOR=vim";
-        let doomed = parse_env_file("GEMINI_API_KEY=\"leaked\" # imported\n");
-        assert_eq!(
-            remove_env_entries_preserving_layout(content, &doomed).as_deref(),
-            Some("# keep\r\nGEMINI_API_KEY='keep_me'\r\nEDITOR=vim")
-        );
-
-        // Older stored configurations can still contain the literal quotes.
-        let legacy = HashMap::from([("GEMINI_API_KEY".into(), "\"leaked\"".into())]);
-        assert_eq!(
-            remove_env_entries_preserving_layout("GEMINI_API_KEY=\"leaked\"\n", &legacy),
-            Some(String::new())
-        );
     }
 }

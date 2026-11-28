@@ -68,20 +68,12 @@ const GLOBAL_PAGES: GlobalPage[] = [
 export const VIEW_STORAGE_KEY = "cc-switch-last-view";
 export const APP_STORAGE_KEY = "cc-switch-last-app";
 
-/** 旧版视图名 → 新视图（OpenClaw 的三个配置页合成了一个）。 */
-const LEGACY_VIEWS: Record<string, View> = {
-  openclawEnv: "openclawConfig",
-  openclawTools: "openclawConfig",
-  openclawAgents: "openclawConfig",
-};
-
 export function isAppPage(view: View): view is AppPage {
   return (APP_PAGES as string[]).includes(view);
 }
 
 export function parseView(value: string | null | undefined): View | null {
   if (!value) return null;
-  if (value in LEGACY_VIEWS) return LEGACY_VIEWS[value];
   if (value === "settings") return "settings";
   if ((APP_PAGES as string[]).includes(value)) return value as AppPage;
   if ((GLOBAL_PAGES as string[]).includes(value)) return value as GlobalPage;

@@ -1,7 +1,6 @@
 //! ① 深链导入、首启导入写出的 DB 原始行。
 //!
-//! 重构不动数据库（不升 schema、不回填、不剥离存量行），降级后旧版直接读这些行，
-//! 所以新增供应商时写进 DB 的字节要保持原样。
+//! 验证当前支持的导入路径写出的供应商字段和通用配置片段。
 
 use cc_switch_lib::{
     import_default_config_test_hook, import_provider_from_deeplink, parse_deeplink_url, AppType,
@@ -134,8 +133,8 @@ fn deeplink_grokbuild_config_rows() {
 }
 
 /// 首启：先把 live 导入成 `default`，再 seed 官方预设（顺序同 `lib.rs` 的启动流程）。
-/// live 里供应商以外的部分进了通用配置片段，片段也一起锁。关键字段（模型名、推理档位
-/// 等）不进片段、留在 `default` 行里：片段已冻结，收进去就再也写不回 live。
+/// `default` 保留导入的原生配置；供应商以外的部分也可读取为通用配置片段，
+/// 不从供应商行里剥离。两种输出一起锁定。
 ///
 /// `settings_sort` 见 [`crate::golden::util::sort_objects`]：Gemini 的 `.env` 解析顺序不稳定。
 fn first_run_import(app: AppType, snapshot: &str, settings_sort: &[&str]) {

@@ -115,11 +115,6 @@ export function BackupStorageSection() {
                     <span className="truncate">
                       {itemText(location.id, "name")}
                     </span>
-                    {location.id.startsWith("legacy") && (
-                      <span className="shrink-0 rounded px-1 py-px text-[10px] font-normal text-fg-2 border border-border">
-                        {t("settings.backupStorage.legacy")}
-                      </span>
-                    )}
                   </div>
                   <div
                     className="font-mono text-xs text-fg-2 truncate"

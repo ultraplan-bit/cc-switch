@@ -18,29 +18,6 @@ const updateTrayMenuSafely = async () => {
   }
 };
 
-/** A failed/partial migration must keep legacy configuration editing available. */
-export const useProfileConfiguration = (
-  scope?: ProfileScope,
-  enabled = true,
-) => {
-  const queryClient = useQueryClient();
-  return useQuery({
-    queryKey: ["profile-configuration", scope],
-    networkMode: "always",
-    enabled: Boolean(scope) && enabled,
-    staleTime: Infinity,
-    retry: false,
-    queryFn: async () => {
-      const result = await profilesApi.migrateLegacy(scope!);
-      await queryClient.invalidateQueries({ queryKey: ["profiles"] });
-      if (result.warnings.length || result.ready === false) {
-        throw new Error(result.warnings.join("\n"));
-      }
-      return result;
-    },
-  });
-};
-
 export const useProfilesQuery = () => {
   return useQuery({
     networkMode: "always",

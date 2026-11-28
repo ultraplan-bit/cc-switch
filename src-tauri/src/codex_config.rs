@@ -493,50 +493,6 @@ pub fn record_codex_managed_oauth_live_auth(
     crate::config::write_json_file(&get_codex_managed_oauth_live_auth_marker_path(), &marker)
 }
 
-fn migrate_legacy_codex_managed_oauth_live_auth_marker(
-    auth: &Value,
-    managed_account_id: &str,
-    managed_id_token: Option<&str>,
-) -> Result<(), AppError> {
-    let marker_path = get_codex_managed_oauth_live_auth_marker_path();
-    if !marker_path.exists() {
-        return Ok(());
-    }
-    let marker: CodexManagedOAuthLiveAuthMarker = read_json_file(&marker_path)?;
-    if !matches!(marker.version, 1 | 2) || marker.account_id != managed_account_id {
-        return Ok(());
-    }
-
-    let auth_account_id = extract_codex_managed_oauth_account_id(auth);
-    let auth_user_identity = extract_codex_auth_user_identity(auth);
-    let managed_user_identity = managed_id_token.and_then(extract_codex_id_token_user_identity);
-    if auth_account_id.as_deref() != Some(managed_account_id)
-        || auth_user_identity.as_deref() != managed_user_identity.as_deref()
-        || managed_user_identity.is_none()
-    {
-        return Err(AppError::Message(format!(
-            "旧版 Codex OAuth 账号 {managed_account_id} 无法通过稳定用户身份确认磁盘凭据所有权；为避免覆盖或串用 auth.json，本次操作已取消，请在认证中心重新登录该账号"
-        )));
-    }
-
-    record_codex_managed_oauth_live_auth(auth, managed_account_id)
-}
-
-/// Before removing a manager record, make any legacy live-auth ownership
-/// provable with the manager's persisted user identity. Failure is surfaced so
-/// callers keep the manager record and marker instead of orphaning auth.json.
-pub(crate) fn prepare_codex_live_auth_for_managed_account_removal(
-    managed_account_id: &str,
-    managed_id_token: Option<&str>,
-) -> Result<(), AppError> {
-    let auth_path = get_codex_auth_path();
-    if !auth_path.exists() {
-        return Ok(());
-    }
-    let auth: Value = read_json_file(&auth_path)?;
-    migrate_legacy_codex_managed_oauth_live_auth_marker(&auth, managed_account_id, managed_id_token)
-}
-
 pub fn codex_auth_matches_recorded_managed_oauth(
     auth: &Value,
     account_id: &str,
@@ -568,21 +524,13 @@ pub fn codex_auth_matches_recorded_managed_oauth(
         }
     };
 
-    // v1/v2 markers do not carry a stable user identity. Since multiple users
-    // can share one workspace, those markers cannot safely authorize adopting
-    // or deleting credentials. The next explicit activation replaces them
-    // with a v3 marker.
-    Ok(marker.account_id == account_id
-        && match marker.version {
-            3 => {
-                marker.chatgpt_account_id.as_deref() == Some(auth_account_id.as_str())
-                    && marker
-                        .user_identity
-                        .as_deref()
-                        .is_some_and(|identity| auth_user_identity.as_deref() == Some(identity))
-            }
-            _ => false,
-        })
+    Ok(marker.version == 3
+        && marker.account_id == account_id
+        && marker.chatgpt_account_id.as_deref() == Some(auth_account_id.as_str())
+        && marker
+            .user_identity
+            .as_deref()
+            .is_some_and(|identity| auth_user_identity.as_deref() == Some(identity)))
 }
 
 /// Verify that a proxied Codex request still uses the exact live access token
@@ -757,13 +705,9 @@ pub fn read_codex_live_auth_refresh_for_account(
     Some((refresh_token, id_token, last_refresh_ms))
 }
 
-/// Read a managed live credential after safely upgrading a legacy marker.
-/// v1/v2 markers only identify a workspace, so the manager's persisted
-/// id_token must prove the live user's identity before the marker can become
-/// authoritative again.
+/// Read a managed live credential only when the current ownership marker matches.
 pub(crate) fn read_codex_live_auth_refresh_for_managed_account(
     account_id: &str,
-    managed_id_token: Option<&str>,
 ) -> Result<Option<CodexManagedLiveRefresh>, AppError> {
     let account_id = account_id.trim();
     if account_id.is_empty() {
@@ -774,7 +718,6 @@ pub(crate) fn read_codex_live_auth_refresh_for_managed_account(
         return Ok(None);
     }
     let auth: Value = read_json_file(&auth_path)?;
-    migrate_legacy_codex_managed_oauth_live_auth_marker(&auth, account_id, managed_id_token)?;
     if !codex_auth_matches_recorded_managed_oauth(&auth, account_id)? {
         return Ok(None);
     }

@@ -12,9 +12,8 @@
 //! ```text
 //! database/
 //! ├── mod.rs        - Database 结构体 + 初始化
-//! ├── schema.rs     - 表结构定义 + Schema 迁移
+//! ├── schema.rs     - 表结构定义 + 格式校验
 //! ├── backup.rs     - SQL 导入导出 + 快照备份
-//! ├── migration.rs  - JSON → SQLite 数据迁移
 //! └── dao/          - 数据访问对象
 //!     ├── providers.rs
 //!     ├── mcp.rs
@@ -25,7 +24,6 @@
 
 pub(crate) mod backup;
 mod dao;
-mod migration;
 mod schema;
 
 #[cfg(test)]
@@ -34,8 +32,7 @@ mod tests;
 // DAO 类型导出供外部使用
 pub use dao::custom_icons::{CustomIconEntry, CUSTOM_ICONS_KEY};
 pub(crate) use dao::providers_seed::{
-    is_official_seed_id, CLAUDE_DESKTOP_OFFICIAL_PROVIDER_ID, CODEX_OFFICIAL_PROVIDER_ID,
-    GROKBUILD_OFFICIAL_PROVIDER_ID,
+    CLAUDE_DESKTOP_OFFICIAL_PROVIDER_ID, CODEX_OFFICIAL_PROVIDER_ID, GROKBUILD_OFFICIAL_PROVIDER_ID,
 };
 pub(crate) use dao::proxy::{PRICING_SOURCE_REQUEST, PRICING_SOURCE_RESPONSE};
 pub use dao::FailoverQueueItem;
@@ -51,8 +48,8 @@ use std::sync::{Mutex, MutexGuard};
 // DAO 方法通过 impl Database 提供，无需额外导出
 
 /// 当前 Schema 版本号
-/// 每次修改表结构时递增，并在 schema.rs 中添加相应的迁移逻辑
-pub(crate) const SCHEMA_VERSION: i32 = 28;
+/// 当前格式唯一受支持；格式变化递增版本，不提供旧版本升级路径。
+pub(crate) const SCHEMA_VERSION: i32 = 29;
 
 /// 安全地序列化 JSON，避免 unwrap panic
 pub(crate) fn to_json_string<T: Serialize>(value: &T) -> Result<String, AppError> {
@@ -155,6 +152,10 @@ impl Database {
 
         let conn = Connection::open(&db_path).map_err(|e| AppError::Database(e.to_string()))?;
 
+        if db_exists && Self::has_user_tables(&conn)? {
+            Self::validate_schema_version_on_conn(&conn)?;
+        }
+
         // 数据库包含供应商 API Key 与账号凭据，在 Unix 上始终收紧为仅属主可读写（0600）。
         #[cfg(unix)]
         {
@@ -186,22 +187,6 @@ impl Database {
         };
         db.create_tables()?;
 
-        // Pre-migration backup: only when upgrading from an existing database
-        {
-            let conn = lock_conn!(db.conn);
-            let version = Self::get_user_version(&conn)?;
-            drop(conn);
-            if version > 0 && version < SCHEMA_VERSION {
-                log::info!(
-                    "Creating pre-migration database backup (v{version} → v{SCHEMA_VERSION})"
-                );
-                if let Err(e) = db.backup_database_file() {
-                    log::warn!("Pre-migration backup failed, continuing migration: {e}");
-                }
-            }
-        }
-
-        db.apply_schema_migrations()?;
         if let Err(e) = db.ensure_incremental_auto_vacuum() {
             log::warn!("Failed to ensure incremental auto-vacuum: {e}");
         }

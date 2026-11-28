@@ -275,9 +275,7 @@ impl Database {
             .execute("PRAGMA auto_vacuum = INCREMENTAL;", [])
             .map_err(|e| AppError::Database(format!("设置暂存库 auto_vacuum 失败: {e}")))?;
 
-        // authorizer 与 progress_handler 只覆盖外部 SQL，执行完立刻摘掉：紧随其后的
-        // `create_tables_on_conn` / `apply_schema_migrations_on_conn` 是本程序自己的
-        // schema 维护语句，不属于需要设防的输入，没必要让它们也过一遍守卫。
+        // authorizer 与 progress_handler 只覆盖外部 SQL，执行完立刻摘掉。
         let deadline = Instant::now().checked_add(execution_timeout);
         temp_conn.authorizer(Some(import_authorizer));
         if let Some(deadline) = deadline {
@@ -320,13 +318,9 @@ impl Database {
             ));
         }
 
-        // Validate the schema produced by the input itself before migrations
-        // can create missing tables and accidentally make a truncated file look valid.
+        // Validate the imported current-format database before touching live data.
         Self::validate_imported_schema(&temp_conn)?;
 
-        // 补齐缺失表/索引并执行迁移
-        Self::create_tables_on_conn(&temp_conn)?;
-        Self::apply_schema_migrations_on_conn(&temp_conn)?;
         // 导入和同步不经过保存时的校验：坏的自定义图标在这里清掉，不带进主库
         crate::services::provider::icon::strip_invalid_custom_icons(&temp_conn)?;
         on_staging_ready()?;
@@ -870,10 +864,7 @@ impl Database {
 
     /// Validate that the external SQL created a recognizable CC Switch schema.
     ///
-    /// These tables all existed in the oldest supported SQL-export schema
-    /// (v3.8.x). Checking before migrations keeps header-only/truncated files
-    /// from being completed by `create_tables_on_conn`, while allowing a valid
-    /// backup whose user-owned configuration tables happen to contain no rows.
+    /// Only the current schema is accepted, including empty configuration tables.
     fn validate_imported_schema(conn: &Connection) -> Result<(), AppError> {
         const REQUIRED_TABLES: &[&str] = &[
             "providers",
@@ -883,6 +874,16 @@ impl Database {
             "skills",
             "skill_repos",
             "settings",
+            "proxy_config",
+            "provider_health",
+            "proxy_request_logs",
+            "model_pricing",
+            "stream_check_logs",
+            "proxy_live_backup",
+            "usage_daily_rollups",
+            "session_log_sync",
+            "session_usage_dedup",
+            "profiles",
         ];
 
         let mut missing = Vec::new();
@@ -899,6 +900,8 @@ impl Database {
                 format!("The imported SQL is missing required CC Switch tables: {names}"),
             ));
         }
+
+        Self::validate_schema_version_on_conn(conn)?;
 
         // 纵深防御：CC Switch 生产 schema 不含 trigger/view，即便 authorizer 被绕过也不允许落盘
         let disallowed_objects: i64 = conn
@@ -983,8 +986,7 @@ impl Database {
             // 每行一条 INSERT 是导入慢的根源：恢复侧要为每条语句单独
             // 解析/准备/收尾，2 万行实测 21 秒（内存库上一样慢，说明是
             // 纯 CPU 而非 I/O）。合并成多行 VALUES 后同样数据 <100ms。
-            // SQLite 从 3.7.11（2012）起支持多行 VALUES，且导入侧是通用
-            // execute_batch，新旧两种格式都能读——向后兼容无忧。
+            // 使用 SQLite 多行 VALUES 减少导入时的语句解析开销。
             let quoted_table = Self::quote_identifier(&table);
             let quoted_columns = columns
                 .iter()
@@ -1272,7 +1274,7 @@ impl Database {
         .map_err(|e| AppError::Database(e.to_string()))?;
 
         // Stage and fully validate the selected file before touching the live
-        // connection. A corrupt/future-schema backup or failed migration must
+        // connection. A corrupt or unsupported-schema backup must
         // leave the current database unchanged.
         let temp_file = NamedTempFile::new().map_err(|e| AppError::IoContext {
             context: "创建数据库恢复暂存文件失败".to_string(),
@@ -1290,8 +1292,7 @@ impl Database {
         Self::validate_sqlite_integrity(&staging_conn)?;
         Self::validate_imported_schema(&staging_conn)?;
         Self::ensure_incremental_auto_vacuum_on_conn(&staging_conn)?;
-        Self::create_tables_on_conn(&staging_conn)?;
-        Self::apply_schema_migrations_on_conn(&staging_conn)?;
+
         Self::ensure_model_pricing_seeded_on_conn(&staging_conn)?;
         Self::validate_sqlite_integrity(&staging_conn)?;
 

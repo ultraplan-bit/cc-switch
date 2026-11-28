@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use toml_edit::{DocumentMut, Item};
 
-use super::{profile_model_keys, AppType, ProfilePayload, ProfileScope};
+use super::{profile_model_keys, AppType, ProfilePayload};
 use crate::error::AppError;
 use crate::live::floor;
 use crate::live::patch::{json::JsonPatch, toml::TomlPatch, KeyPath, LivePatch, LiveWriteError};
@@ -367,7 +367,7 @@ pub(crate) fn from_provider(app: &AppType, settings: &Value) -> Result<String, A
 }
 
 /// Only behavior that the original provider projector actually writes. Shared
-/// inactive fields in a legacy row are not its property and must not be removed.
+/// inactive fields in a provider row are not its property and must not be removed.
 pub(crate) fn projected_provider_behavior(
     app: &AppType,
     settings: &Value,
@@ -531,7 +531,7 @@ pub(crate) fn apply_global(
     let desired = NativeDocument::parse(app, &text)?.entries()?;
     let mut previous = NativeDocument::parse(app, &prior)?.entries()?;
     // A first application has no ledger, but switching the referenced provider
-    // just projected its legacy defaults. Honor explicit Profile removals of
+    // just projected its provider defaults. Honor explicit Profile removals of
     // those defaults without treating inactive/shared row data as owned.
     if let Some(provider) = current_provider {
         for (key, entry) in projected_provider_behavior(app, &provider.settings_config)? {
@@ -576,84 +576,11 @@ pub(crate) fn apply_global(
     Ok(())
 }
 
-pub(crate) fn provider_payload(
-    state: &crate::store::AppState,
-    scope: ProfileScope,
-    provider: &crate::provider::Provider,
-) -> Result<ProfilePayload, AppError> {
-    let app = &scope.apps()[0];
-    let mut payload = ProfilePayload::default();
-    *payload.providers.get_mut(app).unwrap() = Some(provider.id.clone());
-    *payload.native_config.get_mut(app).unwrap() =
-        Some(from_provider(app, &provider.settings_config)?);
-    if app == &AppType::Claude {
-        let env = provider.settings_config.get("env");
-        payload.models.claude = Some(
-            env.and_then(|env| env.get("ANTHROPIC_MODEL"))
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .into(),
-        );
-        payload.model_settings.claude = Some(
-            profile_model_keys(app)
-                .iter()
-                .filter_map(|key| {
-                    env.and_then(|env| env.get(*key))
-                        .and_then(Value::as_str)
-                        .map(|value| ((*key).to_string(), value.to_string()))
-                })
-                .collect(),
-        );
-    } else if app == &AppType::Codex {
-        let text = provider
-            .settings_config
-            .get("config")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
-        let document = text
-            .parse::<DocumentMut>()
-            .map_err(|error| AppError::Config(error.to_string()))?;
-        payload.models.codex = Some(
-            document
-                .get("model")
-                .and_then(Item::as_str)
-                .unwrap_or_default()
-                .into(),
-        );
-        payload.model_settings.codex = Some(
-            profile_model_keys(app)
-                .iter()
-                .filter_map(|key| {
-                    let value = if let Some((section, field)) = key.split_once('.') {
-                        document
-                            .get(section)
-                            .and_then(Item::as_table_like)
-                            .and_then(|table| table.get(field))
-                    } else {
-                        document.get(key)
-                    };
-                    value
-                        .and_then(|value| {
-                            value
-                                .as_str()
-                                .map(str::to_string)
-                                .or_else(|| value.as_integer().map(|value| value.to_string()))
-                        })
-                        .map(|value| ((*key).to_string(), value))
-                })
-                .collect(),
-        );
-        payload.model_catalog.codex = super::provider_model_catalog(state, app, &provider.id)?;
-    }
-    // MCP, Skills and instructions stay None: a connection's default Profile
-    // follows global resources instead of freezing a selection.
-    Ok(payload)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::database::Database;
+    use crate::services::profile::ProfileScope;
     use crate::store::AppState;
     use crate::test_support::TempUserHome;
     use serial_test::serial;
@@ -683,7 +610,7 @@ mod tests {
     }
 
     #[test]
-    fn desktop_provider_native_migration_never_copies_environment_credentials_or_mapping_metadata()
+    fn desktop_provider_native_extraction_never_copies_environment_credentials_or_mapping_metadata()
     {
         let source = serde_json::json!({"env":{"ANTHROPIC_AUTH_TOKEN":"private","ANTHROPIC_BASE_URL":"https://private.test","ANTHROPIC_MODEL":"model"},"modelMapping":{"x":"y"},"disableDeploymentModeChooser":true,"coworkEgressAllowedHosts":["example.test"]});
         let text = from_provider(&AppType::ClaudeDesktop, &source).unwrap();

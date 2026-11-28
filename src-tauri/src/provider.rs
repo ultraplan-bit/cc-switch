@@ -242,10 +242,9 @@ impl Provider {
                 (base_url, api_key)
             }
             // Hermes (config.yaml) flattens credentials at the top level, snake_case.
-            // Copilot CLI 自带模型卡：provider 节点（旧版环境变量形状兜底）。
+            // Copilot CLI 自带模型卡：provider 节点。
             AppType::Copilot => {
-                let converted = crate::copilot_config::convert_legacy_settings(settings);
-                let provider = converted.as_ref().unwrap_or(settings).get("provider");
+                let provider = settings.get("provider");
                 (
                     str_at(provider.and_then(|p| p.get("baseUrl"))),
                     first_non_empty(provider, &["apiKey", "bearerToken"]),
@@ -548,12 +547,6 @@ pub struct ProviderMeta {
     /// 自定义端点列表（按 URL 去重存储）
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub custom_endpoints: HashMap<String, crate::settings::CustomEndpoint>,
-    /// 是否在写入 live 时应用通用配置片段
-    #[serde(
-        rename = "commonConfigEnabled",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub common_config_enabled: Option<bool>,
     /// Claude Desktop 3P 写入模式：direct（直连）或 proxy（预留）
     #[serde(rename = "claudeDesktopMode", skip_serializing_if = "Option::is_none")]
     pub claude_desktop_mode: Option<ClaudeDesktopMode>,
@@ -579,16 +572,9 @@ pub struct ProviderMeta {
         skip_serializing_if = "Option::is_none"
     )]
     pub partner_promotion_key: Option<String>,
-    /// Explicit opt-in multiplier for future proxy cost estimates. Legacy costMultiplier remains inert.
+    /// Explicit opt-in multiplier for future proxy cost estimates.
     #[serde(rename = "billingMultiplier", skip_serializing_if = "Option::is_none")]
     pub billing_multiplier: Option<String>,
-    /// 已停用：供应商级成本倍率。新版不再读取，只为与旧版设备同步时原样往返保留
-    #[serde(rename = "costMultiplier", skip_serializing_if = "Option::is_none")]
-    pub cost_multiplier: Option<String>,
-    /// 已停用：供应商级计费模式覆盖（response/request）。新版只读全局设置，
-    /// 该字段只为与旧版设备同步时原样往返保留
-    #[serde(rename = "pricingModelSource", skip_serializing_if = "Option::is_none")]
-    pub pricing_model_source: Option<String>,
     /// 每日消费限额（USD）
     #[serde(rename = "limitDailyUsd", skip_serializing_if = "Option::is_none")]
     pub limit_daily_usd: Option<String>,
@@ -609,8 +595,6 @@ pub struct ProviderMeta {
     )]
     pub codex_copilot_api_format: Option<String>,
     /// 通用认证绑定（provider_config / managed_account）
-    ///
-    /// 新代码应只写入该字段；githubAccountId 仅保留兼容读取。
     #[serde(rename = "authBinding", skip_serializing_if = "Option::is_none")]
     pub auth_binding: Option<AuthBinding>,
     /// Claude 认证字段名（"ANTHROPIC_AUTH_TOKEN" 或 "ANTHROPIC_API_KEY"）
@@ -687,10 +671,6 @@ pub struct ProviderMeta {
     /// - "github_copilot": GitHub Copilot 供应商
     #[serde(rename = "providerType", skip_serializing_if = "Option::is_none")]
     pub provider_type: Option<String>,
-    /// GitHub Copilot 关联账号 ID（仅 github_copilot 供应商使用）
-    /// 用于多账号支持，关联到特定的 GitHub 账号
-    #[serde(rename = "githubAccountId", skip_serializing_if = "Option::is_none")]
-    pub github_account_id: Option<String>,
     /// Stack 模式下这家 Claude Code 供应商发布的模型（`mode::stack`）。`None` 是没配列表，
     /// 按模型映射（`ANTHROPIC_MODEL` 和各档）发布；空列表是用户清空了，什么都不发布。
     #[serde(
@@ -752,8 +732,6 @@ impl ProviderMeta {
     }
 
     /// 解析指定托管认证供应商绑定的账号 ID。
-    ///
-    /// 新版优先读取 authBinding，旧版继续兼容 githubAccountId。
     pub fn managed_account_id_for(&self, auth_provider: &str) -> Option<String> {
         if let Some(binding) = self.auth_binding.as_ref() {
             if binding.source == AuthBindingSource::ManagedAccount
@@ -761,10 +739,6 @@ impl ProviderMeta {
             {
                 return binding.account_id.clone();
             }
-        }
-
-        if auth_provider == "github_copilot" {
-            return self.github_account_id.clone();
         }
 
         None
@@ -1208,32 +1182,6 @@ mod tests {
     }
 
     #[test]
-    fn provider_meta_serializes_pricing_model_source() {
-        let meta = ProviderMeta {
-            pricing_model_source: Some("response".to_string()),
-            ..ProviderMeta::default()
-        };
-
-        let value = serde_json::to_value(&meta).expect("serialize ProviderMeta");
-
-        assert_eq!(
-            value
-                .get("pricingModelSource")
-                .and_then(|item| item.as_str()),
-            Some("response")
-        );
-        assert!(value.get("pricing_model_source").is_none());
-    }
-
-    #[test]
-    fn provider_meta_omits_pricing_model_source_when_none() {
-        let meta = ProviderMeta::default();
-        let value = serde_json::to_value(&meta).expect("serialize ProviderMeta");
-
-        assert!(value.get("pricingModelSource").is_none());
-    }
-
-    #[test]
     fn provider_meta_roundtrips_max_output_tokens() {
         let meta = ProviderMeta {
             max_output_tokens: Some(64000),
@@ -1381,8 +1329,8 @@ mod tests {
             }),
             None,
         );
-        assert!(copilot.is_github_copilot());
-        assert!(copilot.uses_managed_account_auth());
+        assert!(!copilot.is_github_copilot());
+        assert!(!copilot.uses_managed_account_auth());
 
         let mut codex = Provider::with_id(
             "codex".to_string(),

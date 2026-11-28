@@ -36,7 +36,6 @@ import { codexHistorySplitToastExtras } from "@/utils/codexHistorySplitHint";
 import { appHas } from "@/config/appSpecs";
 
 /** Prefix the backend puts on notes from applying a connection's profile after a switch. */
-const PROFILE_FOLLOW_CODE = "profile_follow:";
 
 /**
  * Hook for managing provider actions (add, update, delete, switch)
@@ -229,9 +228,7 @@ export function useProviderActions(
         const result = await switchProviderMutation.mutateAsync(provider.id);
         await syncClaudePlugin(provider);
 
-        // Surface switch warnings by code — a generic "backfill failed"
-        // message for an auth-cleanup warning would point the user at the
-        // wrong problem entirely.
+        // Surface specific warning codes and preserve other reported details.
         if (result?.warnings?.length) {
           const coded = [
             {
@@ -254,29 +251,14 @@ export function useProviderActions(
               toast.warning(message, { duration: 6000 });
             }
           }
-          // Switching a connection also applies its profile; these notes are
-          // about that profile, not about the provider that was left.
-          const profileNotes = result.warnings
-            .filter((warning) => warning.startsWith(PROFILE_FOLLOW_CODE))
-            .map((warning) => warning.slice(PROFILE_FOLLOW_CODE.length));
-          if (profileNotes.length) {
-            toast.warning(
-              t("profiles.switchFollowWarning", {
-                details: profileNotes.join("\n"),
-              }),
-              { duration: 10000, closeButton: true },
-            );
-          }
-          const hasOtherWarnings = result.warnings.some(
-            (warning) =>
-              !warning.startsWith(PROFILE_FOLLOW_CODE) &&
-              !coded.some(({ code }) => warning.startsWith(code)),
+          const otherWarnings = result.warnings.filter(
+            (warning) => !coded.some(({ code }) => warning.startsWith(code)),
           );
-          if (hasOtherWarnings) {
+          if (otherWarnings.length) {
             toast.warning(
-              t("notifications.backfillWarning", {
-                defaultValue:
-                  "切换成功，但旧供应商配置回填失败，您手动修改的配置可能未保存",
+              t("notifications.switchWarnings", {
+                defaultValue: "切换已完成，请查看提示：\n{{details}}",
+                details: otherWarnings.join("\n"),
               }),
               { duration: 5000 },
             );

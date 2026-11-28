@@ -3008,34 +3008,6 @@ fn compute_dir_hash_ignores_python_bytecode() {
     );
 }
 
-/// 上游仓库自带字节码时，#7772 修复前保存的缓存哈希按旧算法计入了
-/// `.pyc`；检查更新要能认出它，而不是对未变化的 Skill 误报「有更新」。
-#[test]
-fn legacy_cached_hash_with_upstream_bytecode_is_recognized() {
-    let dir = tempdir().expect("tempdir");
-    let remote = dir.path().join("remote");
-    fs::create_dir_all(remote.join("__pycache__")).expect("create remote dir");
-    fs::write(remote.join("SKILL.md"), "---\nname: x\n---\n").expect("write skill");
-    fs::write(remote.join("helper.py"), "def f():\n    return 1\n").expect("write helper");
-    fs::write(remote.join("helper.pyc"), b"\x00 shipped pyc \x00").expect("write pyc");
-    fs::write(
-        remote.join("__pycache__").join("helper.cpython-311.pyc"),
-        b"\x00 shipped nested pyc \x00",
-    )
-    .expect("write nested pyc");
-
-    let legacy_cached = SkillService::compute_legacy_dir_hash(&remote).expect("legacy hash");
-    let new_remote = SkillService::compute_dir_hash(&remote).expect("new hash");
-    assert_ne!(legacy_cached, new_remote, "上游带字节码时新旧算法结果不同");
-    assert!(SkillService::is_legacy_hash_of(&legacy_cached, &remote));
-
-    // 上游真的改了源文件：旧缓存对不上新内容，仍要报更新。
-    let changed = dir.path().join("changed");
-    SkillService::copy_dir_recursive(&remote, &changed).expect("copy remote");
-    fs::write(changed.join("helper.py"), "def f():\n    return 2\n").expect("edit helper");
-    assert!(!SkillService::is_legacy_hash_of(&legacy_cached, &changed));
-}
-
 #[test]
 #[serial_test::serial]
 fn restore_from_backup_rejects_traversal_directory_in_metadata() {

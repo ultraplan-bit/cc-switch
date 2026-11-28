@@ -82,7 +82,7 @@
     "disableAutoModeServer": "Otomatik Mod Sunucu Kontrollerini Devre Dışı Bırak",
     "disableAutoModeServerHelp": "Ağ geçitleri sunucu tarafındaki kontrolü çalıştıramaz. Bu nedenle otomatik mod, her oturumda bir kez “not eligible” bildirimiyle duraklar ve Enter’a bastığınızda yerel kontrole geçer. İşaretlendiğinde bildirim göstermeden doğrudan yerel kontrolü kullanır. Resmî uç noktalarda bu seçeneği işaretlemeyin.",
     "keyFieldsHint": "Uç nokta, anahtar, modeller, bağlam penceresi ve uyumluluk anahtarları sağlayıcıyı takip eder; geri kalan her şey genel bir Claude Code ayarıdır ve kaydedildiğinde her sağlayıcı için geçerlidir.",
-    "inactiveFieldsHint": "Bu sağlayıcıya daha eski bir sürümle kaydedilmiş; geçiş artık bunları uygulamamaktadır. Yukarıya eklemek için birini tıklayın; kaydettikten sonra her sağlayıcı için geçerlidir.",
+    "inactiveFieldsHint": "İçe aktarılan bu alanlar bağlantı değiştirirken uygulanmaz. Gerekli alanları yukarıdaki ayarlara ekleyin.",
     "addToGlobalSettings": "Genel ayarlara ekle"
   },
   "header": {
@@ -385,7 +385,6 @@
     "openclawDefaultModelSetFailed": "Varsayılan model ayarlanamadı",
     "openclawNoModels": "Yapılandırılmış model yok",
     "openclawModelNotFound": "Seçilen model artık mevcut değil. Yenileyin ve tekrar deneyin.",
-    "backfillWarning": "Başarılı bir şekilde geçiş yapıldı ancak değişiklikler önceki sağlayıcıya kaydedilemedi",
     "codexAuthCleanupFailed": "Başarılı bir şekilde geçiş yapıldı ancak auth.json kaldırılamadı; resmi oturum açma kimlik bilgileri hâlâ diskte; bunları kaldırmak için auth.json'u Codex yapılandırma dizininden silin",
     "omoVariantCleanupFailed": "Geçiş başarılı, ancak diğer OMO varyantının (OMO / OMO Slim) yapılandırma dosyası silinemedi, bu yüzden OpenCode ikisini birden yükleyebilir; dosyayı OpenCode yapılandırma dizininden elle silin",
     "windowControlFailed": "Pencere kontrolü başarısız oldu: {{error}}",
@@ -395,10 +394,9 @@
     "codexHistorySplit": {
       "hint": "{{previous}} altındaki {{count}} oturum artık salt okunur",
       "officialBucket": "resmî abonelik",
-      "thirdPartyBucket": "üçüncü taraf sağlayıcılar",
-      "migrationFinished": "{{count}} eski oturum taşındı. Devam etmek için Codex'i yeniden başlatın.",
-      "migrationFailed": "Eski oturumlar taşınamadı: {{error}}. CC Switch bir sonraki açılışta yeniden deneyecek."
-    }
+      "thirdPartyBucket": "üçüncü taraf sağlayıcılar"
+    },
+    "switchWarnings": "Geçiş tamamlandı. Notlar:\n{{details}}"
   },
   "confirm": {
     "deleteProvider": "Sağlayıcıyı Sil",
@@ -415,18 +413,6 @@
       "title": "Yedek Sağlayıcıya Geçişyi Etkinleştir",
       "message": "Yedek sağlayıcıya geçiş gelişmiş bir özelliktir. Lütfen etkinleştirmeden önce nasıl çalıştığını anladığınızdan emin olun.\n\nÖncelikle yedek sağlayıcıya geçiş kuyruğunda sağlayıcı önceliklerini yapılandırmanızı öneririz.",
       "confirm": "Anladım, etkinleştir"
-    },
-    "unifyCodexHistory": {
-      "title": "Birleşik Codex oturum geçmişi",
-      "message": "Etkinleştirildiğinde resmî abonelik paylaşılan \"custom\" sağlayıcı kimliğiyle çalışır ve resmî ile üçüncü taraf oturumlar tek grupta toplanır: yeni Codex her ikisine de devam edebilir, CLI'nin devam listesi de bunları birlikte gösterir.\n\nMevcut resmî oturumlarınızı da taşıyabilirsiniz; taşırsanız CC Switch her açılışta geride kalan resmî oturumları da taşır (önce ~/.cc-switch/backups konumuna yedeklenir; bu ayarı kapatırken geri yükleyebilirsiniz). Taşımadığınız oturumlar yeni Codex'te salt okunur kalır. Taşıma bittikten sonra Codex'i yeniden başlatın.\n\nNot: Diğer arka uç encrypted_content içindeki akıl yürütme verilerinin şifresini çözemediği için eski bir oturuma farklı bir sağlayıcıyla devam etmek başarısız olabilir.",
-      "migrateExisting": "Ayrıca mevcut resmi oturum geçmişini taşıyın",
-      "confirm": "Anladım, etkinleştir"
-    },
-    "unifyCodexHistoryOff": {
-      "title": "Birleşik oturum geçmişini kapat",
-      "message": "Kapatıldığında resmî ve üçüncü taraf oturumlar yeniden iki gruba ayrılır: yeni Codex yalnızca geçerli sağlayıcının grubuna devam edebilir, diğer grup salt okunur olur. Bu açıkken oluşturulan oturumlar birbirinden ayrılamaz, bu yüzden üçüncü taraf grubunda kalırlar.",
-      "restoreBackup": "Taşınan resmî oturumları resmî gruba geri yükleyin (yedekten tam geri yükleme)",
-      "confirm": "Kapat"
     },
     "usage": {
       "title": "Kullanım Sorgusunu Yapılandır",
@@ -633,7 +619,6 @@
       "delete": "Sil",
       "deleting": "Siliniyor...",
       "managedAbove": "Yukarıdaki listede yönetiliyor",
-      "legacy": "Eski",
       "loadFailed": "Yedekleme kullanımı okunamadı",
       "revealFailed": "Klasör açılamadı",
       "deleteConfirmTitle": "\"{{name}}\" silinsin mi?",
@@ -649,18 +634,6 @@
           "name": "Beceri kaldırma yedeklemeleri",
           "hint": "Beceriler kaldırılırken saklanan kopyalar, Beceriler sayfasından geri yüklenebilir. Silme işleminden sonra kaldırılan beceriler artık geri yüklenemez."
         },
-        "codexHistoryUnify": {
-          "name": "Codex oturumu geçiş yedeklemelerini birleştirir",
-          "hint": "\"Birleşik Codex oturum geçmişi\" mevcut oturumları taşıdığında oturum kopyaları tutuldu. Bu anahtarı kapatırken \"Yedeklemeyi geri yükleme\" onlara bağlıdır; silindikten sonra taşınan resmi oturumlar artık orijinal gruplarına geri taşınamaz."
-        },
-        "codexHistoryUnifyRestore": {
-          "name": "Codex oturumu geri yükleme yedeklemelerini birleştirir",
-          "hint": "\"Yedeklemeyi geri yükle\" çalıştırılmadan önce tutulan oturum kopyaları. CC Switch bunları bir daha asla okumaz."
-        },
-        "codexHistoryProviderMigration": {
-          "name": "Codex oturum grubu geçiş yedeklemeleri",
-          "hint": "Oturum grupları taşınmadan önce saklanan kopyalar. CC Switch bunları bir daha okumaz."
-        },
         "liveFirstWrite": {
           "name": "İlk yazma yedeklemelerini yapılandırma",
           "hint": "CC Switch’in bunları ilk kez yeniden yazmasından önceki orijinal istemci yapılandırma dosyaları. Silme işleminden sonra bu orijinaller kaybolur; bir sonraki yazma işleminde dosyayı o zamanki haliyle yedekler."
@@ -673,29 +646,9 @@
           "name": "OpenClaw yapılandırma yedeklemeleri",
           "hint": "OpenClaw yapılandırması kaydedilmeden önce saklanan kopyalar, Yedekleme Saklama tarafından budanır."
         },
-        "proxyLiveBackup": {
-          "name": "Eski yönlendirme devralma yedeklemeleri",
-          "hint": "Yapılandırma kopyaları, yükseltme sırasında eski yönlendirme devralma yedeklerinden taşındı. CC Switch bunları bir daha asla okumaz."
-        },
         "envVars": {
           "name": "Ortam değişkeni temizleme yedeklemeleri",
           "hint": "Çakışan ortam değişkenleri kaldırılmadan önce kaydedilen orijinal değerler kaldırıldı. Silme işleminden sonra bu değerler artık aranamaz."
-        },
-        "legacyConfigBackups": {
-          "name": "Eski config.json yedeklemeleri",
-          "hint": "Eski versiyonların bıraktığı; geçerli sürüm artık bunları okumuyor."
-        },
-        "legacyConfigArchive": {
-          "name": "Eski config.json arşivi",
-          "hint": "Veritabanı geçişinden önceki eski yapılandırma dosyası; geçerli sürüm artık onu okumuyor."
-        },
-        "legacyDbUpgrade": {
-          "name": "Eski veritabanı yükseltme yedeklemeleri",
-          "hint": "Veritabanını yükseltirken eski sürümler tarafından yapılan kopyalar; geçerli sürüm artık bunları okumuyor."
-        },
-        "legacyToolSearch": {
-          "name": "Eski Araç Arama düzeltme eki yedekleri",
-          "hint": "Kaldırılan Araç Arama yaması özelliğinden ayrıldık; geçerli sürüm artık bunları okumuyor."
         }
       }
     },
@@ -744,7 +697,7 @@
       "saveAndTestSuccess": "Yapılandırma kaydedildi, bağlantı tamam",
       "saveAndTestFailed": "Yapılandırma kaydedildi ancak bağlantı testi başarısız oldu: {{error}}",
       "noRemoteData": "Uzak sunucuda eşitleme verisi bulunamadı",
-      "incompatibleVersion": "Uzak veriler uyumsuz (protokol v{{protocolVersion}}, veritabanı {{dbCompatVersion}}). Bu istemci v2 / db-v6 protokolünü destekler.",
+      "incompatibleVersion": "Uzak veriler uyumsuz (protokol v{{protocolVersion}}, veritabanı {{dbCompatVersion}}). Bu istemci v2 / db-v7 protokolünü destekler.",
       "unsaved": "Kaydedilmemiş",
       "saved": "Kaydedildi",
       "unsavedChanges": "Lütfen önce yapılandırmayı kaydedin",
@@ -767,7 +720,6 @@
         "path": "Uzak yol",
         "dbCompat": "Veritabanı uyumluluğu",
         "artifacts": "İçindekiler",
-        "legacyNotice": "Eski bir uzak yol algılandı. Geri yükleme sonrasında bir sonraki yükleme yeni v2/db-v6 yoluna yazılacaktır.",
         "warning": "Bu, tüm yerel verilerin ve beceri yapılandırmalarının üzerine yazacaktır",
         "confirm": "Geri Yüklemeyi Onayla"
       },
@@ -783,7 +735,6 @@
         "path": "Uzak yol",
         "dbCompat": "Veritabanı uyumluluğu",
         "warning": "Bu, uzak sunucudaki mevcut eşitleme verilerinin üzerine yazılacaktır",
-        "legacyNotice": "Eski uzak veriler algılandı. Bu yükleme, yeni v2/db-v6 yoluna yazacak ve eski yolun üzerine yazılmayacaktır.",
         "confirm": "Yüklemeyi Onayla"
       }
     },
@@ -854,7 +805,7 @@
       "autoSyncLastErrorHint": "Lütfen ağ veya S3 ayarlarını kontrol edin. Otomatik eşitleme gelecekteki değişikliklerde yeniden denenecek.",
       "missingBucket": "Lütfen S3 bucket adını girin",
       "noRemoteData": "S3 paketinde eşitleme verisi bulunamadı",
-      "incompatibleVersion": "Uzak veriler uyumlu değil (sürüm {{version}}). Bu istemci v2 / db-v6 protokolünü destekler.",
+      "incompatibleVersion": "Uzak veriler uyumlu değil (sürüm {{version}}). Bu istemci v2 / db-v7 protokolünü destekler.",
       "unsaved": "Kaydedilmemiş",
       "saved": "Kaydedildi",
       "clear": "Yapılandırmayı temizle",
@@ -940,7 +891,7 @@
     "preserveCodexOfficialAuthOnSwitch": "Doğrudan geçişler için resmi giriş bilgilerini koruyun",
     "preserveCodexOfficialAuthOnSwitchDescription": "Yerel yönlendirme kapalıyken üçüncü taraf anahtarları kontrol eder. Devralma yönlendirmesi her zaman Codex resmi giriş bilgilerini korur.",
     "unifyCodexSessionHistory": "Birleşik Codex oturum geçmişi",
-    "unifyCodexSessionHistoryDescription": "Resmî abonelik, üçüncü taraf sağlayıcılarla aynı \"custom\" sağlayıcı kimliğiyle çalışır; böylece tüm oturumlar tek bir grupta toplanır. Yeni Codex sürümleri (masaüstü 26.1103 / CLI 0.167 ve sonrası) yalnızca geçerli sağlayıcının grubundaki oturumlara devam edebilir; diğer grup salt okunur olur ve CLI'nin devam listesi yalnızca geçerli grubu gösterir. Resmî ve üçüncü taraf sağlayıcılar arasında geçiş yapıyorsanız açın. İsteğe bağlı olarak resmî oturumları paylaşılan gruba taşıyabilir (önce yedeklenir) ve kapatırken yedekten geri yükleyebilirsiniz. Not: eski bir oturumun sağlayıcılar arasında sürdürülmesi başarısız olabilir, çünkü encrypted_content mantığının şifresi yalnızca onu oluşturan arka uç tarafından çözülebilir.",
+    "unifyCodexSessionHistoryDescription": "Only future official and third-party Codex sessions use the same provider group. Existing session records are not moved or rewritten.",
     "codexStackClassicSubagents": "Birleştirmedaki klasik alt ajan araçları",
     "codexStackClassicSubagentsDescription": "Ana ajan ile alt ajan farklı sağlayıcılar kullandığında açık olmalıdır; aksi halde alt ajan görevini alamaz.",
     "codexStackClassicSubagentsForcedV2": "Codex config.toml, bu ayara göre öncelikli olan [features] multi_agent_v2'yi açar, dolayısıyla hiçbir etkisi olmaz.",
@@ -948,10 +899,6 @@
     "codexSessionCompressionDescription": "Codex açıkken, her başlatıldığında arka planda 7 gün boyunca değişmeyen oturum dosyalarını sıkıştırır ve bu da çok fazla disk alanı tasarrufu sağlar. Codex, devam ettiğinizde oturumun sıkıştırmasını otomatik olarak açar. CC Switch hala sıkıştırılmış oturumları listeliyor ve sayıyor; liste yalnızca son yanıtlarının önizlemesini göstermiyor. Bu, halen geliştirilmekte olan bir Codex özelliğidir: Codex, açıkken her başlangıçta bir bildirim gösterir. Yeni bir Codex sürümü gerektirir ve Codex yeniden başlatıldıktan sonra etkili olur. Kapatıldığında sıkıştırma durdurulur; zaten sıkıştırılmış olan oturumlar olduğu gibi kalır.",
     "codexSessionCompressionUsage": "Oturumlar şu anda {{size}} kullanıyor",
     "codexSessionCompressionFailed": "Codex oturum sıkıştırma ayarı değiştirilemedi",
-    "unifyCodexHistoryRestoreCompleted": "Yedeklemeden geri yüklenen resmi oturum geçmişi ({{files}} oturum dosyaları, {{rows}} dizin satırları)",
-    "unifyCodexHistoryRestoreFailed": "Resmi oturum geçmişi geri yüklenemedi, lütfen tekrar deneyin",
-    "unifyCodexHistoryRestoreNothing": "Geçerli Codex dizini için geri yüklenebilir geçiş yedeği yok",
-    "unifyCodexHistoryRestoreSkippedToggleOn": "Birleşik oturum geçmişi yeniden etkinleştirildi; geri yükleme atlandı",
     "appVisibility": {
       "title": "Ana Sayfa Ekranı",
       "description": "Ana sayfada hangi uygulamaların gösterileceğini seçin",
@@ -1147,7 +1094,12 @@
       "about": "Hakkında"
     },
     "appConfig": {
-      "configDir": "Yapılandırma dizini"
+      "configDir": "Yapılandırma dizini",
+      "selectAgent": "Agent",
+      "selectionHint": "Ayarlarını ve yapılandırma dizinini görmek için bir Agent seçin.",
+      "empty": "Bu Agent için özel uygulama ayarı yok.",
+      "pendingDirectories": "Kaydedilmemiş dizinler: {{apps}}",
+      "saveDirectories": "Tüm dizin değişikliklerini kaydet"
     },
     "routing": {
       "service": "Hizmet"
@@ -1914,7 +1866,6 @@
     "setAsDefault": "Varsayılan olarak ayarla",
     "retry": "Yeniden dene",
     "copyCode": "Kodu kopyala",
-    "migrationFailed": "Eski kimlik doğrulama geçişi başarısız oldu: {{error}}",
     "loadModelsFailed": "Copilot modelleri yüklenemedi",
     "noPickerModels": "Bu GitHub hesabında kullanılabilir Copilot modeli yok. Bu durum Copilot Free hesaplarında olağandır; lütfen hesabın Copilot Pro veya daha üst bir plana sahip olduğundan emin olun.",
     "noPickerModelsClaude": "Bu GitHub hesabında kullanılabilir Copilot modeli yok. Bu durum Copilot Free hesaplarında olağandır; lütfen hesabın Copilot Pro veya daha üst bir plana sahip olduğundan emin olun. Model alanına gpt-4.1 veya gpt-4o'yu elle de yazabilirsiniz.",
@@ -1952,7 +1903,8 @@
       "notSignedIn": "Copilot CLI'de oturum açılmamış. copilot'u çalıştırıp /login ile oturum açın veya bu kartta bir Yetki Merkezi hesabı bağlayın."
     },
     "defaultCannotRemove": "Copilot'un varsayılan modeli bu sağlayıcıya ait olduğundan kaldırılamaz veya silinemez. Önce copilot içinde /model ile başka bir sağlayıcının modelini seçin.",
-    "terminalNeedsAdd": "Terminalin modelini seçebilmesi için önce bu sağlayıcıyı Copilot'a ekleyin."
+    "terminalNeedsAdd": "Terminalin modelini seçebilmesi için önce bu sağlayıcıyı Copilot'a ekleyin.",
+    "storageFailed": "Cannot read account storage: {{error}}"
   },
   "codexOauth": {
     "authStatus": "Kimlik doğrulama durumu",
@@ -2141,7 +2093,7 @@
     "reasoningEffortHint": "Yukarı akış, düşük/yüksek/maks. gibi düşünme derinliğini desteklediğinde açın. Ayrıca düşünme modunu açar ve Codex'nin muhakeme çabasını yukarı akış Sohbet parametresine eşler.",
     "reasoningGroupTitle": "Muhakeme Yeteneği",
     "keyFieldsHint": "Uç nokta, anahtar, model, akıl yürütme çabası, bağlam penceresi ve uyumluluk anahtarları sağlayıcıyı takip eder; geri kalan her şey, kaydedildikten sonra her sağlayıcı için geçerli olan genel bir Codex ayarıdır.",
-    "inactiveFieldsHint": "Bu sağlayıcıya daha eski bir sürümle kaydedilmiş; geçiş artık bunları uygulamamaktadır. TOML'yi kopyalamak ve ihtiyacınız varsa yukarıya yapıştırmak için birine tıklayın.",
+    "inactiveFieldsHint": "İçe aktarılan bu alanlar bağlantı değiştirirken uygulanmaz. Gerekirse TOML içeriğini yukarıdaki ayarlara kopyalayın.",
     "inactiveFieldCopied": "Kopyalandı",
     "upstreamFormatCopilotRouteHint": "Her mod, Copilot hesap kimlik bilgilerini içeren yönlendirmeyi gerektirir. Seçtiğiniz bir protokol, onu desteklemeyen modeller için açıkça başarısız olur.",
     "maxOutputTokensWarning": "Modelin veya ağ geçidinin gerçek çıkış sınırını aşmayın, aksi halde istekler 400 değerini döndürür.",
@@ -2153,7 +2105,7 @@
     "configJson": "Ayarlar dosyası (settings.json)",
     "configJsonHint": "Gemini CLI'nin settings.json'u (MCP sunucuları MCP panelinde yönetilir)",
     "keyFieldsHint": "Uç nokta, anahtar, model adı ve kimlik doğrulama türü sağlayıcıyı takip eder; diğer ortam değişkenleri ve settings.json, Gemini CLI genel ayarlarıdır ve kaydedildikten sonra her sağlayıcı için geçerlidir.",
-    "inactiveFieldsHint": "Bu sağlayıcıya daha eski bir sürümle kaydedilmiş; geçiş artık bunları uygulamamaktadır. Yukarıya eklemek için birini tıklayın; kaydettikten sonra her sağlayıcı için geçerlidir.",
+    "inactiveFieldsHint": "İçe aktarılan bu alanlar bağlantı değiştirirken uygulanmaz. Gerekli alanları yukarıdaki ayarlara ekleyin.",
     "addToGlobalSettings": "Genel ayarlara ekle"
   },
   "opencode": {
@@ -3122,7 +3074,6 @@
     "applySuccess": "Profil genel olarak uygulandı",
     "applyFailed": "Profil uygulanamadı: {{detail}}",
     "applyWarnings": "Profil {{warningCount}} notla uygulandı:\n{{details}}",
-    "switchFollowWarning": "Bağlantı değiştirildi ancak profili tam olarak uygulanamadı:\n{{details}}",
     "scope": {
       "label": "Kullanım yeri",
       "global": "Genel",
@@ -3180,10 +3131,6 @@
     "import": {
       "completedWithNotes": "Proje yapılandırması içe aktarıldı; notları inceleyin"
     },
-    "migration": {
-      "pending": "Mevcut Agent yapılandırması hazırlanıyor…",
-      "failed": "Mevcut yapılandırmanın geçişi tamamlanmadı"
-    },
     "environment": {
       "title": "Proje ortamı",
       "configureProject": "Projeyi yapılandır",
@@ -3203,6 +3150,14 @@
       "name": "Ad",
       "provider": "Sağlayıcı",
       "inheritProvider": "Geçerli genel sağlayıcıyı kullan",
+      "projectConnection": "Proje API bağlantısı",
+      "projectConnectionInherit": "Genel bağlantıyı devral",
+      "projectConnectionDirect": "Bağımsız proje bağlantısı",
+      "projectConnectionInheritHint": "Bağlantı, Claude Code’un yerel yapılandırma katmanlarına göre devralınır. Devralmaya dönmek yalnızca bu özelliğin yönettiği bağlantı alanlarını kaldırır; ardından oturumu yeniden başlatın. Bu seçenek yalnızca projeye uygulamayı etkiler.",
+      "projectConnectionDirectHint": "Yalnızca projeye uygulamayı etkiler: istekler CC Switch yerel yönlendirmesine uğramadan seçili sağlayıcıya gider. Anthropic protokolünü kullanan standart API anahtarı veya belirteç bağlantıları desteklenir. Kuruluş ilkeleri ve başlangıç seçeneklerinin önceliği devam eder.",
+      "projectConnectionCredentialsHint": "Adres ve anahtar .claude/settings.local.json dosyasına yazılır ve dosya Git dışında tutulur. Git dosyayı zaten izliyorsa bağımsız bağlantı uygulanamaz. Sağlayıcı değişikliklerinden sonra yeniden uygulayın. Devralmaya dönmek yönetilen bağlantı alanlarını kaldırır; ardından Claude oturumunu yeniden başlatın.",
+      "projectConnectionProviderRequired": "Bağımsız proje bağlantısı için mevcut bir sağlayıcı seçin.",
+      "projectConnectionProviderPlaceholder": "Proje sağlayıcısını seçin",
       "providerReferenceHint": "Model özellikleri seçilen sağlayıcıyı kullanır. API adresleri, anahtarlar ve hesaplar sağlayıcıda kalır. Projeye dağıtım genel bağlantıyı değiştirmez.",
       "model": "Model",
       "resetModels": "Sağlayıcı model ayarlarını geri yükle",
@@ -3847,12 +3802,6 @@
     "clickToChange": "Simgeyi değiştirmek için tıklayın",
     "clickToSelect": "Simgeyi seçmek için tıklayın",
     "change": "Simgeyi değiştir"
-  },
-  "migration": {
-    "success": "Yapılandırma başarıyla taşındı",
-    "skillsSuccess": "{{count}} becerilerinin otomatik olarak birleşik yönetime aktarılması",
-    "skillsFailed": "Beceriler otomatik olarak içe aktarılamadı",
-    "skillsFailedDescription": "Beceriler sayfasını açın ve manuel olarak içe aktarmak için \"Mevcut Olanı İçe Aktar\"ı tıklayın (veya yeniden başlatıp tekrar deneyin)."
   },
   "health": {
     "operational": "Operasyonel",
@@ -5159,12 +5108,6 @@
       "marketRemoved": "{{name}} pazar yeri kaldırıldı",
       "marketRemoveFailed": "{{name}} kaldırılamadı"
     }
-  },
-  "newLayoutNotice": {
-    "title": "CC Switch yeni bir görünüme sahip",
-    "body": "Bu sürüm, arayüzü yeniden tasarladığı için birkaç şey değişti:\n• Modlar artık her uygulama sayfasının üst kısmında yer alıyor\n• Kullanım ve Hesaplar kenar çubuğundadır\nDeğişen her şey için sürüm notlarına bakın.",
-    "viewReleaseNotes": "Sürüm notlarını görüntüle",
-    "confirm": "Anladım"
   },
   "whatsNew": {
     "updatedTo": "v{{version}}'ye güncellendi",

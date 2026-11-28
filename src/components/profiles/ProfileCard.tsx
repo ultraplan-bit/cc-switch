@@ -69,6 +69,10 @@ export function ProfileCard({
             <Plug aria-hidden="true" size={13} className="shrink-0" />
             <span className="break-all">{providerName}</span>
           </span>
+          {scope === "claude" &&
+            profile.payload.claudeProjectConnection === "direct" && (
+              <span>{t("profiles.editor.projectConnectionDirect")}</span>
+            )}
           {!desktop && (
             <span className="inline-flex min-w-0 items-center gap-1">
               <Cpu aria-hidden="true" size={13} className="shrink-0" />

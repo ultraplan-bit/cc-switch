@@ -1,8 +1,6 @@
 use std::fs;
 
-use cc_switch_lib::{
-    migrate_skills_to_ssot, AppType, ImportSkillSelection, InstalledSkill, SkillApps, SkillService,
-};
+use cc_switch_lib::{AppType, ImportSkillSelection, InstalledSkill, SkillApps, SkillService};
 
 use crate::support::{create_test_state, ensure_test_home, reset_test_fs, test_mutex};
 
@@ -378,52 +376,5 @@ fn delete_skill_backup_removes_backup_directory() {
             .into_iter()
             .all(|entry| entry.backup_id != backup_id),
         "deleted backup should no longer appear in backup list"
-    );
-}
-
-#[test]
-fn migration_snapshot_overrides_multi_source_directory_inference() {
-    let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
-    reset_test_fs();
-    let home = ensure_test_home();
-
-    write_skill(
-        &home.join(".claude").join("skills").join("demo-skill"),
-        "Demo",
-    );
-    write_skill(
-        &home
-            .join(".config")
-            .join("opencode")
-            .join("skills")
-            .join("demo-skill"),
-        "Demo",
-    );
-
-    let state = create_test_state().expect("create test state");
-    state
-        .db
-        .set_setting(
-            "skills_ssot_migration_snapshot",
-            r#"[{"directory":"demo-skill","app_type":"claude"}]"#,
-        )
-        .expect("seed migration snapshot");
-
-    let count = migrate_skills_to_ssot(&state.db).expect("migrate skills to ssot");
-    assert_eq!(count, 1, "expected one migrated skill");
-
-    let skills = state.db.get_all_installed_skills().expect("get skills");
-    let migrated = skills
-        .values()
-        .find(|skill| skill.directory == "demo-skill")
-        .expect("migrated demo-skill");
-
-    assert!(
-        migrated.apps.claude,
-        "legacy snapshot should preserve Claude enablement"
-    );
-    assert!(
-        !migrated.apps.opencode,
-        "migration should no longer infer OpenCode enablement from a duplicate directory alone"
     );
 }

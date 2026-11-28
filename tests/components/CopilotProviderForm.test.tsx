@@ -113,23 +113,6 @@ describe("CopilotProviderForm", () => {
     expect(input).toBeDisabled();
   });
 
-  it("opens legacy environment cards in the new shape", async () => {
-    const submit = setup({
-      env: {
-        COPILOT_PROVIDER_BASE_URL: "http://localhost:18317/v1",
-        COPILOT_PROVIDER_TYPE: "openai",
-        COPILOT_PROVIDER_WIRE_API: "completions",
-        COPILOT_PROVIDER_API_KEY: "fixture-key",
-        COPILOT_MODEL: "deepseek-v4-flash",
-      },
-    });
-    const values = await save(submit);
-    expect(JSON.parse(values.settingsConfig)).toEqual({
-      provider: byok.provider,
-      models: [{ id: "deepseek-v4-flash" }],
-    });
-  });
-
   it("shows protocol and wire API as a single API format", () => {
     setup(byok);
     expect(

@@ -305,8 +305,7 @@ impl From<&CodexAccountData> for GitHubAccount {
             avatar_url: None,
             authenticated_at: data.authenticated_at,
             github_domain: "github.com".to_string(),
-            // 旧账号可能缺少 id_token 或独立的上游 workspace 字段；两者都需要
-            // 重新登录后才能安全参与本地 ID → workspace 的托管绑定。
+            // 缺少用户或 workspace 身份时必须重新认证，不能安全参与托管绑定。
             reauth_required: data
                 .id_token
                 .as_deref()
@@ -322,9 +321,7 @@ impl CodexAccountData {
         let refreshed_account_id = extract_account_metadata_from_tokens(tokens).0;
         let mut changed = false;
         if let Some(account_id) = refreshed_account_id {
-            // A missing workspace marks a quarantined pre-v2 record. Ordinary
-            // refresh cannot prove which same-workspace user an old binding
-            // originally represented; only explicit targeted reauth may fill it.
+            // Missing identity requires explicit authentication before binding refreshed tokens.
             if self.chatgpt_account_id.is_some()
                 && self.chatgpt_account_id.as_deref() != Some(&account_id)
             {
@@ -392,6 +389,8 @@ pub struct CodexOAuthManager {
     target_login_generations: Arc<RwLock<HashMap<String, u64>>>,
     next_target_login_generation: AtomicU64,
     storage_path: PathBuf,
+    /// A failed startup read must never turn an existing account file into an empty store.
+    storage_error: Option<String>,
     /// 持久化串行锁：`save_to_disk` 与 `clear_auth` 的「快照+写盘/删文件」都在此锁内
     /// 完成。此前由外层 `RwLock<CodexOAuthManager>` 的写锁隐式串行化；去掉外层锁后
     /// 需要它防止并发保存/清除交错，导致已删账号被旧快照复活。
@@ -402,7 +401,7 @@ impl CodexOAuthManager {
     pub fn new(data_dir: PathBuf) -> Self {
         let storage_path = data_dir.join("codex_oauth_auth.json");
 
-        let manager = Self {
+        let mut manager = Self {
             accounts: Arc::new(RwLock::new(HashMap::new())),
             default_account_id: Arc::new(RwLock::new(None)),
             access_tokens: Arc::new(RwLock::new(HashMap::new())),
@@ -415,14 +414,25 @@ impl CodexOAuthManager {
             target_login_generations: Arc::new(RwLock::new(HashMap::new())),
             next_target_login_generation: AtomicU64::new(0),
             storage_path,
+            storage_error: None,
             storage_lock: Arc::new(Mutex::new(())),
         };
 
         if let Err(e) = manager.load_from_disk_sync() {
             log::warn!("[CodexOAuth] 加载存储失败: {e}");
+            manager.storage_error = Some(e.to_string());
         }
 
         manager
+    }
+
+    fn ensure_storage_ready(&self) -> Result<(), CodexOAuthError> {
+        if let Some(error) = &self.storage_error {
+            return Err(CodexOAuthError::ParseError(format!(
+                "Codex 账号存储未成功加载，原文件保持不变；请修复后重启应用: {error}"
+            )));
+        }
+        Ok(())
     }
 
     // ==================== 设备码流程 ====================
@@ -495,6 +505,7 @@ impl CodexOAuthManager {
         &self,
         target_account_id: Option<&str>,
     ) -> Result<(u64, Option<String>, Option<u64>), CodexOAuthError> {
+        self.ensure_storage_ready()?;
         let login_epoch = self.login_epoch.load(Ordering::Acquire);
         let target_account_id = target_account_id
             .map(str::trim)
@@ -820,7 +831,7 @@ impl CodexOAuthManager {
         &self,
         account_id: &str,
     ) -> Result<Option<(String, Option<String>, Option<i64>)>, CodexOAuthError> {
-        let (managed_id_token, managed_workspace) = {
+        let managed_workspace = {
             let accounts = self.accounts.read().await;
             let account = accounts
                 .get(account_id)
@@ -830,14 +841,11 @@ impl CodexOAuthManager {
                     "账号 {account_id} 缺少 workspace 身份，请重新认证"
                 ))
             })?;
-            (account.id_token.clone(), workspace)
+            workspace
         };
         let Some(live_refresh) =
-            crate::codex_config::read_codex_live_auth_refresh_for_managed_account(
-                account_id,
-                managed_id_token.as_deref(),
-            )
-            .map_err(|error| CodexOAuthError::TokenFetchFailed(error.to_string()))?
+            crate::codex_config::read_codex_live_auth_refresh_for_managed_account(account_id)
+                .map_err(|error| CodexOAuthError::TokenFetchFailed(error.to_string()))?
         else {
             return Ok(None);
         };
@@ -1403,24 +1411,14 @@ impl CodexOAuthManager {
         // have been removed as one lifecycle transition.
         let _lifecycle = self.lifecycle_lock.write().await;
 
-        let managed_id_token = {
-            let accounts = self.accounts.read().await;
-            accounts
-                .get(account_id)
-                .ok_or_else(|| CodexOAuthError::AccountNotFound(account_id.to_string()))?
-                .id_token
-                .clone()
-        };
+        if !self.accounts.read().await.contains_key(account_id) {
+            return Err(CodexOAuthError::AccountNotFound(account_id.to_string()));
+        }
 
         // Explicit Auth Center removal means credentials for this managed
         // account must leave the machine. Content matching intentionally also
         // claims a native `codex login` of the same account; that is the same
         // account-scoped credential the user just chose to remove.
-        crate::codex_config::prepare_codex_live_auth_for_managed_account_removal(
-            account_id,
-            managed_id_token.as_deref(),
-        )
-        .map_err(|error| CodexOAuthError::TokenFetchFailed(error.to_string()))?;
         crate::codex_config::clear_codex_live_auth_for_managed_account(account_id)
             .map_err(|error| CodexOAuthError::IoError(error.to_string()))?;
 
@@ -1478,22 +1476,16 @@ impl CodexOAuthManager {
         // write guard guarantees no refresh can recreate live/disk state after
         // the clear has committed.
         let _lifecycle = self.lifecycle_lock.write().await;
+        self.ensure_storage_ready()?;
 
         let accounts_to_clear = self
             .accounts
             .read()
             .await
-            .iter()
-            .map(|(account_id, account)| (account_id.clone(), account.id_token.clone()))
+            .keys()
+            .cloned()
             .collect::<Vec<_>>();
-        for (account_id, id_token) in &accounts_to_clear {
-            crate::codex_config::prepare_codex_live_auth_for_managed_account_removal(
-                account_id,
-                id_token.as_deref(),
-            )
-            .map_err(|error| CodexOAuthError::TokenFetchFailed(error.to_string()))?;
-        }
-        for (account_id, _) in &accounts_to_clear {
+        for account_id in &accounts_to_clear {
             crate::codex_config::clear_codex_live_auth_for_managed_account(account_id)
                 .map_err(|error| CodexOAuthError::IoError(error.to_string()))?;
         }
@@ -1679,6 +1671,7 @@ impl CodexOAuthManager {
         initial_access_token: Option<CachedAccessToken>,
         context: AccountLoginContext<'_>,
     ) -> Result<GitHubAccount, CodexOAuthError> {
+        self.ensure_storage_ready()?;
         let _lifecycle = self.lifecycle_lock.read().await;
         let target_account_id = context
             .target_account_id
@@ -1704,10 +1697,9 @@ impl CodexOAuthManager {
             let existing = accounts
                 .get(&account_id)
                 .ok_or_else(|| CodexOAuthError::AccountNotFound(account_id.clone()))?;
-            let expected_workspace = existing
-                .chatgpt_account_id
-                .as_deref()
-                .unwrap_or(existing.account_id.as_str());
+            let expected_workspace = existing.chatgpt_account_id.as_deref().ok_or_else(|| {
+                CodexOAuthError::ParseError(format!("账号 {account_id} 缺少 workspace 身份"))
+            })?;
             if expected_workspace != chatgpt_account_id {
                 return Err(CodexOAuthError::TokenFetchFailed(format!(
                     "重新登录的 ChatGPT workspace 与账号 {account_id} 不一致"
@@ -1814,14 +1806,7 @@ impl CodexOAuthManager {
                 .iter()
                 .filter(|(existing_id, _)| existing_id.as_str() != account_id.as_str())
                 .any(|(_, existing)| {
-                    existing
-                        .chatgpt_account_id
-                        .as_deref()
-                        .unwrap_or(existing.account_id.as_str())
-                        == data
-                            .chatgpt_account_id
-                            .as_deref()
-                            .unwrap_or(data.account_id.as_str())
+                    existing.chatgpt_account_id == data.chatgpt_account_id
                         && existing
                             .id_token
                             .as_deref()
@@ -1960,7 +1945,7 @@ impl CodexOAuthManager {
         }
         let store: CodexOAuthStore = serde_json::from_value(raw)
             .map_err(|error| CodexOAuthError::ParseError(error.to_string()))?;
-        if !matches!(store.version, 1 | 2)
+        if store.version != 2
             || store
                 .accounts
                 .iter()
@@ -1979,6 +1964,7 @@ impl CodexOAuthManager {
     }
 
     fn write_store_atomic(&self, content: &str) -> Result<(), CodexOAuthError> {
+        self.ensure_storage_ready()?;
         if let Some(parent) = self.storage_path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -2041,6 +2027,11 @@ impl CodexOAuthManager {
         let content = std::fs::read_to_string(&self.storage_path)?;
         let store: CodexOAuthStore = serde_json::from_str(&content)
             .map_err(|e| CodexOAuthError::ParseError(e.to_string()))?;
+        if store.version != 2 {
+            return Err(CodexOAuthError::ParseError(
+                "不支持的 Codex 账号存储版本".into(),
+            ));
+        }
 
         if let Ok(mut accounts) = self.accounts.try_write() {
             *accounts = store.accounts;
@@ -2093,6 +2084,9 @@ pub fn labels_on_disk(data_dir: &std::path::Path) -> (HashMap<String, String>, O
     let Ok(store) = serde_json::from_str::<CodexOAuthStore>(&content) else {
         return (HashMap::new(), None);
     };
+    if store.version != 2 {
+        return (HashMap::new(), None);
+    }
     let default_id = store
         .default_account_id
         .filter(|id| store.accounts.contains_key(id))
@@ -2504,48 +2498,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn duplicate_legacy_workspace_and_user_identity_is_rejected() {
-        let temp = tempfile::tempdir().unwrap();
-        let path = temp.path().to_path_buf();
-        let manager = CodexOAuthManager::new(path.clone());
-        let id_token = crate::codex_config::test_codex_id_token("same-user");
-        let legacy = serde_json::json!({
-            "version": 1,
-            "accounts": {
-                "shared-workspace": {
-                    "account_id": "shared-workspace",
-                    "email": "legacy@example.com",
-                    "refresh_token": "rt-legacy",
-                    "id_token": id_token,
-                    "authenticated_at": 1
-                }
-            },
-            "default_account_id": "shared-workspace"
-        });
-        manager
-            .write_store_atomic(&serde_json::to_string(&legacy).unwrap())
-            .unwrap();
-        drop(manager);
-
-        let manager = CodexOAuthManager::new(path);
-        assert!(matches!(
-            manager
-                .add_account_internal(
-                    "shared-workspace".to_string(),
-                    "rt-duplicate".to_string(),
-                    Some("current@example.com".to_string()),
-                    Some(crate::codex_config::test_codex_id_token("same-user")),
-                    None,
-                    AccountLoginContext::default(),
-                )
-                .await,
-            Err(CodexOAuthError::DuplicateAccount)
-        ));
-        assert_eq!(manager.list_accounts().await.len(), 1);
-        assert!(manager.refresh_locks.read().await.is_empty());
-    }
-
-    #[tokio::test]
     async fn targeted_reauth_rechecks_duplicates_outside_the_target() {
         let temp = tempfile::tempdir().unwrap();
         let manager = CodexOAuthManager::new(temp.path().to_path_buf());
@@ -2791,143 +2743,53 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_v1_store_stays_quarantined_until_targeted_reauth() {
+    async fn failed_storage_read_blocks_login_save_and_clear_without_replacing_the_file() {
+        for content in [
+            r#"{"version":1,"accounts":{},"default_account_id":null}"#,
+            "{unreadable-json",
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let path = temp.path().join("codex_oauth_auth.json");
+            fs::write(&path, content).unwrap();
+            let manager = CodexOAuthManager::new(temp.path().to_path_buf());
+
+            assert!(manager.prepare_login_target(None).await.is_err());
+            assert!(manager
+                .add_account_internal(
+                    "workspace".into(),
+                    "refresh-token".into(),
+                    None,
+                    None,
+                    None,
+                    AccountLoginContext::default(),
+                )
+                .await
+                .is_err());
+            assert!(manager.save_to_disk().await.is_err());
+            assert!(manager.clear_auth().await.is_err());
+            assert!(manager.list_accounts().await.is_empty());
+            assert!(labels_on_disk(temp.path()).0.is_empty());
+            assert_eq!(fs::read_to_string(path).unwrap(), content);
+        }
+    }
+
+    #[tokio::test]
+    async fn repaired_current_store_can_be_loaded_and_cleared_after_restart() {
         let temp = tempfile::tempdir().unwrap();
-        let path = temp.path().to_path_buf();
-        let manager = CodexOAuthManager::new(path.clone());
-        let legacy = serde_json::json!({
-            "version": 1,
-            "accounts": {
-                "legacy-workspace": {
-                    "account_id": "legacy-workspace",
-                    "email": "legacy@example.com",
-                    "refresh_token": "rt-legacy",
-                    "id_token": "legacy-id-token",
-                    "authenticated_at": 1
-                }
-            },
-            "default_account_id": "legacy-workspace"
-        });
-        manager
-            .write_store_atomic(&serde_json::to_string(&legacy).unwrap())
-            .unwrap();
-        drop(manager);
+        let path = temp.path().join("codex_oauth_auth.json");
+        fs::write(&path, "{unreadable-json").unwrap();
+        let blocked = CodexOAuthManager::new(temp.path().to_path_buf());
+        assert!(blocked.clear_auth().await.is_err());
 
-        let manager = CodexOAuthManager::new(path.clone());
-        let accounts = manager.list_accounts().await;
-        assert_eq!(accounts.len(), 1);
-        assert_eq!(accounts[0].id, "legacy-workspace");
-        assert!(accounts[0].reauth_required);
-        assert!(matches!(
-            manager
-                .chatgpt_account_id_for_account("legacy-workspace")
-                .await,
-            Err(CodexOAuthError::ParseError(_))
-        ));
-        assert!(matches!(
-            manager
-                .get_valid_token_for_account("legacy-workspace")
-                .await,
-            Err(CodexOAuthError::ParseError(_))
-        ));
-
-        let header = URL_SAFE_NO_PAD.encode(b"{\"alg\":\"none\"}");
-        let unresolved_payload =
-            URL_SAFE_NO_PAD.encode(b"{\"organizations\":[{\"id\":\"org-456\"}]}");
-        let unresolved_tokens = OAuthTokenResponse {
-            access_token: format!("{header}.{unresolved_payload}."),
-            refresh_token: Some("rt-rotated".to_string()),
-            id_token: None,
-            expires_in: Some(3600),
-        };
-        {
-            let mut stored = manager.accounts.write().await;
-            assert!(stored
-                .get_mut("legacy-workspace")
-                .unwrap()
-                .apply_refreshed_tokens(&unresolved_tokens));
-        }
-        manager.save_to_disk().await.unwrap();
-        drop(manager);
-
-        let manager = CodexOAuthManager::new(path.clone());
-        assert!(manager
-            .chatgpt_account_id_for_account("legacy-workspace")
-            .await
-            .is_err());
-        assert_eq!(
-            manager
-                .accounts
-                .read()
-                .await
-                .get("legacy-workspace")
-                .unwrap()
-                .refresh_token,
-            "rt-rotated"
-        );
-
-        let payload = URL_SAFE_NO_PAD.encode(
-            b"{\"https://api.openai.com/auth\":{\"chatgpt_account_id\":\"actual-workspace\"}}",
-        );
-        let refreshed_tokens = OAuthTokenResponse {
-            access_token: format!("{header}.{payload}."),
-            refresh_token: None,
-            id_token: None,
-            expires_in: Some(3600),
-        };
-        {
-            let mut stored = manager.accounts.write().await;
-            assert!(!stored
-                .get_mut("legacy-workspace")
-                .unwrap()
-                .apply_refreshed_tokens(&refreshed_tokens));
-        }
-        manager.save_to_disk().await.unwrap();
-        drop(manager);
-
-        let manager = CodexOAuthManager::new(path);
-        assert_eq!(
-            manager.default_account_id().await.as_deref(),
-            Some("legacy-workspace")
-        );
-        assert!(manager
-            .chatgpt_account_id_for_account("legacy-workspace")
-            .await
-            .is_err());
-        assert!(manager.list_accounts().await[0].reauth_required);
-        assert_eq!(
-            manager
-                .accounts
-                .read()
-                .await
-                .get("legacy-workspace")
-                .unwrap()
-                .refresh_token,
-            "rt-rotated"
-        );
-
-        manager
-            .add_account_internal(
-                "legacy-workspace".to_string(),
-                "rt-reauthenticated".to_string(),
-                Some("legacy@example.com".to_string()),
-                Some(crate::codex_config::test_codex_id_token("legacy-user")),
-                None,
-                AccountLoginContext {
-                    target_account_id: Some("legacy-workspace"),
-                    ..Default::default()
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(
-            manager
-                .chatgpt_account_id_for_account("legacy-workspace")
-                .await
-                .unwrap(),
-            "legacy-workspace"
-        );
-        assert!(!manager.list_accounts().await[0].reauth_required);
+        fs::write(
+            &path,
+            r#"{"version":2,"accounts":{},"default_account_id":null}"#,
+        )
+        .unwrap();
+        let repaired = CodexOAuthManager::new(temp.path().to_path_buf());
+        assert!(repaired.prepare_login_target(None).await.is_ok());
+        repaired.clear_auth().await.unwrap();
+        assert!(!path.exists());
     }
 
     #[tokio::test]

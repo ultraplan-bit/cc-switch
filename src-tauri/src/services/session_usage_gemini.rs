@@ -293,9 +293,6 @@ fn insert_gemini_session_entry(
             return Ok(false);
         }
 
-        // 确保未剪枝的存量明细也拥有长期去重收据，后续归档删除明细后不会重导
-        record_gemini_dedup_tombstone(&tx, request_id)?;
-
         if old_model == model
             && old_input == i64::from(tokens.input)
             && old_output == i64::from(output_tokens)
@@ -781,24 +778,12 @@ mod tests {
     }
 
     #[test]
-    fn test_legacy_gemini_row_without_dedup_tombstone_is_protected_on_prune_and_never_overwrites_proxy(
-    ) -> Result<(), AppError> {
+    fn test_gemini_import_never_overwrites_a_proxy_row() -> Result<(), AppError> {
         let db = Database::memory()?;
-        let legacy_id = "gemini_session:legacy-sess:msg-legacy";
         let proxy_id = "gemini_session:collision:msg-proxy";
 
         {
             let conn = lock_conn!(db.conn);
-            // Simulate a <= 4.0.31 database row created before session_usage_dedup tombstones
-            conn.execute(
-                "INSERT INTO proxy_request_logs (
-                    request_id, provider_id, app_type, model, request_model,
-                    input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
-                    total_cost_usd, latency_ms, status_code, created_at, data_source
-                ) VALUES (?1, '_gemini_session', 'gemini', 'gemini-2.5-pro', 'gemini-2.5-pro',
-                          80, 20, 0, 0, '0.01', 0, 200, 946684800, 'gemini_session')",
-                [legacy_id],
-            )?;
             conn.execute(
                 "INSERT INTO proxy_request_logs (
                     request_id, provider_id, app_type, model, request_model,
@@ -809,27 +794,6 @@ mod tests {
                 [proxy_id],
             )?;
         }
-
-        // Pruning old legacy row records its tombstone before deleting detail
-        assert_eq!(db.rollup_and_prune(30)?, 1);
-
-        let tokens = GeminiTokens {
-            input: 80,
-            output: 20,
-            cached: 0,
-            thoughts: 0,
-        };
-        assert!(
-            !insert_gemini_session_entry(
-                &db,
-                legacy_id,
-                &tokens,
-                "gemini-2.5-pro",
-                Some("legacy-sess"),
-                Some("2000-01-01T00:00:00Z"),
-            )?,
-            "pruned legacy gemini_session row must not be re-imported"
-        );
 
         // Non-gemini_session row with same request_id is never overwritten
         let changed_tokens = GeminiTokens {

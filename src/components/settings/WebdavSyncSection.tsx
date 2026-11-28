@@ -1052,12 +1052,11 @@ export function WebdavSyncSection({
   const lastError = config?.status?.lastError?.trim();
   const showAutoSyncError =
     !!lastError && config?.status?.lastErrorSource === "auto";
-  const currentRemotePath = `/${form.remoteRoot.trim() || "cc-switch-sync"}/v2/db-v6/${form.profile.trim() || "default"}`;
-  const currentS3RemotePath = `${s3Bucket.trim() || "bucket"}/${s3RemoteRoot.trim() || "cc-switch-sync"}/v2/db-v6/${s3Profile.trim() || "default"}`;
+  const currentRemotePath = `/${form.remoteRoot.trim() || "cc-switch-sync"}/v2/db-v7/${form.profile.trim() || "default"}`;
+  const currentS3RemotePath = `${s3Bucket.trim() || "bucket"}/${s3RemoteRoot.trim() || "cc-switch-sync"}/v2/db-v7/${s3Profile.trim() || "default"}`;
   const remoteDbCompatDisplay = formatDbCompatVersion(
     remoteInfo?.dbCompatVersion,
   );
-  const remoteIsLegacy = remoteInfo?.layout === "legacy";
 
   const s3LastSyncAt = s3Config?.status?.lastSyncAt;
   const s3LastSyncDisplay = s3LastSyncAt
@@ -1725,14 +1724,9 @@ export function WebdavSyncSection({
                     </dl>
                   </div>
                 )}
-                {remoteInfo && !remoteIsLegacy && (
+                {remoteInfo && (
                   <p className="text-destructive font-medium">
                     {t("settings.webdavSync.confirmUpload.warning")}
-                  </p>
-                )}
-                {remoteInfo && remoteIsLegacy && (
-                  <p className="font-medium text-warning-text">
-                    {t("settings.webdavSync.confirmUpload.legacyNotice")}
                   </p>
                 )}
               </div>
@@ -1799,11 +1793,6 @@ export function WebdavSyncSection({
                     </dt>
                     <dd>{remoteInfo.artifacts.join(",")}</dd>
                   </dl>
-                )}
-                {remoteInfo?.layout === "legacy" && (
-                  <p className="font-medium text-warning-text">
-                    {t("settings.webdavSync.confirmDownload.legacyNotice")}
-                  </p>
                 )}
                 <p className="text-destructive font-medium">
                   {t("settings.webdavSync.confirmDownload.warning")}

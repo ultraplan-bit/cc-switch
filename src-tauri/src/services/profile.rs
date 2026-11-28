@@ -1,12 +1,10 @@
 //! 项目 Profile 编排服务
 //!
-//! Profile 是**全应用共享的项目实体**（用户拥有的项目就那几个），payload
-//! 按 app 分槽存配置快照（供应商 / 模型设置 / MCP / Skills / Prompt）。快照与应用
-//! 均**按分组（scope）操作**：Claude Code 与 Codex 的工作目录往往不同
-//! （各在各的项目里），因此各组独立指向自己的当前项目、只拍/只应用组内
-//! 槽位，互不牵连；重命名/删除作用于共享实体本身。
+//! 配置方案按 Agent 保存连接引用、模型、行为和可选资源；项目目录单独登记。
+//! 同一方案可以应用到全局或部署到多个项目，每个位置按 Agent 保存自己的应用状态。
+//! 只有显式创建或导入才保存方案，读取列表和创建连接不生成配置方案。
 //! 应用（apply）时复用现有切换原语批量落地：
-//! - 供应商：`ProviderService::switch`（内建代理接管热切换与接管下禁切官方）
+//! - 供应商：`ProviderService::switch_connection_only`（内建代理接管热切换与接管下禁切官方）
 //! - MCP：`McpService::toggle_app`（改标志 + 单 server 物化）
 //! - Skills：`SkillService::toggle_app`（改标志 + 单 skill 物化）
 //! - Prompt：`PromptService::enable_prompt`（互斥激活 + 原子写 live）
@@ -27,7 +25,6 @@ use crate::prompt::Prompt;
 use crate::services::{McpService, PromptService, ProviderService, SkillService};
 use crate::store::AppState;
 
-mod migration;
 pub(crate) mod native_config;
 
 /// Profile 操作的应用分组：项目实体全应用共享，但快照/应用/当前指针按组进行。
@@ -93,8 +90,7 @@ impl ProfileScope {
 
 /// 提示词槽位的「拍到时没有启用中的提示词」标记（应用时停用当前启用项）。
 ///
-/// 不能用 None 表示：None 已约定为「该侧从未拍过、不动」。提示词 id 不会是空串；
-/// 旧版读到它会当作已删除的提示词跳过并给提示，不会误改配置。
+/// 不能用 None 表示：None 已约定为「该侧从未拍过、不动」。提示词 id 不会是空串。
 pub const NO_ACTIVE_PROMPT: &str = "";
 
 pub(crate) const CLAUDE_PROFILE_MODEL_KEYS: &[&str] = &[
@@ -524,6 +520,15 @@ fn remember_resource_names<'a>(
     }
 }
 
+/// Claude Code 项目使用全局连接，或部署所选供应商的独立直连配置。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ClaudeProjectConnection {
+    #[default]
+    Inherit,
+    Direct,
+}
+
 /// Profile 的 JSON 快照结构（与前端 TS 类型严格对应）
 ///
 /// 配置槽位都是 Option：None = 该侧从未拍过快照（应用时不动），
@@ -532,17 +537,17 @@ fn remember_resource_names<'a>(
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ProfilePayload {
+    /// Only affects Claude Code project deployment, never global application.
+    pub claude_project_connection: ClaudeProjectConnection,
     /// Agent-native behavior excluding connection, typed model and library resource fields.
     pub native_config: PerApp<Option<String>>,
     /// 每 app 的当前供应商 id
     pub providers: PerApp<Option<String>>,
-    /// 每 app 独立保存的模型；None = 旧快照未保存，空串 = 继承默认模型。
+    /// 每 app 独立保存的模型；None = 不管理该 Agent 的模型，空串 = 继承默认模型。
     pub models: PerApp<Option<String>>,
-    /// 每 app 的 Agent 专属模型覆盖；空 map 表示拍到但无额外覆盖，None 表示旧快照未保存。
-    #[serde(alias = "model_settings")]
+    /// 每 app 的 Agent 专属模型覆盖；空 map 表示拍到但无额外覆盖，None 表示不管理该 Agent 的模型设置。
     pub model_settings: PerApp<Option<BTreeMap<String, String>>>,
     /// Codex 的 Profile 专属模型目录（含 auto-review 与 speed-tier 设置）。
-    #[serde(alias = "model_catalog")]
     pub model_catalog: PerApp<Option<serde_json::Value>>,
     /// 每 app 启用的 MCP server id 集合
     pub mcp: PerApp<Option<Vec<String>>>,
@@ -559,6 +564,8 @@ pub struct ProfilePayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProfileConfig {
+    #[serde(default)]
+    pub claude_project_connection: ClaudeProjectConnection,
     #[serde(default)]
     pub native_config: Option<String>,
     pub provider_id: Option<String>,
@@ -588,24 +595,14 @@ pub enum ProfileSource {
     Blank,
 }
 
-/// Settings key recording the default Profile of a connection.
-pub(crate) fn default_profile_key(scope: ProfileScope, provider_id: &str) -> String {
-    format!(
-        "profile_migration_v1_provider_{}_{provider_id}",
-        scope.as_str()
-    )
-}
-
-/// Code prefixed to warnings produced when a connection switch also applies
-/// that connection's default Profile, so callers can tell them from the
-/// switch's own warnings.
-pub const PROFILE_FOLLOW_WARNING_PREFIX: &str = "profile_follow:";
-
 impl ProfilePayload {
     /// 用另一份快照覆盖本载荷中某分组的槽位，其余分组原样保留
     /// （"以当前状态更新"只更新发起页所属分组，避免把别的应用
     /// 正处于其他项目的状态串进来）
     pub fn merge_scope_from(&mut self, other: &ProfilePayload, scope: ProfileScope) {
+        if scope == ProfileScope::Claude {
+            self.claude_project_connection = other.claude_project_connection;
+        }
         for app in scope.apps() {
             if let (Some(dst), Some(src)) = (
                 self.native_config.get_mut(app),
@@ -1122,12 +1119,6 @@ impl ProfileService {
         Ok(duplicate)
     }
 
-    /// Move directory bindings of older versions into the project registry.
-    /// Idempotent and cheap once done; safe to call from read paths.
-    pub fn seed_project_registry(state: &AppState) -> Result<(), AppError> {
-        state.db.seed_profile_projects_from_legacy().map(|_| ())
-    }
-
     /// Register a project directory as a deployment target.
     pub fn add_project(state: &AppState, path: &str) -> Result<(), AppError> {
         let path = normalize_project_path(path)?
@@ -1143,101 +1134,9 @@ impl ProfileService {
             .remove_profile_project(normalized.as_deref().unwrap_or(path))
     }
 
-    /// Create the default Profile of a connection unless it already has (or had)
-    /// one. Returns the id of a Profile created by this call.
-    pub fn ensure_default_profile(
-        state: &AppState,
-        scope: ProfileScope,
-        provider: &crate::provider::Provider,
-    ) -> Result<Option<String>, AppError> {
-        let marker = default_profile_key(scope, &provider.id);
-        if state.db.get_setting(&marker)?.is_some() {
-            return Ok(None);
-        }
-        let payload = native_config::provider_payload(state, scope, provider)?;
-        let now = chrono::Utc::now().timestamp();
-        let profile = Profile {
-            id: uuid::Uuid::new_v4().to_string(),
-            name: provider.name.clone(),
-            payload: serde_json::to_string(&payload)
-                .map_err(|error| AppError::Config(error.to_string()))?,
-            sort_order: provider
-                .sort_index
-                .and_then(|value| i64::try_from(value).ok()),
-            created_at: Some(now),
-            updated_at: Some(now),
-        };
-        state.db.save_migrated_profile(&profile, &marker)?;
-        Ok(Some(profile.id))
-    }
-
-    /// After the connection library switched to `provider_id`: apply that
-    /// connection's default Profile so model and behavior follow the connection,
-    /// or clear the current marker when there is nothing to follow.
-    ///
-    /// Aggregation (stack) mode owns models itself, so nothing is applied there.
-    pub(crate) fn follow_connection_switch(
-        state: &AppState,
-        app: &AppType,
-        provider_id: &str,
-        warnings: &mut Vec<String>,
-    ) -> Result<(), AppError> {
-        let Some(scope) = ProfileScope::for_app(app) else {
-            return Ok(());
-        };
-        if scope == ProfileScope::ClaudeDesktop {
-            return state.db.set_current_profile_id(scope.as_str(), None);
-        }
-        let target = (|| -> Result<Option<(String, ProfilePayload)>, AppError> {
-            let Some(id) = state
-                .db
-                .get_setting(&default_profile_key(scope, provider_id))?
-            else {
-                return Ok(None);
-            };
-            let Some(profile) = state.db.get_profile(&id)? else {
-                return Ok(None);
-            };
-            let Ok(payload) = serde_json::from_str::<ProfilePayload>(&profile.payload) else {
-                return Ok(None);
-            };
-            if payload.providers.get(app).and_then(Option::as_deref) != Some(provider_id)
-                || !payload.scope_captured(scope)
-            {
-                return Ok(None);
-            }
-            if crate::mode::current::mode_state(app).is_proxy()
-                && crate::mode::state::stack(
-                    &crate::live::engine::DeviceStore::for_device(),
-                    app.as_str(),
-                )?
-                .enabled
-            {
-                return Ok(None);
-            }
-            Ok(Some((id, payload)))
-        })()?;
-        let Some((id, payload)) = target else {
-            return state.db.set_current_profile_id(scope.as_str(), None);
-        };
-        let mut follow = Vec::new();
-        if let Err(error) = Self::apply_configuration(state, &payload, app, &mut follow) {
-            follow.push(format!("[{}] apply profile failed: {error}", app.as_str()));
-        }
-        state
-            .db
-            .set_current_profile(scope.as_str(), Some(&id), !follow.is_empty())?;
-        warnings.extend(
-            follow
-                .into_iter()
-                .map(|warning| format!("{PROFILE_FOLLOW_WARNING_PREFIX}{warning}")),
-        );
-        Ok(())
-    }
-
     /// 更新项目：重命名（作用于共享实体）和/或以当前状态重拍快照
     /// （resnapshot 只覆盖 scope 分组的槽位，其余分组原样保留；
-    /// 全局切换前自动保存；项目 Profile 也可通过显式更新入口重拍）
+    /// 只有显式更新入口才重拍快照）
     pub fn update(
         state: &AppState,
         id: &str,
@@ -1303,6 +1202,34 @@ impl ProfileService {
         let mut payload: ProfilePayload = serde_json::from_str(&profile.payload)
             .map_err(|error| AppError::Config(format!("解析 Profile payload 失败: {error}")))?;
         let app = &scope.apps()[0];
+        if config.claude_project_connection == ClaudeProjectConnection::Direct {
+            if scope != ProfileScope::Claude {
+                return Err(AppError::InvalidInput(
+                    "项目独立连接仅支持 Claude Code".into(),
+                ));
+            }
+            let provider_id = config
+                .provider_id
+                .as_deref()
+                .ok_or_else(|| AppError::InvalidInput("项目独立连接必须选择供应商".into()))?;
+            let provider = match state.db.read_provider(app, provider_id)? {
+                Some(Ok(provider)) => provider,
+                Some(Err(_)) => {
+                    return Err(AppError::InvalidInput(format!(
+                        "供应商配置不可读，无法用于项目独立连接: {provider_id}"
+                    )))
+                }
+                None => {
+                    return Err(AppError::InvalidInput(format!(
+                        "供应商已不存在: {provider_id}"
+                    )))
+                }
+            };
+            crate::services::project_profile::connection::validate_provider(&provider)?;
+        }
+        if scope == ProfileScope::Claude {
+            payload.claude_project_connection = config.claude_project_connection;
+        }
         if let Some(native) = config.native_config.as_deref() {
             *payload.native_config.get_mut(app).expect("validated app") =
                 Some(native_config::normalize(app, native, true)?);
@@ -1494,7 +1421,7 @@ impl ProfileService {
             );
         }
         if follow_global_resources {
-            // None = not managed, including when editing a legacy Desktop snapshot.
+            // None means the Profile does not manage this resource type.
             *payload.mcp.get_mut(app).expect("validated profile app") = None;
             *payload.skills.get_mut(app).expect("validated profile app") = None;
             *payload.prompts.get_mut(app).expect("validated profile app") = None;
@@ -2131,6 +2058,7 @@ mod tests {
             .set_current_profile_id("codex", Some(&initial.id))
             .unwrap();
         let config = ProfileConfig {
+            claude_project_connection: ClaudeProjectConnection::Inherit,
             native_config: None,
             provider_id: None,
             model: "project-independent-model".to_string(),
@@ -2312,6 +2240,183 @@ mod tests {
         AppState::new(std::sync::Arc::new(
             crate::database::Database::memory().unwrap(),
         ))
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn claude_project_connection_saves_and_copies_without_credentials_or_cross_agent_changes() {
+        let _home = crate::test_support::TempUserHome::new();
+        let state = memory_state();
+        let provider = crate::provider::Provider::with_id(
+            "project-api".into(),
+            "Project API".into(),
+            serde_json::json!({"env": {
+                "ANTHROPIC_BASE_URL": "https://project.example",
+                "ANTHROPIC_AUTH_TOKEN": "project-test-token"
+            }}),
+            None,
+        );
+        state.db.save_provider(&AppType::Claude, &provider).unwrap();
+        let profile = ProfileService::create_from(
+            &state,
+            "Project",
+            ProfileScope::Claude,
+            ProfileSource::Blank,
+        )
+        .unwrap();
+        let initial: ProfilePayload = serde_json::from_str(&profile.payload).unwrap();
+        assert_eq!(
+            initial.claude_project_connection,
+            ClaudeProjectConnection::Inherit
+        );
+        let config = ProfileConfig {
+            claude_project_connection: ClaudeProjectConnection::Direct,
+            native_config: None,
+            provider_id: Some(provider.id.clone()),
+            model: "project-model".into(),
+            model_settings: Some(BTreeMap::new()),
+            model_catalog: None,
+            mcp_ids: vec![],
+            skill_ids: vec![],
+            prompt_id: None,
+            follow_global_resources: true,
+        };
+        let saved = ProfileService::update_config(
+            &state,
+            &profile.id,
+            ProfileScope::Claude,
+            config.clone(),
+            None,
+        )
+        .unwrap();
+        let payload: ProfilePayload = serde_json::from_str(&saved.payload).unwrap();
+        assert_eq!(
+            payload.claude_project_connection,
+            ClaudeProjectConnection::Direct
+        );
+        assert_eq!(payload.providers.claude.as_deref(), Some("project-api"));
+        assert!(!saved.payload.contains("project-test-token"));
+        assert!(!saved.payload.contains("https://project.example"));
+        assert!(!crate::config::get_claude_settings_path().exists());
+
+        let copied =
+            ProfileService::duplicate(&state, &profile.id, "Copy", ProfileScope::Claude).unwrap();
+        let copied: ProfilePayload = serde_json::from_str(&copied.payload).unwrap();
+        assert_eq!(
+            copied.claude_project_connection,
+            payload.claude_project_connection
+        );
+        assert_eq!(copied.providers.claude, payload.providers.claude);
+
+        let saved = ProfileService::update_config(
+            &state,
+            &profile.id,
+            ProfileScope::Codex,
+            ProfileConfig {
+                claude_project_connection: ClaudeProjectConnection::Inherit,
+                provider_id: None,
+                ..config
+            },
+            None,
+        )
+        .unwrap();
+        let mut payload: ProfilePayload = serde_json::from_str(&saved.payload).unwrap();
+        assert_eq!(
+            payload.claude_project_connection,
+            ClaudeProjectConnection::Direct
+        );
+        let codex_copy =
+            ProfileService::duplicate(&state, &profile.id, "Codex copy", ProfileScope::Codex)
+                .unwrap();
+        let codex_copy: ProfilePayload = serde_json::from_str(&codex_copy.payload).unwrap();
+        assert_eq!(
+            codex_copy.claude_project_connection,
+            ClaudeProjectConnection::Inherit
+        );
+        payload.clear_scope(ProfileScope::Codex);
+        assert_eq!(
+            payload.claude_project_connection,
+            ClaudeProjectConnection::Direct
+        );
+        payload.clear_scope(ProfileScope::Claude);
+        assert_eq!(
+            payload.claude_project_connection,
+            ClaudeProjectConnection::Inherit
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn claude_project_connection_rejects_invalid_inputs_without_saving() {
+        let _home = crate::test_support::TempUserHome::new();
+        let state = memory_state();
+        let profile = ProfileService::create_from(
+            &state,
+            "Project",
+            ProfileScope::Claude,
+            ProfileSource::Blank,
+        )
+        .unwrap();
+        let mut official = crate::provider::Provider::with_id(
+            "official".into(),
+            "Official".into(),
+            serde_json::json!({}),
+            None,
+        );
+        official.category = Some("official".into());
+        state.db.save_provider(&AppType::Claude, &official).unwrap();
+        let mut unreadable = official.clone();
+        unreadable.id = "unreadable".into();
+        state
+            .db
+            .save_provider(&AppType::Claude, &unreadable)
+            .unwrap();
+        state
+            .db
+            .conn
+            .lock()
+            .unwrap()
+            .execute(
+                "UPDATE providers SET settings_config = ?1 WHERE id = 'unreadable' AND app_type = 'claude'",
+                ["{invalid"],
+            )
+            .unwrap();
+
+        for (scope, provider_id) in [
+            (ProfileScope::Claude, None),
+            (ProfileScope::Claude, Some("missing")),
+            (ProfileScope::Claude, Some("official")),
+            (ProfileScope::Claude, Some("unreadable")),
+            (ProfileScope::Codex, Some("official")),
+            (ProfileScope::ClaudeDesktop, Some("official")),
+        ] {
+            let result = ProfileService::update_config(
+                &state,
+                &profile.id,
+                scope,
+                ProfileConfig {
+                    claude_project_connection: ClaudeProjectConnection::Direct,
+                    native_config: None,
+                    provider_id: provider_id.map(str::to_string),
+                    model: String::new(),
+                    model_settings: None,
+                    model_catalog: None,
+                    mcp_ids: vec![],
+                    skill_ids: vec![],
+                    prompt_id: None,
+                    follow_global_resources: true,
+                },
+                Some("Must not save".into()),
+            );
+            assert!(result.is_err(), "{scope:?}, {provider_id:?} must fail");
+            let unchanged = state.db.get_profile(&profile.id).unwrap().unwrap();
+            assert_eq!(unchanged.payload, profile.payload);
+            assert_eq!(unchanged.name, profile.name);
+        }
+        assert!(serde_json::from_str::<ProfilePayload>(
+            r#"{"claudeProjectConnection":"unsupported"}"#
+        )
+        .is_err());
     }
 
     fn two_agent_profile(state: &AppState, id: &str) -> (Profile, ProfilePayload) {
@@ -2574,6 +2679,7 @@ mod tests {
         assert_eq!(captured.resource_names.claude.mcp["enabled"], "Enabled");
 
         let config = |follow: bool, mcp_ids: Vec<String>| ProfileConfig {
+            claude_project_connection: ClaudeProjectConnection::Inherit,
             native_config: None,
             provider_id: None,
             model: String::new(),
@@ -2675,6 +2781,7 @@ mod tests {
     #[test]
     fn test_payload_serde_roundtrip() {
         let payload = ProfilePayload {
+            claude_project_connection: ClaudeProjectConnection::Direct,
             native_config: PerApp::default(),
             models: PerApp::default(),
             model_settings: PerApp {
@@ -2725,14 +2832,14 @@ mod tests {
         assert!(json.contains("modelSettings"));
         assert!(json.contains("modelCatalog"));
         assert!(json.contains("resourceNames"));
+        assert!(json.contains("\"claudeProjectConnection\":\"direct\""));
         let back: ProfilePayload = serde_json::from_str(&json).unwrap();
         assert_eq!(back, payload);
     }
 
     #[test]
     fn test_payload_tolerates_missing_fields() {
-        // 前向兼容：旧版/部分字段缺失时应落到 None（"该侧未拍过"）而不是报错，
-        // 应用时对缺失槽位不做任何改动
+        // 未设置的 Agent 槽位不参与应用，避免影响其他 Agent。
         let back: ProfilePayload =
             serde_json::from_str(r#"{"providers":{"claude":"p1"},"mcp":{"claude":["m1"]}}"#)
                 .unwrap();
@@ -2921,5 +3028,143 @@ mod tests {
         let (toggles, dangling) = plan_toggles(&current, &[]);
         assert_eq!(toggles, vec![("a".to_string(), false)]);
         assert!(dangling.is_empty());
+    }
+    #[test]
+    #[serial_test::serial]
+    fn global_apply_failure_clears_active_marker_and_never_resnapshots_another_saved_profile() {
+        let _home = crate::test_support::TempUserHome::new();
+        let state = AppState::new(std::sync::Arc::new(
+            crate::database::Database::memory().unwrap(),
+        ));
+        let previous = Profile {
+            id: "previous".into(),
+            name: "Previous".into(),
+            payload: serde_json::to_string(&ProfilePayload::default()).unwrap(),
+            sort_order: None,
+            created_at: None,
+            updated_at: None,
+        };
+        state.db.save_profile(&previous).unwrap();
+        state
+            .db
+            .set_current_profile_id("claude", Some(&previous.id))
+            .unwrap();
+        let mut payload = ProfilePayload::default();
+        payload.native_config.claude =
+            Some(r#"{"env":{"ANTHROPIC_AUTH_TOKEN":"forbidden"}}"#.into());
+        let target = Profile {
+            id: "target".into(),
+            name: "Target".into(),
+            payload: serde_json::to_string(&payload).unwrap(),
+            ..previous.clone()
+        };
+        state.db.save_profile(&target).unwrap();
+        let warnings = ProfileService::apply(&state, &target.id, ProfileScope::Claude).unwrap();
+        assert!(!warnings.is_empty());
+        // It becomes the current Profile, flagged as not matching live configuration,
+        // and is never projected as if it had been applied.
+        assert_eq!(
+            state
+                .db
+                .get_current_profile_id("claude")
+                .unwrap()
+                .as_deref(),
+            Some("target")
+        );
+        assert_eq!(state.db.get_applied_profile_id("claude").unwrap(), None);
+        assert_eq!(
+            state.db.get_profile(&previous.id).unwrap().unwrap().payload,
+            previous.payload
+        );
+        assert!(!crate::config::get_claude_settings_path().exists());
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn codex_global_catalog_can_use_current_connection_without_a_profile_provider_reference() {
+        let _home = crate::test_support::TempUserHome::new();
+        let state = AppState::new(std::sync::Arc::new(
+            crate::database::Database::memory().unwrap(),
+        ));
+        let path = crate::codex_config::get_codex_config_path();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            "model_provider='custom'\n[model_providers.custom]\nbase_url='https://keep.test'\n",
+        )
+        .unwrap();
+        let mut payload = ProfilePayload::default();
+        payload.models.codex = Some("independent".into());
+        payload.model_catalog.codex =
+            Some(serde_json::json!({"models":[{"model":"independent","contextWindow":123456}]}));
+        let mut warnings = Vec::new();
+        ProfileService::apply_saved_model_catalog(&state, &payload, &mut warnings).unwrap();
+        assert!(!warnings.iter().any(|warning| warning.contains("没有选择")));
+        let config: toml::Value = toml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(
+            config["model_providers"]["custom"]["base_url"].as_str(),
+            Some("https://keep.test")
+        );
+        assert!(config.get("model_catalog_json").is_some());
+        assert!(crate::codex_config::get_codex_model_catalog_path().exists());
+        let profile = Profile {
+            id: "catalog-applied".into(),
+            name: "Catalog applied".into(),
+            payload: serde_json::to_string(&payload).unwrap(),
+            sort_order: None,
+            created_at: None,
+            updated_at: None,
+        };
+        state.db.save_profile(&profile).unwrap();
+        let warnings = ProfileService::apply(&state, &profile.id, ProfileScope::Codex).unwrap();
+        assert!(
+            warnings.is_empty(),
+            "successful local catalog application has no warning: {warnings:?}"
+        );
+        assert_eq!(
+            state.db.get_current_profile_id("codex").unwrap().as_deref(),
+            Some(profile.id.as_str())
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn independent_profile_catalog_is_rejected_before_touching_an_active_stack() {
+        let _home = crate::test_support::TempUserHome::new();
+        let state = AppState::new(std::sync::Arc::new(
+            crate::database::Database::memory().unwrap(),
+        ));
+        let store = crate::live::engine::DeviceStore::for_device();
+        crate::mode::state::update(&store, |live| {
+            let app = live.apps.entry("codex".into()).or_default();
+            app.mode = Some(crate::mode::state::Mode::Proxy);
+            app.stack.enabled = true;
+            app.stack.members = vec!["one".into(), "two".into()];
+        })
+        .unwrap();
+        let path = crate::codex_config::get_codex_model_catalog_path();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let original = r#"{"models":[{"slug":"stack-one"},{"slug":"stack-two"}]}"#;
+        std::fs::write(&path, original).unwrap();
+        let mut payload = ProfilePayload::default();
+        payload.model_catalog.codex = Some(serde_json::json!({"models":[{"model":"private"}]}));
+        payload.native_config.codex = Some("[features]\nshould_not_apply=true".into());
+        let profile = Profile {
+            id: "private".into(),
+            name: "Private".into(),
+            payload: serde_json::to_string(&payload).unwrap(),
+            sort_order: None,
+            created_at: None,
+            updated_at: None,
+        };
+        state.db.save_profile(&profile).unwrap();
+        let error = ProfileService::apply(&state, &profile.id, ProfileScope::Codex).unwrap_err();
+        assert!(error.to_string().contains("聚合"));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+        assert!(!crate::codex_config::get_codex_config_path().exists());
+        assert_eq!(
+            crate::mode::state::stack(&store, "codex").unwrap().members,
+            vec!["one", "two"]
+        );
     }
 }

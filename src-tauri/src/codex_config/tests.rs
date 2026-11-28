@@ -266,10 +266,6 @@ fn managed_chatgpt_login_matches_local_marker_and_workspace() {
         !codex_live_auth_matches_managed_request("local-account-a", "other-access").unwrap(),
         "another user's bearer in the same workspace must not match"
     );
-    let managed_id_token = full_bundle
-        .pointer("/tokens/id_token")
-        .and_then(Value::as_str)
-        .expect("managed id token");
     assert!(
         codex_live_auth_is_managed_chatgpt_login(&full_bundle, "local-account-a"),
         "a full refreshable bundle for the managed account must be recognized"
@@ -295,37 +291,6 @@ fn managed_chatgpt_login_matches_local_marker_and_workspace() {
     assert!(
         get_codex_auth_path().exists(),
         "removing local account A must not delete native account B"
-    );
-
-    crate::config::write_json_file(
-        &get_codex_managed_oauth_live_auth_marker_path(),
-        &json!({
-            "version": 2,
-            "account_id": "workspace-shared"
-        }),
-    )
-    .expect("write legacy managed auth marker");
-    assert!(
-        read_codex_live_auth_refresh_for_managed_account(
-            "workspace-shared",
-            Some(managed_id_token),
-        )
-        .is_err(),
-        "a legacy marker must not migrate across users in one workspace"
-    );
-    assert!(
-        !codex_live_auth_is_managed_chatgpt_login(&other_user, "workspace-shared"),
-        "a legacy marker without user identity must not establish ownership"
-    );
-    assert!(
-        read_codex_live_auth_refresh_for_account("workspace-shared").is_none(),
-        "a legacy marker must not authorize refresh-token adoption"
-    );
-    clear_codex_live_auth_for_managed_account("workspace-shared")
-        .expect("clear ambiguous legacy marker");
-    assert!(
-        get_codex_auth_path().exists(),
-        "clearing an ambiguous legacy marker must preserve native auth"
     );
 
     // 非 chatgpt 模式（API key）不应命中。
@@ -359,45 +324,6 @@ fn missing_or_malformed_marker_never_establishes_ownership() {
 
     crate::config::write_text_file(&marker, "{not json").expect("write malformed marker");
     assert!(!codex_auth_matches_recorded_managed_oauth(&auth, "local-account-a").unwrap());
-}
-
-#[test]
-#[serial]
-fn legacy_managed_marker_removal_requires_manager_identity() {
-    let _home = TestHome::new();
-    let id_token = test_codex_id_token("legacy-user");
-    let auth = codex_managed_oauth_auth_value(
-        "legacy-workspace",
-        "access",
-        Some(&id_token),
-        "refresh",
-        "2026-01-01T00:00:00Z",
-    );
-    crate::config::write_json_file(&get_codex_auth_path(), &auth).expect("write legacy live auth");
-    crate::config::write_json_file(
-        &get_codex_managed_oauth_live_auth_marker_path(),
-        &json!({
-            "version": 2,
-            "account_id": "legacy-workspace"
-        }),
-    )
-    .expect("write legacy marker");
-
-    let other_user = test_codex_id_token("other-user");
-    assert!(prepare_codex_live_auth_for_managed_account_removal(
-        "legacy-workspace",
-        Some(&other_user),
-    )
-    .is_err());
-    assert!(get_codex_auth_path().exists());
-    assert!(get_codex_managed_oauth_live_auth_marker_path().exists());
-
-    prepare_codex_live_auth_for_managed_account_removal("legacy-workspace", Some(&id_token))
-        .expect("prove and migrate legacy ownership");
-    clear_codex_live_auth_for_managed_account("legacy-workspace")
-        .expect("remove proven managed live auth");
-    assert!(!get_codex_auth_path().exists());
-    assert!(!get_codex_managed_oauth_live_auth_marker_path().exists());
 }
 
 #[test]

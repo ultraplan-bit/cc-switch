@@ -233,7 +233,7 @@ mod tests {
 
     #[test]
     #[serial]
-    fn list_merges_native_entries_and_converts_legacy_rows() {
+    fn list_merges_native_entries_without_converting_stored_rows() {
         with_copilot_home(|state, home| {
             std::fs::create_dir_all(home).unwrap();
             std::fs::write(
@@ -288,13 +288,13 @@ mod tests {
             let legacy = &listed["legacy"];
             assert_eq!(
                 legacy.settings_config,
-                json!({"provider":{"baseUrl":"https://legacy.test/v1","apiKey":"k"},"models":[{"id":"lm"}]})
+                json!({"env":{"COPILOT_PROVIDER_BASE_URL":"https://legacy.test/v1","COPILOT_PROVIDER_API_KEY":"k","COPILOT_MODEL":"lm"}})
             );
             assert_eq!(
                 legacy.meta.as_ref().and_then(|m| m.live_config_managed),
                 Some(false)
             );
-            // 转换结果存回库里
+            // Reading the list leaves the stored configuration shape unchanged.
             let saved = state
                 .db
                 .get_provider_by_id("legacy", &AppType::Copilot)

@@ -329,21 +329,6 @@ pub fn needs_routing(provider: &Provider) -> bool {
             || ProviderKind::declared(provider).is_some())
 }
 
-/// 升级前旧版的状态：直连指针是模型映射卡（旧版按卡片决定模式，这张卡生效时 Desktop 指着
-/// 本地路由）。启动时据此把 Desktop 定为路由模式、路由到这张卡。
-pub fn legacy_mapping_card(db: &Database) -> Option<Provider> {
-    if current_platform_paths().is_err() {
-        return None;
-    }
-    crate::mode::current::direct_provider(db, &AppType::ClaudeDesktop)
-        .ok()
-        .flatten()
-        .filter(|provider| {
-            !is_official_provider(provider)
-                && matches!(provider_mode(provider), ClaudeDesktopMode::Proxy)
-        })
-}
-
 pub fn provider_mode(provider: &Provider) -> ClaudeDesktopMode {
     provider
         .meta

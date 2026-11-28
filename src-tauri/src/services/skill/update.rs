@@ -14,12 +14,6 @@ impl SkillService {
         Self::compute_dir_hash_with(dir, true)
     }
 
-    /// 旧版算法：字节码也计入。库里在 #7772 修复前保存的 content_hash 是用它
-    /// 算的；只给 check_updates 识别并迁移这类旧缓存用。
-    pub(super) fn compute_legacy_dir_hash(dir: &Path) -> Result<String> {
-        Self::compute_dir_hash_with(dir, false)
-    }
-
     pub(super) fn compute_dir_hash_with(dir: &Path, skip_bytecode: bool) -> Result<String> {
         use sha2::{Digest, Sha256};
 
@@ -169,16 +163,6 @@ impl SkillService {
         }
     }
 
-    /// 库里缓存的哈希是否是该远端目录按旧算法（字节码计入）算出的值。
-    ///
-    /// 上游仓库自带 `.pyc` / `__pycache__` 时，#7772 修复前安装的 Skill 缓存的
-    /// 是旧算法的哈希，与新算法的远端哈希必然不等；不识别就会对未变化的
-    /// Skill 误报「有更新」，用户点更新又是一次整目录替换。远端不含字节码时
-    /// 新旧算法结果相同，前面的相等比较已经放行，不会走到这里。
-    pub(super) fn is_legacy_hash_of(cached_hash: &str, remote_dir: &Path) -> bool {
-        Self::compute_legacy_dir_hash(remote_dir).is_ok_and(|legacy| legacy == cached_hash)
-    }
-
     /// 检查所有已安装 Skill 的更新
     ///
     /// 仅检查有 repo_owner 的 Skill（本地 Skill 跳过），
@@ -277,12 +261,6 @@ impl SkillService {
                         if freshly_computed {
                             let _ = db.update_skill_hash(&skill.id, &h, 0);
                             Some(h)
-                        } else if h != remote_hash && Self::is_legacy_hash_of(&h, &remote_skill_dir)
-                        {
-                            // 旧版缓存（字节码计入）与上游一致：迁移成新算法的
-                            // 值，不报「有更新」；更新时间保持原值。
-                            let _ = db.update_skill_hash(&skill.id, &remote_hash, skill.updated_at);
-                            Some(remote_hash.clone())
                         } else {
                             Some(h)
                         }

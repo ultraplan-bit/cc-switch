@@ -85,32 +85,6 @@ pub struct ProfilesResponse {
     pub projects: Vec<ProjectStatus>,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProfileMigrationResult {
-    profiles: Vec<ProfileDto>,
-    warnings: Vec<String>,
-    ready: bool,
-}
-
-#[tauri::command]
-pub async fn migrate_legacy_agent_profiles(
-    state: State<'_, AppState>,
-    scope: String,
-) -> Result<ProfileMigrationResult, String> {
-    let scope = ProfileScope::parse(&scope)?;
-    profile_mutation(&state, move |state| {
-        ProfileService::migrate_legacy_agent_profiles(state, scope).map(|(profiles, warnings)| {
-            ProfileMigrationResult {
-                profiles: profiles.into_iter().map(ProfileDto::from).collect(),
-                ready: warnings.is_empty(),
-                warnings,
-            }
-        })
-    })
-    .await
-}
-
 /// Profile 应用完成后的统一收尾：发事件 + 重建托盘菜单
 ///
 /// 只对项目所属分组内的应用发 provider-switched。UI 与托盘两个入口必须
@@ -194,8 +168,6 @@ fn global_state(state: &AppState, scope: ProfileScope) -> Option<GlobalState> {
 }
 
 fn list_profiles_blocking(state: &AppState) -> Result<ProfilesResponse, String> {
-    // Seeding is serialized by the database transaction and guarded by its own marker.
-    ProfileService::seed_project_registry(state)?;
     let profiles = ProfileService::list(state)?;
     let payloads: std::collections::HashMap<&str, &str> = profiles
         .iter()

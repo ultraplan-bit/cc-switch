@@ -76,11 +76,8 @@ export function EditProviderDialog({
   modeView,
 }: EditProviderDialogProps) {
   const { t } = useTranslation();
-  const {
-    connectionsOnly,
-    pending: resolvingConnectionMode,
-    migrationError,
-  } = useProviderConnectionMode(appId, open, modeView, provider?.id);
+  const { connectionsOnly, pending: resolvingConnectionMode } =
+    useProviderConnectionMode(appId, open, modeView, provider?.id);
   // 表单用了聚合的简化布局：页头应用名后标「聚合模式」
   const [stackLayout, setStackLayout] = useState(false);
   const [authSettingsTarget, setAuthSettingsTarget] =
@@ -472,11 +469,6 @@ export function EditProviderDialog({
         </>
       }
     >
-      {migrationError && (
-        <Notice tone="warning" title={t("profiles.migration.failed")}>
-          {String(migrationError)}
-        </Notice>
-      )}
       {currentNotice}
       {waitingForEditorView ? (
         <div className="py-12 text-center text-body text-fg-2">

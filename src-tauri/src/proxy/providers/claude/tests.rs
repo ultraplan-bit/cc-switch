@@ -866,8 +866,7 @@ fn copilot_legacy_url_in_any_base_url_field() {
     }
 }
 
-/// A declared OAuth kind beats a Copilot URL here, while
-/// `Provider::is_github_copilot` lets the URL win. Kept as is.
+/// Declared OAuth identity takes precedence over a stored endpoint URL.
 #[test]
 fn declared_oauth_kind_beats_copilot_url() {
     let adapter = ClaudeAdapter::new();
@@ -879,7 +878,7 @@ fn declared_oauth_kind_beats_copilot_url() {
         },
     );
     assert_eq!(adapter.provider_type(&codex), ProviderType::CodexOAuth);
-    assert!(codex.is_github_copilot());
+    assert!(!codex.is_github_copilot());
 }
 
 #[test]
@@ -1307,9 +1306,13 @@ fn test_transform_claude_request_openai_chat_strips_stop_for_copilot() {
 fn copilot_gemini_chat_sends_mid_conversation_system_as_user() {
     // #9613: Copilot hoists every system message into the Gemini instruction,
     // so only Gemini models on Copilot get later system messages as user ones.
-    let copilot = create_provider(json!({
-        "env": { "ANTHROPIC_BASE_URL": "https://api.githubcopilot.com" }
-    }));
+    let copilot = create_provider_with_meta(
+        json!({"env":{"ANTHROPIC_BASE_URL":"https://api.githubcopilot.com"}}),
+        ProviderMeta {
+            provider_type: Some("github_copilot".into()),
+            ..Default::default()
+        },
+    );
     let generic = create_provider(json!({
         "env": { "ANTHROPIC_BASE_URL": "https://openrouter.ai/api/v1" }
     }));
@@ -1370,9 +1373,8 @@ fn copilot_gemini_chat_sends_mid_conversation_system_as_user() {
 }
 
 #[test]
-fn test_transform_claude_request_openai_chat_strips_stop_for_copilot_env_url() {
-    // 兼容旧/手动 Copilot provider：即使没有 meta.provider_type，
-    // 只要 ANTHROPIC_BASE_URL 指向 Copilot，也应移除 stop。
+fn stored_copilot_url_without_declared_identity_keeps_stop() {
+    // A stored endpoint alone does not opt a custom provider into managed-account transforms.
     let provider = create_provider(json!({
         "env": {
             "ANTHROPIC_BASE_URL": "https://api.githubcopilot.com",
@@ -1390,7 +1392,7 @@ fn test_transform_claude_request_openai_chat_strips_stop_for_copilot_env_url() {
         transform_claude_request_for_api_format(body, &provider, "openai_chat", None, None)
             .unwrap();
 
-    assert!(transformed.get("stop").is_none());
+    assert_eq!(transformed["stop"], json!(["\n\nHuman:"]));
 }
 
 #[test]

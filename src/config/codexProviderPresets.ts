@@ -26,7 +26,6 @@ export interface CodexProviderPreset extends PresetFamilyFields {
   config: string; // 将写入 ~/.codex/config.toml（TOML 字符串）
   isOfficial?: boolean; // 标识是否为官方预设
   isPartner?: boolean; // 标识是否为商业合作伙伴
-  primePartner?: boolean; // 旧版的置顶合作伙伴标记；v7 起界面不再读取，新预设不写
   partnerPromotionKey?: string; // 合作伙伴促销信息的 i18n key
   category?: ProviderCategory; // 新增：分类
   isCustomTemplate?: boolean; // 标识是否为自定义模板
@@ -286,7 +285,6 @@ export const codexProviderPresets: CodexProviderPreset[] = [
     family: "kimi",
     planKey: "payg",
     regionKey: "cn",
-    primePartner: true,
     websiteUrl: "https://platform.kimi.com",
     apiKeyUrl: "https://platform.kimi.com/console/api-keys",
     auth: generateThirdPartyAuth(""),
@@ -388,7 +386,6 @@ export const codexProviderPresets: CodexProviderPreset[] = [
     family: "kimi",
     planKey: "coding",
     regionKey: "cn",
-    primePartner: true,
     websiteUrl: "https://www.kimi.com/code/",
     apiKeyUrl: "https://www.kimi.com/code/",
     auth: generateThirdPartyAuth(""),

@@ -22,88 +22,14 @@ fn sanitize_provider_name(name: &str) -> String {
 }
 
 #[test]
-fn migrate_legacy_common_config_usage_marks_historical_provider_enabled() {
-    let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
-    reset_test_fs();
-    let _home = ensure_test_home();
-
-    let mut config = MultiAppConfig::default();
-    {
-        let manager = config
-            .get_manager_mut(&AppType::Claude)
-            .expect("claude manager");
-        manager.current = "legacy-provider".to_string();
-        manager.providers.insert(
-            "legacy-provider".to_string(),
-            Provider::with_id(
-                "legacy-provider".to_string(),
-                "Legacy".to_string(),
-                json!({
-                    "includeCoAuthoredBy": false,
-                    "env": {
-                        "ANTHROPIC_API_KEY": "legacy-key"
-                    }
-                }),
-                None,
-            ),
-        );
-    }
-
-    let state = create_test_state_with_config(&config).expect("create test state");
-    state
-        .db
-        .set_config_snippet(
-            &AppType::Claude,
-            Some(r#"{ "includeCoAuthoredBy": false }"#.to_string()),
-        )
-        .expect("set common config snippet");
-
-    ProviderService::migrate_legacy_common_config_usage_if_needed(&state, AppType::Claude)
-        .expect("migrate legacy common config");
-
-    let providers = state
-        .db
-        .get_all_providers(&AppType::Claude)
-        .expect("get providers after migration");
-    let provider = providers
-        .get("legacy-provider")
-        .expect("legacy provider exists");
-
-    assert_eq!(
-        provider
-            .meta
-            .as_ref()
-            .and_then(|meta| meta.common_config_enabled),
-        Some(true),
-        "historical provider should be explicitly marked as using common config"
-    );
-    assert!(
-        provider
-            .settings_config
-            .get("includeCoAuthoredBy")
-            .is_none(),
-        "common config fields should be stripped from provider storage after migration"
-    );
-    assert_eq!(
-        provider
-            .settings_config
-            .get("env")
-            .and_then(|v| v.get("ANTHROPIC_API_KEY"))
-            .and_then(|v| v.as_str()),
-        Some("legacy-key"),
-        "provider-specific auth should remain untouched"
-    );
-}
-
-#[test]
 /// 第三方路由一律写成 `custom`：行里用什么 id 都一样，行本身不改写。
 fn provider_service_switch_codex_writes_every_third_party_route_as_custom() {
     let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
     reset_test_fs();
     let _home = ensure_test_home();
 
-    let legacy_auth = json!({ "OPENAI_API_KEY": "rightcode-key" });
-    let legacy_config = r#"model_provider = "rightcode"
+    let native_auth = json!({ "OPENAI_API_KEY": "rightcode-key" });
+    let native_config = r#"model_provider = "rightcode"
 model = "gpt-5.4"
 
 [model_providers.rightcode]
@@ -112,7 +38,7 @@ base_url = "https://rightcode.example/v1"
 wire_api = "responses"
 requires_openai_auth = true
 "#;
-    write_codex_live_atomic(&legacy_auth, Some(legacy_config))
+    write_codex_live_atomic(&native_auth, Some(native_config))
         .expect("seed existing codex live config");
 
     let mut initial_config = MultiAppConfig::default();
@@ -128,7 +54,7 @@ requires_openai_auth = true
                 "RightCode".to_string(),
                 json!({
                     "auth": {"OPENAI_API_KEY": "stale"},
-                    "config": legacy_config
+                    "config": native_config
                 }),
                 None,
             ),
@@ -186,9 +112,13 @@ requires_openai_auth = true
         model_providers.get("aihubmix").is_none(),
         "the row's own table id is not written"
     );
-    assert!(
-        model_providers.get("rightcode").is_none(),
-        "the old version's table for old-provider (same id and address as its row) is retired"
+    let native: toml::Value = toml::from_str(native_config).expect("parse native config");
+    assert_eq!(
+        model_providers.get("rightcode"),
+        native
+            .get("model_providers")
+            .and_then(|v| v.get("rightcode")),
+        "switching manages the custom table and preserves native provider tables"
     );
 
     let providers = state
@@ -352,15 +282,11 @@ requires_openai_auth = true
         Some(true)
     );
 
-    // 旧版按行的 id 写进 live 的表（id 和地址都对得上 legacy-provider 的投影）被清掉，
-    // 里面的真实 Key 不再留在 live 里。
-    assert!(
-        parsed_live
-            .get("model_providers")
-            .and_then(|v| v.get("rightcode"))
-            .is_none(),
-        "the table an old version wrote for legacy-provider is retired: {live_config}"
-    );
+    // 未由当前写入管理的原生路由表保持原样。
+    assert!(parsed_live
+        .get("model_providers")
+        .and_then(|v| v.get("rightcode"))
+        .is_some());
 
     ProviderService::switch(&state, AppType::Codex, "plain-provider")
         .expect("switch away from the bridge provider");
@@ -807,16 +733,9 @@ fn provider_service_switch_codex_preserved_login_rejects_empty_third_party_confi
 }
 
 #[test]
-fn provider_service_switch_codex_preserved_login_normalizes_legacy_reroute_config() {
+fn provider_service_switch_codex_rejects_unsupported_reroute_config_without_writes() {
     let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
     reset_test_fs();
-    // Preservation ON + a legacy-shape third-party config (top-level
-    // openai_base_url rerouting the built-in `openai` provider): the shape
-    // has no provider table to carry the bearer token — since 0.149 the
-    // built-in provider would keep using the preserved official OAuth from
-    // auth.json and send it to the third-party base URL. The switch must
-    // normalize the config into the custom table with the key
-    // injected, leaving the official login untouched.
     let _home = ensure_test_home();
     enable_codex_official_auth_preservation();
 
@@ -856,20 +775,12 @@ openai_base_url = "https://relay.example/v1"
 
     let state = create_test_state_with_config(&initial_config).expect("create test state");
 
-    ProviderService::switch(&state, AppType::Codex, "legacy-shape")
-        .expect("legacy reroute shape must be normalized, not rejected");
-
+    assert!(ProviderService::switch(&state, AppType::Codex, "legacy-shape").is_err());
     let live_config =
         std::fs::read_to_string(cc_switch_lib::get_codex_config_path()).expect("read config.toml");
     assert!(
-        !live_config.contains("openai_base_url"),
-        "the top-level reroute must be rewritten away; got:\n{live_config}"
-    );
-    assert!(
-        live_config.contains("[model_providers.custom]")
-            && live_config.contains("base_url = \"https://relay.example/v1\"")
-            && live_config.contains("experimental_bearer_token = \"third-party-key\""),
-        "routing and key must move into the custom provider table; got:\n{live_config}"
+        live_config.is_empty(),
+        "unsupported configuration must not change live files"
     );
 
     let auth_value: serde_json::Value =
@@ -880,117 +791,6 @@ openai_base_url = "https://relay.example/v1"
             .and_then(|v| v.as_str()),
         Some("official-oauth-token"),
         "the preserved official OAuth login must stay untouched"
-    );
-}
-
-#[test]
-fn provider_service_switch_codex_preserved_login_normalizes_config_carried_token() {
-    let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
-    reset_test_fs();
-    // Same legacy reroute shape, but the key sits in the config text itself
-    // (raw-edited provider with `auth = {}`): normalization must see
-    // config-carried tokens too, not only auth.OPENAI_API_KEY, and the
-    // injected token must land inside the rewritten provider table.
-    let _home = ensure_test_home();
-    enable_codex_official_auth_preservation();
-
-    let raw_edited_config = r#"model_provider = "openai"
-model = "gpt-5.4"
-openai_base_url = "https://relay.example/v1"
-experimental_bearer_token = "config-carried-key"
-"#;
-
-    let mut initial_config = MultiAppConfig::default();
-    {
-        let manager = initial_config
-            .get_manager_mut(&AppType::Codex)
-            .expect("codex manager");
-        manager.providers.insert(
-            "raw-edited".to_string(),
-            Provider::with_id(
-                "raw-edited".to_string(),
-                "RawEdited".to_string(),
-                json!({
-                    "auth": {},
-                    "config": raw_edited_config
-                }),
-                None,
-            ),
-        );
-    }
-
-    let state = create_test_state_with_config(&initial_config).expect("create test state");
-
-    ProviderService::switch(&state, AppType::Codex, "raw-edited")
-        .expect("legacy reroute with a config-carried token must be normalized");
-
-    let live_config =
-        std::fs::read_to_string(cc_switch_lib::get_codex_config_path()).expect("read config.toml");
-    assert!(
-        !live_config.contains("openai_base_url"),
-        "the top-level reroute must be rewritten away; got:\n{live_config}"
-    );
-    assert!(
-        live_config.contains("[model_providers.custom]"),
-        "the custom provider table must be created; got:\n{live_config}"
-    );
-    assert_eq!(
-        cc_switch_lib::extract_codex_experimental_bearer_token(&live_config).as_deref(),
-        Some("config-carried-key"),
-        "the config-carried key must resolve for the rewritten provider; got:\n{live_config}"
-    );
-}
-
-#[test]
-fn provider_service_switch_codex_default_normalizes_legacy_reroute_config() {
-    let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
-    reset_test_fs();
-    // Same legacy shape with preservation OFF (default): the switch is
-    // config-only on every path, so instead of feeding the built-in
-    // provider's ambient auth through auth.json the shape is normalized into
-    // a custom table and auth.json is removed.
-    let _home = ensure_test_home();
-
-    let legacy_shape_config = r#"model_provider = "openai"
-model = "gpt-5.4"
-openai_base_url = "https://relay.example/v1"
-"#;
-
-    let mut initial_config = MultiAppConfig::default();
-    {
-        let manager = initial_config
-            .get_manager_mut(&AppType::Codex)
-            .expect("codex manager");
-        manager.providers.insert(
-            "legacy-shape".to_string(),
-            Provider::with_id(
-                "legacy-shape".to_string(),
-                "LegacyShape".to_string(),
-                json!({
-                    "auth": {"OPENAI_API_KEY": "third-party-key"},
-                    "config": legacy_shape_config
-                }),
-                None,
-            ),
-        );
-    }
-
-    let state = create_test_state_with_config(&initial_config).expect("create test state");
-
-    ProviderService::switch(&state, AppType::Codex, "legacy-shape")
-        .expect("default-path switch must normalize the legacy ambient-auth shape");
-
-    assert!(
-        !cc_switch_lib::get_codex_auth_path().exists(),
-        "third-party switches are config-only: no auth.json is written"
-    );
-    let live_config =
-        std::fs::read_to_string(cc_switch_lib::get_codex_config_path()).expect("read config.toml");
-    assert!(
-        !live_config.contains("openai_base_url")
-            && live_config.contains("[model_providers.custom]")
-            && live_config.contains("experimental_bearer_token = \"third-party-key\""),
-        "routing and key must move into the custom provider table; got:\n{live_config}"
     );
 }
 
@@ -1874,7 +1674,6 @@ fn sync_current_provider_for_app_leaves_the_proxy_contract_alone() {
             None,
         );
         provider.meta = Some(ProviderMeta {
-            common_config_enabled: Some(true),
             ..Default::default()
         });
 
@@ -1957,10 +1756,10 @@ base_url = "https://api.deepseek.com/v1"
 wire_api = "responses"
 experimental_bearer_token = "old-key"
 "#;
-    let proxy_live_config = r#"model_provider = "deepseek"
+    let proxy_live_config = r#"model_provider = "custom"
 model = "deepseek-chat"
 
-[model_providers.deepseek]
+[model_providers.custom]
 name = "DeepSeek"
 base_url = "http://127.0.0.1:15721/v1"
 wire_api = "responses"
@@ -2081,47 +1880,6 @@ fn explicitly_cleared_common_snippet_is_not_auto_extracted() {
             .should_auto_extract_config_snippet(&AppType::Claude)
             .expect("check auto-extract after snippet saved"),
         "existing snippets should also block auto-extraction"
-    );
-}
-
-#[test]
-fn legacy_common_config_migration_flag_roundtrip() {
-    let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
-    reset_test_fs();
-    let _home = ensure_test_home();
-
-    let state = create_test_state().expect("create test state");
-
-    assert!(
-        !state
-            .db
-            .is_legacy_common_config_migrated()
-            .expect("initial migration flag"),
-        "migration flag should default to false"
-    );
-
-    state
-        .db
-        .set_legacy_common_config_migrated(true)
-        .expect("set migration flag");
-    assert!(
-        state
-            .db
-            .is_legacy_common_config_migrated()
-            .expect("read migration flag"),
-        "migration flag should persist once set"
-    );
-
-    state
-        .db
-        .set_legacy_common_config_migrated(false)
-        .expect("clear migration flag");
-    assert!(
-        !state
-            .db
-            .is_legacy_common_config_migrated()
-            .expect("read migration flag after clear"),
-        "migration flag should be removable for tests/debugging"
     );
 }
 
@@ -2381,7 +2139,6 @@ fn seed_claude_switch_state(
             let mut provider =
                 Provider::with_id(id.to_string(), id.to_string(), settings.clone(), None);
             provider.meta = Some(ProviderMeta {
-                common_config_enabled: Some(true),
                 ..Default::default()
             });
             manager.providers.insert(id.to_string(), provider);
@@ -2526,8 +2283,7 @@ fn switch_claude_moves_compat_switches_with_their_provider() {
     );
 }
 
-/// 窗口值按供应商走：千问 → Kimi 换值，Kimi → 官方删掉；旧版给 Kimi 注入、行里
-/// 没有的值由残留清理兜住。
+/// 供应商管理的窗口值跟随切换，用户自行设置且不属于供应商的窗口值保留。
 #[test]
 fn switch_claude_window_values_follow_the_provider() {
     let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
@@ -2544,15 +2300,15 @@ fn switch_claude_window_values_follow_the_provider() {
         "ANTHROPIC_AUTH_TOKEN": "sk-kimi",
         "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "262144"
     }});
-    let old_kimi = json!({ "env": {
+    let kimi_without_window = json!({ "env": {
         "ANTHROPIC_BASE_URL": "https://api.kimi.com/coding/",
-        "ANTHROPIC_AUTH_TOKEN": "sk-old-kimi"
+        "ANTHROPIC_AUTH_TOKEN": "sk-kimi-without-window"
     }});
     let state = seed_claude_switch_state(
         &[
             ("qwen", qwen.clone()),
             ("kimi", kimi),
-            ("old-kimi", old_kimi),
+            ("kimi-without-window", kimi_without_window),
             ("claude-official", json!({ "env": {} })),
         ],
         "qwen",
@@ -2567,14 +2323,22 @@ fn switch_claude_window_values_follow_the_provider() {
     ProviderService::switch(&state, AppType::Claude, "claude-official").expect("to official");
     assert_eq!(claude_live(), json!({ "env": {} }));
 
-    // 旧版切到早期的 Kimi 行时注入的默认值：上一家的行里查不到。
-    ProviderService::switch(&state, AppType::Claude, "old-kimi").expect("to old kimi");
+    // 供应商未管理窗口设置时，用户自行写入的值不归连接切换所有。
+    ProviderService::switch(&state, AppType::Claude, "kimi-without-window")
+        .expect("to kimi without window settings");
     let mut live = claude_live();
     live["env"]["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] = json!("262144");
     live["env"]["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] = json!("262144");
-    std::fs::write(get_claude_settings_path(), live.to_string()).expect("seed injected");
+    std::fs::write(get_claude_settings_path(), live.to_string())
+        .expect("write user window settings");
     ProviderService::switch(&state, AppType::Claude, "claude-official").expect("to official");
-    assert_eq!(claude_live(), json!({ "env": {} }));
+    assert_eq!(
+        claude_live(),
+        json!({ "env": {
+            "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "262144",
+            "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "262144"
+        } })
+    );
 }
 
 /// live 解析不了：切换报错，文件字节、mtime 和当前供应商都不变。
@@ -2795,65 +2559,6 @@ fn provider_service_delete_current_provider_returns_error() {
         ),
         other => panic!("expected Config/Message error, got {other:?}"),
     }
-}
-
-#[test]
-fn recover_from_crash_without_backup_cleans_placeholder_instead_of_writing_it_back() {
-    let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
-    reset_test_fs();
-    let _home = ensure_test_home();
-
-    // 接管态 Claude Live，且 DB 中无备份（模拟切换 app_config_dir 后新库首启的场景）
-    let taken_over_live = json!({
-        "env": {
-            "ANTHROPIC_BASE_URL": "http://127.0.0.1:15721",
-            "ANTHROPIC_AUTH_TOKEN": "PROXY_MANAGED"
-        }
-    });
-    let settings_path = get_claude_settings_path();
-    std::fs::create_dir_all(settings_path.parent().expect("settings dir")).expect("create dir");
-    std::fs::write(
-        &settings_path,
-        serde_json::to_string_pretty(&taken_over_live).expect("serialize taken over live"),
-    )
-    .expect("write taken over live");
-
-    let state = create_test_state().expect("create test state");
-
-    // 模拟历史异常：接管态 Live 已被导入成 current provider（SSOT 被污染）
-    let provider = Provider::with_id(
-        "default".to_string(),
-        "default".to_string(),
-        taken_over_live.clone(),
-        None,
-    );
-    state
-        .db
-        .save_provider(&AppType::Claude, &provider)
-        .expect("save placeholder provider");
-    state
-        .db
-        .set_current_provider(&AppType::Claude, "default")
-        .expect("set current provider");
-
-    // 启动时处理旧版遗留的接管态：没开代理（enabled=0），写回直连。
-    futures::executor::block_on(cc_switch_lib::mode::controller::startup(&state));
-
-    let live_after: serde_json::Value =
-        read_json_file(&settings_path).expect("read live settings after recovery");
-    let env = live_after.get("env").cloned().unwrap_or_else(|| json!({}));
-    assert_ne!(
-        env.get("ANTHROPIC_AUTH_TOKEN").and_then(|v| v.as_str()),
-        Some("PROXY_MANAGED"),
-        "recovery must not write the placeholder back to live"
-    );
-    assert!(
-        env.get("ANTHROPIC_BASE_URL")
-            .and_then(|v| v.as_str())
-            .map(|url| !url.starts_with("http://127.0.0.1"))
-            .unwrap_or(true),
-        "recovery must drop the local proxy base URL"
-    );
 }
 
 /// 切换写出的 live 文件里有 Key（Codex 的 auth.json 与 config.toml、Claude Code 的
@@ -3284,10 +2989,6 @@ fn claude_editor_first_provider_keeps_the_existing_settings() {
         }})
     );
     assert_eq!(
-        row.meta.and_then(|meta| meta.common_config_enabled),
-        Some(true)
-    );
-    assert_eq!(
         state
             .db
             .get_current_provider(&AppType::Claude)
@@ -3352,46 +3053,9 @@ fn claude_editor_leaves_exclusive_fields_from_live_to_the_user() {
     );
 }
 
-/// 存量 Bedrock API Key 行在编辑器里保存后，Key 还在顶层 `apiKey`：旧版的代理只从那里
-/// 读，降级后照样能用。
+/// 编辑器读取已保存的官方分类，预览的登录方式与切换一致。
 #[test]
-fn claude_editor_keeps_a_legacy_bedrock_key_where_older_versions_read_it() {
-    let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
-    reset_test_fs();
-    let _home = ensure_test_home();
-
-    let legacy = json!({
-        "apiKey": "bedrock-key",
-        "env": { "CLAUDE_CODE_USE_BEDROCK": "1", "AWS_REGION": "us-east-1" }
-    });
-    let state = seed_claude_switch_state(&[("bedrock", legacy.clone())], "bedrock", "{}");
-    ProviderService::switch(&state, AppType::Claude, "bedrock").expect("switch");
-
-    let (row, base) = open_claude_editor(&state, "bedrock");
-    assert_eq!(
-        base["env"]["AWS_BEARER_TOKEN_BEDROCK"],
-        json!("bedrock-key")
-    );
-    save_claude_editor(&state, &row, &base, base.clone(), "refuse").expect("save as is");
-    assert_eq!(claude_row(&state, "bedrock"), legacy);
-
-    let (row, base) = open_claude_editor(&state, "bedrock");
-    let mut edited = base.clone();
-    edited["env"]["AWS_BEARER_TOKEN_BEDROCK"] = json!("rotated-key");
-    save_claude_editor(&state, &row, &base, edited, "refuse").expect("rotate the key");
-    let stored = claude_row(&state, "bedrock");
-    assert_eq!(stored["apiKey"], json!("rotated-key"), "{stored}");
-    assert!(stored["env"].get("AWS_BEARER_TOKEN_BEDROCK").is_none());
-    assert_eq!(
-        claude_live()["env"]["AWS_BEARER_TOKEN_BEDROCK"],
-        json!("rotated-key")
-    );
-}
-
-/// 旧版没有 `category` 的 Google 卡：编辑器按库里那一行认出官方卡，预览的登录方式和切换
-/// 写的相同；新增时没有行，只看草稿的 `category`。
-#[test]
-fn gemini_editor_recognizes_a_legacy_google_card_like_switching_does() {
+fn gemini_editor_uses_saved_official_category_like_switching_does() {
     let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
     reset_test_fs();
     let home = ensure_test_home();
@@ -3403,11 +3067,11 @@ fn gemini_editor_recognizes_a_legacy_google_card_like_switching_does() {
         json!({ "env": {} }),
         None,
     );
-    google.category = None;
+    google.category = Some("official".into());
     state
         .db
         .save_provider(&AppType::Gemini, &google)
-        .expect("save legacy google card");
+        .expect("save official google card");
 
     let category = ProviderService::editor_category(&state, &AppType::Gemini, Some("google"), None)
         .expect("category");

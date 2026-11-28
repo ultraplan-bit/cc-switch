@@ -19,7 +19,6 @@ import { renderWithQueryClient } from "../utils/testQueryClient";
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
-  migrate: vi.fn(),
   create: vi.fn(),
   importProject: vi.fn(),
   duplicate: vi.fn(),
@@ -126,7 +125,6 @@ beforeEach(() => {
   projects = [];
   current = { claude: null, claudeDesktop: null, codex: null };
   mocks.updateTrayMenu.mockResolvedValue(true);
-  mocks.migrate.mockResolvedValue({ profiles: [], warnings: [] });
   mocks.pickDirectory.mockResolvedValue("/projects/demo");
   mocks.create.mockResolvedValue(profile());
   mocks.apply.mockResolvedValue([]);
@@ -216,7 +214,6 @@ beforeEach(() => {
     projects = projects.filter((project) => project.path !== path);
   });
   mocks.invoke.mockImplementation((command: string, args: unknown) => {
-    if (command === "migrate_legacy_agent_profiles") return mocks.migrate(args);
     switch (command) {
       case "list_profiles":
         return Promise.resolve({
@@ -300,6 +297,24 @@ beforeEach(() => {
 });
 
 describe("ProfilesPage", () => {
+  it.each(["claude", "codex"] as const)(
+    "keeps a new user's %s profiles empty without creating or migrating on open",
+    async (activeApp) => {
+      renderWithQueryClient(<ProfilesPage activeApp={activeApp} />);
+      expect(await screen.findByText("profiles.empty")).toBeVisible();
+      expect(screen.queryByRole("listitem")).toBeNull();
+      expect(profiles).toEqual([]);
+      expect(mocks.invoke).toHaveBeenCalledWith("list_profiles");
+      expect(
+        mocks.invoke.mock.calls.some(
+          ([command]) => command === "migrate_legacy_agent_profiles",
+        ),
+      ).toBe(false);
+      expect(mocks.create).not.toHaveBeenCalled();
+      expect(mocks.importProject).not.toHaveBeenCalled();
+    },
+  );
+
   it("shows the same Agent's profiles at each location and only writes after an explicit action", async () => {
     profiles = [
       profile(),
@@ -806,6 +821,7 @@ describe("direct profile configuration editing", () => {
         scope: "claude",
         name: "Project A edited",
         config: {
+          claudeProjectConnection: "inherit",
           followGlobalResources: false,
           providerId: "provider-b",
           model: "private-model",
@@ -977,6 +993,7 @@ describe("direct profile configuration editing", () => {
         scope: "claude",
         name: "Renamed",
         config: {
+          claudeProjectConnection: "inherit",
           followGlobalResources: false,
           providerId: null,
           model: "",

@@ -26,24 +26,15 @@ describe("Bedrock API Key field", () => {
     expect(getApiKeyFromConfig(updated, "claude")).toBe("bedrock-key");
   });
 
-  // 旧版预设把 Key 写在顶层 apiKey：存量行照常显示，编辑时写回原处，不改写行结构
-  it("keeps legacy rows with a top-level apiKey working", () => {
-    const legacy = bedrockConfig({}, { apiKey: "legacy-key" });
-    expect(hasApiKeyField(legacy, "claude")).toBe(true);
-    expect(getApiKeyFromConfig(legacy, "claude")).toBe("legacy-key");
-
-    const parsed = JSON.parse(
-      setApiKeyInConfig(legacy, "rotated-key", { appType: "claude" }),
-    );
-    expect(parsed.apiKey).toBe("rotated-key");
-    expect(parsed.env).not.toHaveProperty("AWS_BEARER_TOKEN_BEDROCK");
-  });
-
-  it("prefers the env token over a leftover top-level apiKey", () => {
+  it("reads only the native Bedrock token field", () => {
     const both = bedrockConfig(
       { AWS_BEARER_TOKEN_BEDROCK: "env-key" },
       { apiKey: "stale-key" },
     );
     expect(getApiKeyFromConfig(both, "claude")).toBe("env-key");
+    const topLevelOnly = bedrockConfig({}, { apiKey: "unused-key" });
+    expect(getApiKeyFromConfig(topLevelOnly, "claude")).toBe("");
+    expect(hasApiKeyField(topLevelOnly, "claude")).toBe(false);
+    expect(setApiKeyInConfig(topLevelOnly, "new-key")).toBe(topLevelOnly);
   });
 });

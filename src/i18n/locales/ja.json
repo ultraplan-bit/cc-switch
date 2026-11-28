@@ -82,7 +82,7 @@
     "disableAutoModeServer": "auto mode のサーバー側チェックを無効化",
     "disableAutoModeServerHelp": "ゲートウェイはサーバー側チェックに対応していないため、auto mode はセッションごとに一度「対象外」の通知で止まり、Enter を押すとローカルチェックに切り替わります。オンにすると最初からローカルチェックを使い、通知は出ません。公式エンドポイントではオンにしないでください。",
     "keyFieldsHint": "エンドポイント、キー、モデル、コンテキストウィンドウ、互換スイッチはプロバイダーの切り替えに従います。それ以外のフィールドは Claude Code のグローバル設定で、保存するとすべてのプロバイダーに適用されます。",
-    "inactiveFieldsHint": "旧バージョンがこのプロバイダーに保存した設定で、切り替えでは反映されなくなりました。クリックすると上に追加され、保存後はすべてのプロバイダーに適用されます。",
+    "inactiveFieldsHint": "これらのインポート済み項目は接続の切り替え時に適用されません。必要な項目を上の設定に追加できます。",
     "addToGlobalSettings": "グローバル設定に追加"
   },
   "header": {
@@ -385,7 +385,6 @@
     "openclawDefaultModelSetFailed": "デフォルトモデルの設定に失敗しました",
     "openclawNoModels": "モデルが設定されていません",
     "openclawModelNotFound": "選択したモデルは存在しません。更新してからもう一度お試しください。",
-    "backfillWarning": "切り替え成功しましたが、前のプロバイダーへの設定保存に失敗しました",
     "codexAuthCleanupFailed": "切り替えは成功しましたが、auth.json を削除できませんでした。公式ログイン資格情報がディスクに残っています。完全に削除するには Codex 設定ディレクトリの auth.json を手動で削除してください",
     "omoVariantCleanupFailed": "切り替えに成功しましたが、もう一方の OMO バリアント（OMO / OMO Slim）の設定ファイルを削除できませんでした。OpenCode が両方を読み込む可能性があります。OpenCode の設定ディレクトリから手動で削除してください",
     "windowControlFailed": "ウィンドウ操作に失敗しました: {{error}}",
@@ -395,10 +394,9 @@
     "codexHistorySplit": {
       "hint": "{{previous}}で作成した {{count}} 件のセッションは閲覧のみになりました",
       "officialBucket": "公式サブスクリプション",
-      "thirdPartyBucket": "サードパーティプロバイダー",
-      "migrationFinished": "古いセッションを {{count}} 件移行しました。Codex を再起動すると続けられます。",
-      "migrationFailed": "古いセッションの移行に失敗しました：{{error}}。次回 CC Switch の起動時に自動で再試行します。"
-    }
+      "thirdPartyBucket": "サードパーティプロバイダー"
+    },
+    "switchWarnings": "切り替えが完了しました。確認事項：\n{{details}}"
   },
   "confirm": {
     "deleteProvider": "プロバイダーを削除",
@@ -415,18 +413,6 @@
       "title": "フェイルオーバーの有効化",
       "message": "フェイルオーバーは上級機能です。有効にする前に、その仕組みを理解していることをご確認ください。\n\nフェイルオーバーキューでプロバイダーの優先順位を先に設定することをお勧めします。",
       "confirm": "理解しました、有効にする"
-    },
-    "unifyCodexHistory": {
-      "title": "Codex セッション履歴を統一",
-      "message": "オンにすると、公式サブスクリプションが共有の custom プロバイダー ID で動作し、公式とサードパーティのセッションが同じグループにまとまります。新しい Codex でもどちらのセッションも再開でき、CLI の resume 一覧にもまとめて表示されます。\n\n既存の公式セッションを移行することもできます。移行を選ぶと、以後は起動のたびに公式グループに残ったセッションも移行します（移行前に ~/.cc-switch/backups へ自動バックアップし、オフにする際に復元を選べます）。移行しないセッションは新しい Codex では閲覧のみになります。移行後は Codex を再起動してください。\n\n注意：プロバイダーをまたいで古いセッションを再開すると、相手のバックエンドが encrypted_content の推論内容を復号できず失敗する場合があります。",
-      "migrateExisting": "既存の公式セッション履歴も移行する",
-      "confirm": "理解しました、オンにする"
-    },
-    "unifyCodexHistoryOff": {
-      "title": "セッション履歴の統一をオフにする",
-      "message": "オフにすると、公式サブスクリプションとサードパーティのセッションが再び 2 つのグループに分かれます。新しい Codex では現在のプロバイダーのグループしか再開できず、もう一方は閲覧のみになります。オンの間に作成されたセッションは出所を区別できないため、サードパーティ側のグループに残ります。",
-      "restoreBackup": "移行した公式セッションを公式グループへ復元する（バックアップから正確に復元）",
-      "confirm": "オフにする"
     },
     "usage": {
       "title": "使用量クエリの設定",
@@ -633,7 +619,6 @@
       "delete": "削除",
       "deleting": "削除中...",
       "managedAbove": "上のリストで管理",
-      "legacy": "旧バージョン",
       "loadFailed": "バックアップ使用量の読み込みに失敗しました",
       "revealFailed": "フォルダを開けませんでした",
       "deleteConfirmTitle": "「{{name}}」を削除しますか？",
@@ -649,18 +634,6 @@
           "name": "Skill アンインストール時のバックアップ",
           "hint": "Skill をアンインストールする前のコピーで、Skills ページから復元できます。削除すると、それらの Skill は復元できなくなります。"
         },
-        "codexHistoryUnify": {
-          "name": "Codex セッション統合の移行バックアップ",
-          "hint": "「Codex セッション履歴を統一」で既存セッションを移行したときのコピー。このスイッチをオフにする際の「バックアップから復元」はこれに依存します。削除すると、移行した公式セッションを元のグループに戻せなくなります。"
-        },
-        "codexHistoryUnifyRestore": {
-          "name": "Codex セッション統合の復元バックアップ",
-          "hint": "「バックアップから復元」を実行する前のコピー。CC Switch が再び読み込むことはありません。"
-        },
-        "codexHistoryProviderMigration": {
-          "name": "Codex セッショングループ移行バックアップ",
-          "hint": "セッショングループを移行する前のコピー。CC Switch が再び読み込むことはありません。"
-        },
         "liveFirstWrite": {
           "name": "設定ファイル初回書き込みバックアップ",
           "hint": "CC Switch が各クライアントの設定ファイルを初めて書き換える前の元ファイル。削除すると元のファイルは取り戻せません。次回の書き込み時にその時点のファイルが改めてバックアップされます。"
@@ -673,29 +646,9 @@
           "name": "OpenClaw 設定のバックアップ",
           "hint": "OpenClaw の設定を保存する前のコピー。「バックアップ保持数」に従って自動で整理されます。"
         },
-        "proxyLiveBackup": {
-          "name": "旧ルーティング引き継ぎバックアップ",
-          "hint": "アップグレード時に旧ルーティング引き継ぎバックアップから移した設定のコピー。CC Switch が再び読み込むことはありません。"
-        },
         "envVars": {
           "name": "環境変数クリーンアップのバックアップ",
           "hint": "競合する環境変数を削除する前に記録した元の値。削除すると元の値を確認できなくなります。"
-        },
-        "legacyConfigBackups": {
-          "name": "旧 config.json のバックアップ",
-          "hint": "旧バージョンが残したファイル。現在のバージョンは読み込みません。"
-        },
-        "legacyConfigArchive": {
-          "name": "旧 config.json のアーカイブ",
-          "hint": "データベース移行前の旧設定ファイル。現在のバージョンは読み込みません。"
-        },
-        "legacyDbUpgrade": {
-          "name": "旧データベースアップグレードのバックアップ",
-          "hint": "旧バージョンがデータベースをアップグレードした際のコピー。現在のバージョンは読み込みません。"
-        },
-        "legacyToolSearch": {
-          "name": "旧 Tool Search パッチのバックアップ",
-          "hint": "削除済みの Tool Search パッチ機能が残したファイル。現在のバージョンは読み込みません。"
         }
       }
     },
@@ -744,7 +697,7 @@
       "saveAndTestSuccess": "設定を保存しました。接続正常です",
       "saveAndTestFailed": "設定を保存しましたが、接続テストに失敗しました：{{error}}",
       "noRemoteData": "クラウドに同期データが見つかりません",
-      "incompatibleVersion": "リモートデータに互換性がありません（プロトコル v{{protocolVersion}}、データベース {{dbCompatVersion}}）。このクライアントは protocol v2 / db-v6 をサポートしています。",
+      "incompatibleVersion": "リモートデータに互換性がありません（プロトコル v{{protocolVersion}}、データベース {{dbCompatVersion}}）。このクライアントは protocol v2 / db-v7 をサポートしています。",
       "unsaved": "未保存",
       "saved": "保存済み",
       "unsavedChanges": "先に設定を保存してください",
@@ -767,7 +720,6 @@
         "path": "リモートパス",
         "dbCompat": "DB 互換レイヤー",
         "artifacts": "内容",
-        "legacyNotice": "旧レイアウトのリモートパスを検出しました。復元後、次回のアップロードは新しい v2/db-v6 パスに書き込まれます。",
         "warning": "ローカルのすべてのデータとスキル設定が上書きされます",
         "confirm": "復元を実行"
       },
@@ -783,7 +735,6 @@
         "path": "リモートパス",
         "dbCompat": "DB 互換レイヤー",
         "warning": "リモートの既存同期データが上書きされます",
-        "legacyNotice": "旧レイアウトのリモートデータを検出しました。今回のアップロードは新しい v2/db-v6 パスに書き込み、旧パスは上書きしません。",
         "confirm": "アップロードを実行"
       }
     },
@@ -854,7 +805,7 @@
       "autoSyncLastErrorHint": "ネットワークまたは S3 設定を確認してください。次回の変更時に自動再試行されます。",
       "missingBucket": "S3 バケットを入力してください",
       "noRemoteData": "S3 バケットに同期データが見つかりません",
-      "incompatibleVersion": "リモートデータに互換性がありません（バージョン {{version}}）。このクライアントは protocol v2 / db-v6 をサポートしています。",
+      "incompatibleVersion": "リモートデータに互換性がありません（バージョン {{version}}）。このクライアントは protocol v2 / db-v7 をサポートしています。",
       "unsaved": "未保存",
       "saved": "保存済み",
       "clear": "設定をクリア",
@@ -940,7 +891,7 @@
     "preserveCodexOfficialAuthOnSwitch": "直接切替時に公式ログインを保持",
     "preserveCodexOfficialAuthOnSwitchDescription": "ローカルルーティングが無効な場合のサードパーティ切替を制御します。ルーティング接管中は常に Codex の公式ログインを保持します。",
     "unifyCodexSessionHistory": "Codex セッション履歴を統一",
-    "unifyCodexSessionHistoryDescription": "公式サブスクリプションもサードパーティと同じ custom プロバイダー ID で動作し、公式とサードパーティのセッションが同じグループにまとまります。新しい Codex（デスクトップ版 26.1103・CLI 0.167 以降）は現在のプロバイダーと同じグループのセッションしか再開できず、別グループは閲覧のみになります。CLI の resume 一覧も現在のグループだけを表示します。公式とサードパーティを切り替えて使う場合はオンを推奨します。公式グループのセッションの移行も選択でき（移行前に自動バックアップ）、オフにする際はバックアップから復元できます。注意：プロバイダーをまたいで古いセッションを再開すると、encrypted_content の推論内容を相手のバックエンドが復号できず、再開に失敗する場合があります。",
+    "unifyCodexSessionHistoryDescription": "Only future official and third-party Codex sessions use the same provider group. Existing session records are not moved or rewritten.",
     "codexStackClassicSubagents": "集約モードでサブエージェントにクラシックツールを使う",
     "codexStackClassicSubagentsDescription": "メインとサブのエージェントが別のプロバイダーを使う場合は必ずオンにしてください。オフだとサブエージェントにタスクが届きません。",
     "codexStackClassicSubagentsForcedV2": "Codex の config.toml で [features] multi_agent_v2 がオンになっています。こちらが優先されるため、この設定は効きません。",
@@ -948,10 +899,6 @@
     "codexSessionCompressionDescription": "オンにすると、Codex は起動するたびに 7 日以上更新のないセッションファイルをバックグラウンドで圧縮し、ディスク使用量を大きく減らします。圧縮したセッションで会話を続けると Codex が自動的に展開します。CC Switch は圧縮されたセッションも通常どおり表示・集計しますが、一覧には最後の返信のプレビューが表示されません。Codex でまだ開発中の機能のため、オンの間は Codex の起動時に毎回通知が表示されます。新しめの Codex が必要で、Codex を再起動すると有効になります。オフにすると圧縮は止まりますが、圧縮済みのセッションはそのまま残ります。",
     "codexSessionCompressionUsage": "セッションの現在の使用量: {{size}}",
     "codexSessionCompressionFailed": "Codex セッション圧縮の設定を変更できませんでした",
-    "unifyCodexHistoryRestoreCompleted": "バックアップから公式セッション履歴を復元しました（セッションファイル {{files}} 件、インデックス {{rows}} 行）",
-    "unifyCodexHistoryRestoreFailed": "公式セッション履歴の復元に失敗しました。もう一度お試しください",
-    "unifyCodexHistoryRestoreNothing": "現在の Codex ディレクトリに復元可能な移行バックアップはありません",
-    "unifyCodexHistoryRestoreSkippedToggleOn": "統一セッション履歴が再度有効化されたため、復元をスキップしました",
     "appVisibility": {
       "title": "ホームページ表示",
       "description": "ホームページに表示するアプリを選択",
@@ -1147,7 +1094,12 @@
       "about": "情報"
     },
     "appConfig": {
-      "configDir": "設定ディレクトリ"
+      "configDir": "設定ディレクトリ",
+      "selectAgent": "Agent",
+      "selectionHint": "Agent を選択して、専用の設定と設定ディレクトリを表示します。",
+      "empty": "この Agent に専用のアプリ設定はありません。",
+      "pendingDirectories": "未保存のディレクトリ：{{apps}}",
+      "saveDirectories": "すべてのディレクトリ変更を保存"
     },
     "routing": {
       "service": "サービス"
@@ -1985,7 +1937,6 @@
     "setAsDefault": "デフォルトに設定",
     "retry": "再試行",
     "copyCode": "コードをコピー",
-    "migrationFailed": "旧認証データの移行に失敗しました: {{error}}",
     "loadModelsFailed": "Copilot モデル一覧の読み込みに失敗しました",
     "noPickerModels": "この GitHub アカウントで利用できる Copilot モデルがありません。Copilot Free アカウントでは通常このようになります。Copilot Pro 以上のプランが有効か確認してください。",
     "noPickerModelsClaude": "この GitHub アカウントで利用できる Copilot モデルがありません。Copilot Free アカウントでは通常このようになります。Copilot Pro 以上のプランが有効か確認してください。モデル欄に gpt-4.1 または gpt-4o を手動で入力すれば、そのまま利用できます。",
@@ -2023,7 +1974,8 @@
       "notSignedIn": "Copilot CLI にログインしていません。copilot を実行して /login でログインするか、このカードで認証センターのアカウントを紐付けてください。"
     },
     "defaultCannotRemove": "Copilot の既定モデルがこのプロバイダーのものなので、削除できません。先に copilot の /model でほかのプロバイダーのモデルに切り替えてください。",
-    "terminalNeedsAdd": "ターミナルでモデルを選べるよう、先にこのプロバイダーを Copilot に追加してください。"
+    "terminalNeedsAdd": "ターミナルでモデルを選べるよう、先にこのプロバイダーを Copilot に追加してください。",
+    "storageFailed": "Cannot read account storage: {{error}}"
   },
   "codexOauth": {
     "authStatus": "認証状態",
@@ -2212,7 +2164,7 @@
     "reasoningEffortHint": "上流が low/high/max などの思考深度に対応しているときにオンにします。思考モードも同時にオンになり、Codex の reasoning.effort を上流の Chat パラメーターに変換します。",
     "reasoningGroupTitle": "思考能力",
     "keyFieldsHint": "エンドポイント、キー、モデル、推論レベル、コンテキストウィンドウ、互換スイッチはプロバイダーに合わせて切り替わります。それ以外は Codex のグローバル設定で、保存するとすべてのプロバイダーに適用されます。",
-    "inactiveFieldsHint": "旧バージョンがこのプロバイダーに保存した設定で、切り替えでは反映されなくなりました。クリックすると TOML をコピーできるので、必要なら上に貼り付けてください。",
+    "inactiveFieldsHint": "これらのインポート済み項目は接続の切り替え時に適用されません。必要に応じて TOML を上の設定にコピーしてください。",
     "inactiveFieldCopied": "コピーしました",
     "upstreamFormatCopilotRouteHint": "どのモードでもルーティングが必要で、ルーティングが Copilot アカウントの認証情報を注入します。手動指定したプロトコルにモデルが対応していないとエラーになります。",
     "maxOutputTokensWarning": "モデルやゲートウェイの実際の出力上限を超えないでください。超えると 400 が返ります。",
@@ -2224,7 +2176,7 @@
     "configJson": "設定ファイル (settings.json)",
     "configJsonHint": "Gemini CLI の settings.json（MCP サーバーは MCP パネルで管理します）",
     "keyFieldsHint": "エンドポイント、キー、モデル名、認証方式はプロバイダーに合わせて切り替わります。その他の環境変数と settings.json は Gemini CLI のグローバル設定で、保存するとすべてのプロバイダーに適用されます。",
-    "inactiveFieldsHint": "旧バージョンがこのプロバイダーに保存した設定で、切り替えでは反映されなくなりました。クリックすると上に追加され、保存後はすべてのプロバイダーに適用されます。",
+    "inactiveFieldsHint": "これらのインポート済み項目は接続の切り替え時に適用されません。必要な項目を上の設定に追加できます。",
     "addToGlobalSettings": "グローバル設定に追加"
   },
   "opencode": {
@@ -3193,7 +3145,6 @@
     "applySuccess": "プロファイルをグローバルに適用しました",
     "applyFailed": "プロファイルを適用できませんでした：{{detail}}",
     "applyWarnings": "プロファイルを適用しました（注意 {{warningCount}} 件）：\n{{details}}",
-    "switchFollowWarning": "接続は切り替わりましたが、対応するプロファイルを完全には適用できませんでした：\n{{details}}",
     "scope": {
       "label": "使用先",
       "global": "グローバル",
@@ -3251,10 +3202,6 @@
     "import": {
       "completedWithNotes": "プロジェクト設定をインポートしました。注意事項を確認してください"
     },
-    "migration": {
-      "pending": "既存の Agent 設定を準備しています…",
-      "failed": "既存設定の移行が完了していません"
-    },
     "environment": {
       "title": "プロジェクト環境",
       "configureProject": "プロジェクトを設定",
@@ -3274,6 +3221,14 @@
       "name": "名前",
       "provider": "プロバイダー",
       "inheritProvider": "現在のグローバルプロバイダーを使用",
+      "projectConnection": "プロジェクトの API 接続",
+      "projectConnectionInherit": "グローバル接続を継承",
+      "projectConnectionDirect": "プロジェクト専用の直接接続",
+      "projectConnectionInheritHint": "接続は Claude Code 本来の設定階層に従って継承されます。継承に戻すと、この機能が管理する接続フィールドのみが削除されます。その後セッションを再起動してください。この設定はプロジェクトへのデプロイにのみ適用されます。",
+      "projectConnectionDirectHint": "プロジェクトへのデプロイにのみ適用されます。CC Switch のローカルルーティングを経由せず、選択したプロバイダーに直接接続します。Anthropic プロトコルの通常の API キーまたはトークンのみ対応します。組織の管理ポリシーや起動時の指定は引き続き優先されます。",
+      "projectConnectionCredentialsHint": "アドレスとキーは .claude/settings.local.json に書き込まれ、Git の無視対象になります。Git がすでに追跡している場合、直接接続のデプロイはできません。プロバイダーの変更後は再デプロイしてください。継承に戻すと管理対象の接続フィールドが削除されます。その後、Claude セッションを再起動してください。",
+      "projectConnectionProviderRequired": "プロジェクト専用の直接接続には既存のプロバイダーを選択してください。",
+      "projectConnectionProviderPlaceholder": "プロジェクトのプロバイダーを選択",
       "providerReferenceHint": "モデル機能は選択したプロバイダーを使用します。API アドレス、キー、アカウントは引き続きプロバイダーを参照します。プロジェクトへのデプロイでグローバル接続は切り替わりません。",
       "model": "モデル",
       "resetModels": "プロバイダーのモデル設定に戻す",
@@ -3918,12 +3873,6 @@
     "clickToChange": "クリックでアイコンを変更",
     "clickToSelect": "クリックでアイコンを選択",
     "change": "アイコンを変更"
-  },
-  "migration": {
-    "success": "設定の移行が完了しました",
-    "skillsSuccess": "スキルを {{count}} 件、自動的に統合管理へインポートしました",
-    "skillsFailed": "スキルの自動インポートに失敗しました",
-    "skillsFailedDescription": "Skills 画面で「既存をインポート」をクリックして手動でインポートしてください（または再起動して再試行）。"
   },
   "health": {
     "operational": "正常",
@@ -5230,12 +5179,6 @@
       "marketRemoved": "マーケットプレイス {{name}} を削除しました",
       "marketRemoveFailed": "{{name}} を削除できませんでした"
     }
-  },
-  "newLayoutNotice": {
-    "title": "画面が新しくなりました",
-    "body": "このバージョンでは画面を一新し、いくつかの機能の場所が変わりました：\n• モードは各アプリのページ上部に移動しました\n• 使用量とアカウントはサイドバーにあります\n変更点の詳細はリリースノートをご覧ください。",
-    "viewReleaseNotes": "リリースノートを見る",
-    "confirm": "OK"
   },
   "whatsNew": {
     "updatedTo": "v{{version}} に更新しました",

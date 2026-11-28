@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import "@testing-library/jest-dom";
 import type { ComponentProps } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -290,29 +290,60 @@ describe("SettingsPage", () => {
     expect(screen.getByText("log-config-panel")).toBeInTheDocument();
   });
 
-  it("drives per-app directories and saves only after a change", async () => {
-    const { rerenderWith } = renderSettingsPage({ section: "appConfig" });
-
+  it("shows only the selected Agent and routes its directory controls", async () => {
+    const { rerenderWith } = renderSettingsPage({
+      section: "appConfig",
+      activeApp: "codex",
+    });
     expect(screen.getByText("codex-auth-settings")).toBeInTheDocument();
-    // 没改过目录：没有保存按钮
     expect(
-      screen.queryByRole("button", { name: "common.save" }),
-    ).not.toBeInTheDocument();
-
+      screen.getByRole("textbox", {
+        name: "Codex settings.appConfig.configDir",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText("settings.browsePlaceholderClaude"),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("switch", { name: "settings.skipClaudeOnboarding" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: "settings.appConfig.saveDirectories",
+      }),
+    ).toBeNull();
     fireEvent.click(
-      screen.getAllByRole("button", { name: "settings.browseDirectory" })[0],
-    );
-    expect(settingsMock.browseDirectory).toHaveBeenCalledWith("claude");
-    fireEvent.click(
-      screen.getAllByRole("button", { name: "settings.resetDefault" })[1],
+      screen.getByRole("button", { name: "settings.resetDefault" }),
     );
     expect(settingsMock.resetDirectory).toHaveBeenCalledWith("codex");
+
+    fireEvent.change(
+      screen.getByRole("combobox", { name: "settings.appConfig.selectAgent" }),
+      {
+        target: { value: "claude" },
+      },
+    );
+    expect(screen.queryByText("codex-auth-settings")).toBeNull();
+    expect(
+      screen.getByRole("switch", { name: "settings.skipClaudeOnboarding" }),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "settings.browseDirectory" }),
+    );
+    expect(settingsMock.browseDirectory).toHaveBeenCalledWith("claude");
 
     settingsMock = createSettingsMock({
       settings: { ...savedSettings, codexConfigDir: "/new/codex" },
     });
-    rerenderWith({ section: "appConfig" });
-    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    rerenderWith({ section: "appConfig", activeApp: "codex" });
+    expect(
+      screen.getByPlaceholderText("settings.browsePlaceholderClaude"),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "settings.appConfig.saveDirectories",
+      }),
+    );
     await waitFor(() =>
       expect(settingsMock.saveSettings).toHaveBeenCalledTimes(1),
     );
@@ -371,117 +402,60 @@ describe("SettingsPage", () => {
     expect(screen.getByText("about:false")).toBeInTheDocument();
   });
 
-  describe("app configuration navigation", () => {
-    let frames: Map<number, FrameRequestCallback>;
-    let now: number;
-
-    beforeEach(() => {
-      frames = new Map();
-      now = 0;
-      let frameId = 0;
-      vi.stubGlobal(
-        "requestAnimationFrame",
-        (callback: FrameRequestCallback) => {
-          frames.set(++frameId, callback);
-          return frameId;
-        },
-      );
-      vi.stubGlobal("cancelAnimationFrame", (id: number) => frames.delete(id));
-      vi.stubGlobal("matchMedia", () => ({ matches: false }));
-      vi.spyOn(performance, "now").mockImplementation(() => now);
+  it("selects the requested Agent and follows a later navigation target", () => {
+    const { rerenderWith } = renderSettingsPage({
+      section: "appConfig",
+      activeApp: "codex",
+      appConfigTarget: "pi",
     });
+    expect(
+      screen.getByRole("combobox", { name: "settings.appConfig.selectAgent" }),
+    ).toHaveValue("pi");
+    expect(
+      screen.getByPlaceholderText("settings.browsePlaceholderPi"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("codex-auth-settings")).toBeNull();
+    rerenderWith({ section: "appConfig", appConfigTarget: "gemini" });
+    expect(
+      screen.getByPlaceholderText("settings.browsePlaceholderGemini"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText("settings.browsePlaceholderPi"),
+    ).toBeNull();
+  });
 
-    afterEach(() => {
-      vi.restoreAllMocks();
-      vi.unstubAllGlobals();
+  it("does not substitute another Agent's settings when none are available", () => {
+    renderSettingsPage({ section: "appConfig", activeApp: "claude-desktop" });
+    expect(
+      screen.getByRole("combobox", { name: "settings.appConfig.selectAgent" }),
+    ).toHaveValue("claude-desktop");
+    expect(screen.getByText("settings.appConfig.empty")).toBeInTheDocument();
+    expect(screen.queryByRole("switch")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "settings.browseDirectory" }),
+    ).toBeNull();
+  });
+
+  it("keeps all pending directories discoverable while another Agent is selected", () => {
+    settingsMock = createSettingsMock({
+      appConfigDir: "/moved",
+      settings: {
+        ...savedSettings,
+        claudeConfigDir: "/draft/claude",
+        codexConfigDir: "/draft/codex",
+      },
     });
-
-    const advanceFrames = (count: number) => {
-      for (let i = 0; i < count; i++) {
-        now += 50;
-        const callbacks = [...frames.values()];
-        frames.clear();
-        callbacks.forEach((callback) => callback(now));
-      }
-    };
-
-    const startNavigation = () => {
-      const view = renderSettingsPage({
-        section: "appConfig",
-        appConfigScrollTarget: "pi",
-      });
-      const container =
-        view.container.querySelector<HTMLDivElement>("#main-content")!;
-      const target =
-        view.container.querySelector<HTMLElement>("#app-config-pi")!;
-      Object.defineProperties(container, {
-        clientHeight: { value: 500 },
-        scrollHeight: { value: 1500 },
-      });
-      vi.spyOn(container, "getBoundingClientRect").mockReturnValue(
-        new DOMRect(0, 0, 700, 500),
-      );
-      vi.spyOn(target, "getBoundingClientRect").mockReturnValue(
-        new DOMRect(0, 1000, 700, 100),
-      );
-      const highlight = { cancel: vi.fn(), onfinish: null };
-      const animate = vi.fn().mockReturnValue(highlight);
-      target.animate = animate;
-      advanceFrames(2);
-      expect(container.scrollTop).toBeGreaterThan(0);
-      expect(container.scrollTop).toBeLessThan(608);
-      expect(animate).not.toHaveBeenCalled();
-      return { ...view, scrollContainer: container, animate, highlight };
-    };
-
-    it.each(["wheel", "touchstart", "pointerdown", "keyboard", "scrollbar"])(
-      "preserves user scrolling and skips highlighting after %s takes over",
-      (input) => {
-        const { scrollContainer, animate } = startNavigation();
-        if (input === "keyboard") {
-          expect(fireEvent.keyDown(window, { key: "PageUp" })).toBe(true);
-        } else if (input !== "scrollbar") {
-          expect(
-            fireEvent(
-              scrollContainer,
-              new Event(input, { bubbles: true, cancelable: true }),
-            ),
-          ).toBe(true);
-        }
-        // 浏览器处理用户输入后的位置，后续动画帧不得把它拉回定位轨迹。
-        scrollContainer.scrollTop = 27;
-        advanceFrames(12);
-        expect(scrollContainer.scrollTop).toBe(27);
-        expect(animate).not.toHaveBeenCalled();
+    renderSettingsPage({ section: "appConfig", activeApp: "gemini" });
+    expect(tMock).toHaveBeenCalledWith(
+      "settings.appConfig.pendingDirectories",
+      {
+        apps: "Claude Code, Codex, CC Switch",
       },
     );
-
-    it("finishes normal navigation and flashes twice after reaching the target", () => {
-      const { scrollContainer, animate } = startNavigation();
-      advanceFrames(12);
-      expect(scrollContainer.scrollTop).toBe(608);
-      expect(animate).toHaveBeenCalledTimes(1);
-      expect(animate).toHaveBeenCalledWith(
-        expect.any(Array),
-        expect.objectContaining({ iterations: 2 }),
-      );
-    });
-
-    it("does not treat cursor movement in a directory input as page scrolling", () => {
-      const { scrollContainer, animate } = startNavigation();
-      fireEvent.keyDown(scrollContainer.querySelector("input")!, {
-        key: "ArrowUp",
-      });
-      advanceFrames(12);
-      expect(scrollContainer.scrollTop).toBe(608);
-      expect(animate).toHaveBeenCalledTimes(1);
-    });
-
-    it("cancels an active highlight when the user starts scrolling", () => {
-      const { scrollContainer, highlight } = startNavigation();
-      advanceFrames(12);
-      fireEvent.wheel(scrollContainer);
-      expect(highlight.cancel).toHaveBeenCalledTimes(1);
-    });
+    expect(
+      screen.getByRole("button", {
+        name: "settings.appConfig.saveDirectories",
+      }),
+    ).toBeEnabled();
   });
 });

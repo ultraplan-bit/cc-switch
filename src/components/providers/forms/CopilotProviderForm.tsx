@@ -597,7 +597,6 @@ export function CopilotProviderForm({
     onSubmittingChange?.(true);
     try {
       const meta: ProviderMeta = { ...(initialData?.meta ?? {}) };
-      delete meta.githubAccountId;
       delete meta.authBinding;
       if (isOfficial && accountId) {
         meta.authBinding = {

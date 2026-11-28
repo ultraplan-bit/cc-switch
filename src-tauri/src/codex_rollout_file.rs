@@ -3,22 +3,19 @@
 //! Codex 的 `[features] local_thread_store_compression`（以及不受该开关控制的
 //! app-server `rollout/compress`）会把 7 天没动过的 rollout 压成同名 `.jsonl.zst`
 //! （单帧 zstd、保留 mtime）并删掉原文件；在压缩过的会话上继续对话时，Codex
-//! 先解压回 `.jsonl` 再追加。会话管理、用量导入、历史分桶迁移都经这里读写，
+//! 先解压回 `.jsonl` 再追加。会话管理与用量导入通过这里读取，
 //! 两种形态对它们透明。
 
 use std::collections::HashSet;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read};
+#[cfg(test)]
+use std::io::Read;
+use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
-
-use crate::config::atomic_write;
-use crate::error::AppError;
 
 const COMPRESSED_SUFFIX: &str = ".zst";
 const PLAIN_SUFFIX: &str = ".jsonl";
 const READER_CAPACITY: usize = 1 << 20;
-/// 与 Codex 压缩时用的级别无关，只用于 CC Switch 原地改写压缩文件（历史分桶迁移）。
-const WRITE_LEVEL: i32 = 3;
 
 fn file_name(path: &Path) -> Option<&str> {
     path.file_name().and_then(|name| name.to_str())
@@ -76,6 +73,7 @@ pub fn reader_from_file(path: &Path, file: File) -> io::Result<Box<dyn BufRead +
 }
 
 /// 读出全文（UTF-8），压缩文件先解压。
+#[cfg(test)]
 pub fn read_to_string(path: &Path) -> io::Result<String> {
     if !is_compressed(path) {
         return std::fs::read_to_string(path);
@@ -83,37 +81,6 @@ pub fn read_to_string(path: &Path) -> io::Result<String> {
     let mut text = String::new();
     open_reader(path)?.read_to_string(&mut text)?;
     Ok(text)
-}
-
-/// 原子写回；压缩路径先编码成 zstd，保持文件原有形态。
-///
-/// 两种形态都保留原 mtime：`codex resume` 按 mtime 排序，会话列表里压缩会话的最后活跃
-/// 时间也取 mtime（Codex 压缩时也保留了它），改写元数据不该让老会话显示成刚刚活跃。
-pub fn write_rollout(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
-    let modified = std::fs::metadata(path)
-        .and_then(|meta| meta.modified())
-        .ok();
-    if is_compressed(path) {
-        let encoded = zstd::stream::encode_all(bytes, WRITE_LEVEL)
-            .map_err(|error| AppError::io(path, error))?;
-        atomic_write(path, &encoded)?;
-    } else {
-        atomic_write(path, bytes)?;
-    }
-    if let Some(modified) = modified {
-        // Unix 设时间只看属主，只读打开就够（文件本身可能只读）；Windows 要可写句柄。
-        // 内容已经写好，时间戳只影响排序：恢复失败不该让整次迁移中断
-        let file = if cfg!(windows) {
-            File::options().write(true).open(path)
-        } else {
-            File::open(path)
-        };
-        let times = std::fs::FileTimes::new().set_modified(modified);
-        if let Err(error) = file.and_then(|file| file.set_times(times)) {
-            log::warn!("Failed to restore mtime of {}: {error}", path.display());
-        }
-    }
-    Ok(())
 }
 
 /// 逻辑文件名（去掉 `.zst`）。`path` 可以是任意平台的路径字符串（游标里存的原样）。
@@ -142,6 +109,14 @@ pub fn dedupe_siblings(paths: Vec<PathBuf>) -> Vec<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn write_rollout(path: &Path, bytes: &[u8]) -> io::Result<()> {
+        if is_compressed(path) {
+            std::fs::write(path, zstd::stream::encode_all(bytes, 3)?)
+        } else {
+            std::fs::write(path, bytes)
+        }
+    }
 
     #[test]
     fn recognizes_both_forms() {
@@ -196,63 +171,6 @@ mod tests {
                 PathBuf::from("/y/a.jsonl.zst"),
             ]
         );
-    }
-
-    #[test]
-    fn rewriting_rollout_keeps_mtime() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        for name in ["rollout-a.jsonl.zst", "rollout-b.jsonl"] {
-            let path = temp.path().join(name);
-            write_rollout(&path, b"{\"a\":1}\n").expect("write");
-            let old = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
-            File::options()
-                .write(true)
-                .open(&path)
-                .expect("open")
-                .set_times(std::fs::FileTimes::new().set_modified(old))
-                .expect("set mtime");
-
-            write_rollout(&path, b"{\"a\":2}\n").expect("rewrite");
-
-            let modified = std::fs::metadata(&path)
-                .expect("meta")
-                .modified()
-                .expect("mtime");
-            assert_eq!(modified, old, "{name}");
-            assert_eq!(read_to_string(&path).expect("read"), "{\"a\":2}\n");
-        }
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn rewriting_read_only_rollout_keeps_mtime() {
-        use std::os::unix::fs::PermissionsExt;
-        let temp = tempfile::tempdir().expect("tempdir");
-        for name in ["rollout-c.jsonl", "rollout-d.jsonl.zst"] {
-            let path = temp.path().join(name);
-            write_rollout(&path, b"{\"a\":1}\n").expect("write");
-            let old = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
-            File::options()
-                .write(true)
-                .open(&path)
-                .expect("open")
-                .set_times(std::fs::FileTimes::new().set_modified(old))
-                .expect("set mtime");
-            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o444)).expect("chmod");
-
-            write_rollout(&path, b"{\"a\":2}\n").expect("rewrite");
-
-            let modified = std::fs::metadata(&path)
-                .expect("meta")
-                .modified()
-                .expect("mtime");
-            assert_eq!(
-                read_to_string(&path).expect("read"),
-                "{\"a\":2}\n",
-                "{name}"
-            );
-            assert_eq!(modified, old, "{name}");
-        }
     }
 
     #[test]

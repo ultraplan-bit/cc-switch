@@ -78,7 +78,7 @@ interface ManagedAccountsGroupProps {
   status: "loading" | "error" | "ready";
   statusErrorText: string;
   onRetryStatus: () => void;
-  /** 标题行下面的提示（Copilot 旧数据迁移失败） */
+  /** 标题行下面的状态提示 */
   notice?: React.ReactNode;
   /** 不能登录的原因（Claude 官方账号：配置目录在 WSL 里）：「添加账号」「重新登录」置灰，原因显示在标题行下面 */
   loginDisabledReason?: string;

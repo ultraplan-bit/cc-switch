@@ -23,6 +23,8 @@ export interface PerApp<T> {
  * （空数组，应用时清空启用）严格区分。
  */
 export interface ProfilePayload {
+  /** Claude Code project deployment only; credentials remain in the provider library. */
+  claudeProjectConnection?: "inherit" | "direct";
   providers: PerApp<string | null>;
   models?: PerApp<string | null>;
   /** Agent-native model settings independent of the selected provider. */
@@ -50,6 +52,8 @@ export interface ProfileResourceNames {
 }
 
 export interface ProfileConfig {
+  /** Only Claude Code can override its connection when deployed to a project. */
+  claudeProjectConnection?: "inherit" | "direct";
   providerId: string | null;
   model: string;
   modelSettings: Record<string, string>;
@@ -139,17 +143,7 @@ export interface ProfilesResponse {
   projects: ProfileProject[];
 }
 
-export interface ProfileMigrationResult {
-  profiles: Profile[];
-  warnings: string[];
-  ready?: boolean;
-}
-
 export const profilesApi = {
-  /** Idempotently preserve legacy configuration before using Profile-only editing. */
-  async migrateLegacy(scope: ProfileScope): Promise<ProfileMigrationResult> {
-    return await invoke("migrate_legacy_agent_profiles", { scope });
-  },
   /**
    * 读取方案、各 Agent 的全局状态以及已登记项目的部署状态
    */

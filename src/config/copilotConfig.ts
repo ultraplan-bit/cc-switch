@@ -85,24 +85,7 @@ export const normalizeCopilotProviderId = (value: string) =>
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
-/** PR #8753 期间的旧形状：自带模型全在 `env` 的 `COPILOT_PROVIDER_*` 里。 */
-export const COPILOT_LEGACY_ENV = {
-  baseUrl: "COPILOT_PROVIDER_BASE_URL",
-  type: "COPILOT_PROVIDER_TYPE",
-  apiKey: "COPILOT_PROVIDER_API_KEY",
-  bearerToken: "COPILOT_PROVIDER_BEARER_TOKEN",
-  wireApi: "COPILOT_PROVIDER_WIRE_API",
-  transport: "COPILOT_PROVIDER_TRANSPORT",
-  azureApiVersion: "COPILOT_PROVIDER_AZURE_API_VERSION",
-  modelId: "COPILOT_PROVIDER_MODEL_ID",
-  wireModel: "COPILOT_PROVIDER_WIRE_MODEL",
-  maxPromptTokens: "COPILOT_PROVIDER_MAX_PROMPT_TOKENS",
-  maxOutputTokens: "COPILOT_PROVIDER_MAX_OUTPUT_TOKENS",
-  headers: "COPILOT_PROVIDER_HEADERS",
-  model: "COPILOT_MODEL",
-} as const;
-
-/** 卡片 `env` 里的字符串值（官方卡的 `COPILOT_MODEL`、旧形状的 BYOK 变量）。 */
+/** 官方卡 `env` 中的字符串值，如 `COPILOT_MODEL`。 */
 export function copilotEnvOf(settingsConfig: unknown): Record<string, string> {
   const env = isPlainObject(settingsConfig) ? settingsConfig.env : undefined;
   if (!isPlainObject(env)) return {};
@@ -122,12 +105,9 @@ function copilotProviderNodeOf(
   return isPlainObject(provider) ? (provider as CopilotProviderNode) : null;
 }
 
-/** 有 `provider` 节点就是自带模型卡；旧形状按 `COPILOT_PROVIDER_BASE_URL` 认（只为显示）。 */
+/** 有 `provider` 节点就是自带模型卡。 */
 export function isCopilotByok(settingsConfig: unknown): boolean {
-  if (copilotProviderNodeOf(settingsConfig)) return true;
-  return Boolean(
-    copilotEnvOf(settingsConfig)[COPILOT_LEGACY_ENV.baseUrl]?.trim(),
-  );
+  return copilotProviderNodeOf(settingsConfig) !== null;
 }
 
 /** 官方卡：category 是 official，或者配置里没有自带模型。 */
@@ -148,56 +128,6 @@ export function reasoningEffortOf(settingsConfig: unknown): string {
     (COPILOT_REASONING_EFFORTS as readonly string[]).includes(value.trim())
     ? value.trim()
     : "";
-}
-
-/** 旧形状 `COPILOT_PROVIDER_HEADERS` 的「名称: 值」行文本。 */
-function parseLegacyHeaders(text: string | undefined): Record<string, string> {
-  const headers: Record<string, string> = {};
-  for (const line of (text ?? "").split(/\r?\n|\\n/)) {
-    const index = line.indexOf(":");
-    if (index <= 0) continue;
-    const name = line.slice(0, index).trim();
-    if (name) headers[name] = line.slice(index + 1).trim();
-  }
-  return headers;
-}
-
-const positiveNumber = (value: string | undefined) => {
-  const number = Number(value?.trim());
-  return Number.isFinite(number) && number > 0 ? number : undefined;
-};
-
-/** 旧 env 形状换成新形状（与后端 list 时的就地转换一致），表单打开旧行时用。 */
-function legacyByokConfig(env: Record<string, string>): CopilotByokConfig {
-  const value = (key: keyof typeof COPILOT_LEGACY_ENV) =>
-    env[COPILOT_LEGACY_ENV[key]]?.trim() || undefined;
-  const provider: CopilotProviderNode = { baseUrl: value("baseUrl") ?? "" };
-  const type = value("type");
-  if (type) provider.type = type as CopilotProviderType;
-  const wireApi = value("wireApi");
-  if (wireApi) provider.wireApi = wireApi as CopilotWireApi;
-  const transport = value("transport");
-  if (transport) provider.transport = transport as "http" | "websockets";
-  const apiKey = value("apiKey");
-  if (apiKey) provider.apiKey = apiKey;
-  const bearerToken = value("bearerToken");
-  if (bearerToken) provider.bearerToken = bearerToken;
-  const azureApiVersion = value("azureApiVersion");
-  if (azureApiVersion) provider.azure = { apiVersion: azureApiVersion };
-  const headers = parseLegacyHeaders(env[COPILOT_LEGACY_ENV.headers]);
-  if (Object.keys(headers).length) provider.headers = headers;
-
-  const wireModel = value("wireModel");
-  const modelId = value("modelId");
-  const id = value("model") ?? modelId ?? wireModel ?? "";
-  const model: CopilotModel = { id };
-  if (wireModel && wireModel !== id) model.wireModel = wireModel;
-  if (modelId && modelId !== id) model.modelId = modelId;
-  const maxPromptTokens = positiveNumber(value("maxPromptTokens"));
-  if (maxPromptTokens) model.maxPromptTokens = maxPromptTokens;
-  const maxOutputTokens = positiveNumber(value("maxOutputTokens"));
-  if (maxOutputTokens) model.maxOutputTokens = maxOutputTokens;
-  return { provider, models: id ? [model] : [] };
 }
 
 /** 读出自带模型卡的配置；不是自带模型卡时给一份空白配置。 */
@@ -223,8 +153,6 @@ export function copilotByokConfigOf(
           }))
         : [],
     };
-  } else if (isCopilotByok(settingsConfig)) {
-    config = legacyByokConfig(copilotEnvOf(settingsConfig));
   } else {
     config = emptyCopilotByokConfig();
   }

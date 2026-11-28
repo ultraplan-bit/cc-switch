@@ -1,9 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { TFunction } from "i18next";
-import {
-  codexHistorySplitToastExtras,
-  showCodexUnifyMigrationFinished,
-} from "@/utils/codexHistorySplitHint";
+import { codexHistorySplitToastExtras } from "@/utils/codexHistorySplitHint";
 
 const warningMock = vi.fn();
 const successMock = vi.fn();
@@ -46,56 +43,5 @@ describe("codexHistorySplitToastExtras", () => {
       t,
     );
     expect(other.description).toContain("thirdPartyBucket:3");
-  });
-});
-
-describe("showCodexUnifyMigrationFinished", () => {
-  beforeEach(() => {
-    successMock.mockReset();
-    errorMock.mockReset();
-  });
-
-  it("tells the user how many sessions moved so they can restart Codex", () => {
-    showCodexUnifyMigrationFinished(
-      { migratedStateRows: 3986, migratedJsonlFiles: 3732, error: null },
-      t,
-    );
-    expect(successMock).toHaveBeenCalledWith(
-      "notifications.codexHistorySplit.migrationFinished:undefined:3986",
-      expect.anything(),
-    );
-    expect(errorMock).not.toHaveBeenCalled();
-  });
-
-  it("falls back to the session file count when no state DB was read", () => {
-    showCodexUnifyMigrationFinished(
-      { migratedStateRows: 0, migratedJsonlFiles: 7 },
-      t,
-    );
-    expect(successMock).toHaveBeenCalledWith(
-      "notifications.codexHistorySplit.migrationFinished:undefined:7",
-      expect.anything(),
-    );
-  });
-
-  it("stays quiet when nothing was migrated", () => {
-    showCodexUnifyMigrationFinished(
-      { migratedStateRows: 0, migratedJsonlFiles: 0 },
-      t,
-    );
-    expect(successMock).not.toHaveBeenCalled();
-    expect(errorMock).not.toHaveBeenCalled();
-  });
-
-  it("reports a failure instead of a success", () => {
-    showCodexUnifyMigrationFinished(
-      { migratedStateRows: 0, migratedJsonlFiles: 0, error: "disk full" },
-      t,
-    );
-    expect(errorMock).toHaveBeenCalledWith(
-      "notifications.codexHistorySplit.migrationFailed",
-      expect.anything(),
-    );
-    expect(successMock).not.toHaveBeenCalled();
   });
 });

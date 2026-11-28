@@ -2087,12 +2087,6 @@ function ProviderFormFull({
     const nextMeta: ProviderMeta = {
       ...(baseMeta ?? {}),
       opencodeConfigFormat: isNativeOpencode ? "v2" : undefined,
-      // Claude Code、Codex、Gemini CLI 的通用配置片段已冻结：沿用行里原有的标记，新增时
-      // 由后端写 true（兼容旧版）。
-      commonConfigEnabled:
-        appId === "claude" || appId === "codex" || usesGeminiStyleForm(appId)
-          ? initialData?.meta?.commonConfigEnabled
-          : undefined,
       endpointAutoSelect,
       claudeDesktopMode: undefined,
       // 保存 providerType（用于识别 Copilot / Codex OAuth 等特殊供应商）
@@ -2138,11 +2132,6 @@ function ProviderFormFull({
                       accountId: selectedClaudeAccountId,
                     }
                   : undefined,
-      // GitHub Copilot 多账号：保存关联的账号 ID
-      githubAccountId:
-        isCopilotProviderForSubmit && selectedGitHubAccountId
-          ? selectedGitHubAccountId
-          : undefined,
       codexFastMode: isClaudeCodexOauthProvider ? codexFastMode : undefined,
       codexChatReasoning:
         appId === "codex" && category !== "official" && isCodexChatFormat
@@ -2237,9 +2226,6 @@ function ProviderFormFull({
     }
     if (!nextMeta.authBinding && "authBinding" in nextMeta) {
       delete nextMeta.authBinding;
-    }
-    if (!nextMeta.githubAccountId && "githubAccountId" in nextMeta) {
-      delete nextMeta.githubAccountId;
     }
 
     if (supportsBillingMultiplier) {

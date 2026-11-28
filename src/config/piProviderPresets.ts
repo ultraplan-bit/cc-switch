@@ -42,7 +42,6 @@ export interface PiProviderPreset extends PresetFamilyFields {
   };
   category?: ProviderCategory;
   isPartner?: boolean;
-  primePartner?: boolean;
   partnerPromotionKey?: string;
   theme?: PresetTheme;
   icon?: string;
@@ -352,7 +351,6 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       models: kimiModels(),
     },
     category: "cn_official",
-    primePartner: true,
     partnerPromotionKey: "kimi",
     icon: "kimi",
     iconColor: "#6366F1",
@@ -394,7 +392,6 @@ const piProviderPresetDefinitions: PiProviderPreset[] = [
       models: kimiForCodingModels(),
     },
     category: "cn_official",
-    primePartner: true,
     icon: "kimi",
     iconColor: "#6366F1",
   },

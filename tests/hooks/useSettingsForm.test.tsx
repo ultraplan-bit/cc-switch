@@ -28,6 +28,88 @@ afterEach(() => {
 });
 
 describe("useSettingsForm Hook", () => {
+  it("preserves only dirty directory fields through refetch and clears them after save", () => {
+    const original = {
+      showInTray: true,
+      claudeConfigDir: "/saved/claude",
+      codexConfigDir: "/saved/codex",
+      piConfigDir: "/saved/pi",
+    };
+    useSettingsQueryMock.mockReturnValue({ data: original, isLoading: false });
+    const { result, rerender } = renderHook(() => useSettingsForm());
+    act(() => {
+      result.current.updateSettings({
+        claudeConfigDir: "/draft/claude",
+        piConfigDir: undefined,
+      });
+    });
+    const refreshed = {
+      ...original,
+      showInTray: false,
+      codexConfigDir: "/external/codex",
+    };
+    useSettingsQueryMock.mockReturnValue({ data: refreshed, isLoading: false });
+    rerender();
+    expect(result.current.settings).toMatchObject({
+      showInTray: false,
+      claudeConfigDir: "/draft/claude",
+      codexConfigDir: "/external/codex",
+      piConfigDir: undefined,
+    });
+
+    const saved = {
+      ...refreshed,
+      claudeConfigDir: "/draft/claude",
+      piConfigDir: undefined,
+    };
+    useSettingsQueryMock.mockReturnValue({ data: saved, isLoading: false });
+    rerender();
+    useSettingsQueryMock.mockReturnValue({
+      data: {
+        ...saved,
+        claudeConfigDir: "/later/claude",
+        piConfigDir: "/later/pi",
+      },
+      isLoading: false,
+    });
+    rerender();
+    expect(result.current.settings?.claudeConfigDir).toBe("/later/claude");
+    expect(result.current.settings?.piConfigDir).toBe("/later/pi");
+  });
+
+  it("accepts server directory changes after reverting or explicitly discarding a draft", () => {
+    const original = { claudeConfigDir: "/saved/claude" };
+    useSettingsQueryMock.mockReturnValue({ data: original, isLoading: false });
+    const { result, rerender } = renderHook(() => useSettingsForm());
+    act(() => result.current.updateSettings({ claudeConfigDir: "/draft" }));
+    act(() =>
+      result.current.updateSettings({ claudeConfigDir: " /saved/claude " }),
+    );
+    useSettingsQueryMock.mockReturnValue({
+      data: { claudeConfigDir: "/external/claude" },
+      isLoading: false,
+    });
+    rerender();
+    expect(result.current.settings?.claudeConfigDir).toBe("/external/claude");
+
+    act(() =>
+      result.current.updateSettings({ claudeConfigDir: "/draft-again" }),
+    );
+    act(() =>
+      result.current.resetSettings({
+        showInTray: true,
+        minimizeToTrayOnClose: true,
+        claudeConfigDir: "/reset/claude",
+      }),
+    );
+    useSettingsQueryMock.mockReturnValue({
+      data: { claudeConfigDir: "/later/claude" },
+      isLoading: false,
+    });
+    rerender();
+    expect(result.current.settings?.claudeConfigDir).toBe("/later/claude");
+  });
+
   it("ignores an unsupported cached language sharing the Chinese prefix", () => {
     useSettingsQueryMock.mockReturnValue({ data: null, isLoading: false });
     window.localStorage.setItem("language", "zha");

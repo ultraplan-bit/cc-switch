@@ -6,7 +6,6 @@
 
 mod support;
 
-mod app_config_load;
 mod app_type_parse;
 mod copilot_commands;
 mod deeplink_import;

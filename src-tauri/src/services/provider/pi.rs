@@ -324,7 +324,6 @@ mod tests {
             sort_index: None,
             notes: None,
             meta: Some(ProviderMeta {
-                common_config_enabled: Some(true),
                 endpoint_auto_select: Some(true),
                 live_config_managed: Some(false),
                 api_format: Some("openai_chat".to_string()),
@@ -374,7 +373,6 @@ mod tests {
             .unwrap()
             .unwrap();
         let meta = saved.meta.unwrap_or_default();
-        assert_eq!(meta.common_config_enabled, None);
         assert_eq!(meta.live_config_managed, None);
         assert_eq!(meta.endpoint_auto_select, None);
         assert_eq!(meta.api_format, None);

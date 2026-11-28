@@ -18,7 +18,6 @@ import {
 import {
   useAddProfileProjectMutation,
   useApplyProfileMutation,
-  useProfileConfiguration,
   useProfilesQuery,
   useRemoveProfileProjectMutation,
 } from "@/lib/query/profiles";
@@ -72,7 +71,6 @@ function ProfilesPageContent({
   } | null>(null);
   const [removingProject, setRemovingProject] = useState<string | null>(null);
 
-  const migration = useProfileConfiguration(scope);
   const { data, isPending, isError, refetch } = useProfilesQuery();
   const { data: providers } = useQuery({
     queryKey: ["providers", scope, "profile-editor"],
@@ -306,32 +304,6 @@ function ProfilesPageContent({
         )}
         {location.mode === "project" && project && !project.available && (
           <Notice tone="warning" title={t("profiles.projects.unavailable")} />
-        )}
-
-        {migration.isFetching && (
-          <p role="status" className="text-caption text-fg-3">
-            {t("profiles.migration.pending")}
-          </p>
-        )}
-        {migration.isError && (
-          <div
-            role="alert"
-            className="flex min-w-0 flex-wrap items-center gap-2 text-caption text-destructive"
-          >
-            <p className="min-w-0 flex-1 break-words">
-              {t("profiles.migration.failed")}:{" "}
-              {extractErrorMessage(migration.error)}
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={migration.isFetching}
-              onClick={() => void migration.refetch()}
-            >
-              {t("common.retry")}
-            </Button>
-          </div>
         )}
 
         {profiles.length > 5 && (

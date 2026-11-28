@@ -33,13 +33,20 @@ describe("findManagedAccountUsers", () => {
         },
       },
     }),
-    // 旧字段 githubAccountId 指定了 a2
-    provider("legacy-a2", {
-      meta: { providerType: "github_copilot", githubAccountId: "a2" },
+    // authBinding 指定了 a2
+    provider("bound-a2", {
+      meta: {
+        providerType: "github_copilot",
+        authBinding: {
+          source: "managed_account",
+          authProvider: "github_copilot",
+          accountId: "a2",
+        },
+      },
     }),
     // 没指定：跟着默认账号
     provider("follows-default", { meta: { providerType: "github_copilot" } }),
-    // 没写 providerType 的旧卡按地址认
+    // 未声明托管身份的自定义连接不隐式绑定默认账号。
     provider(
       "by-url",
       {},
@@ -58,7 +65,6 @@ describe("findManagedAccountUsers", () => {
     expect(users.map((u) => [u.providerId, u.viaDefault])).toEqual([
       ["bound-a1", false],
       ["follows-default", true],
-      ["by-url", true],
     ]);
   });
 
@@ -66,7 +72,7 @@ describe("findManagedAccountUsers", () => {
     const users = findManagedAccountUsers("github_copilot", ["a2"], "a1", {
       claude,
     });
-    expect(users.map((u) => u.providerId)).toEqual(["legacy-a2"]);
+    expect(users.map((u) => u.providerId)).toEqual(["bound-a2"]);
   });
 
   it("collects every provider when removing all accounts", () => {
@@ -78,9 +84,8 @@ describe("findManagedAccountUsers", () => {
     );
     expect(users.map((u) => u.providerId)).toEqual([
       "bound-a1",
-      "legacy-a2",
+      "bound-a2",
       "follows-default",
-      "by-url",
     ]);
   });
 

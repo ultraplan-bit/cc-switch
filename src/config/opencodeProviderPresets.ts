@@ -10,7 +10,6 @@ export interface OpenCodeProviderPreset extends PresetFamilyFields {
   settingsConfig: OpenCodeProviderConfig;
   isOfficial?: boolean;
   isPartner?: boolean;
-  primePartner?: boolean; // 旧版的置顶合作伙伴标记；v7 起界面不再读取，新预设不写
   partnerPromotionKey?: string;
   category?: ProviderCategory;
   templateValues?: Record<string, TemplateValueConfig>;
@@ -658,7 +657,6 @@ export const opencodeProviderPresets: OpenCodeProviderPreset[] = [
     family: "kimi",
     planKey: "payg",
     regionKey: "cn",
-    primePartner: true,
     websiteUrl: "https://platform.kimi.com",
     apiKeyUrl: "https://platform.kimi.com/console/api-keys",
     settingsConfig: {
@@ -730,7 +728,6 @@ export const opencodeProviderPresets: OpenCodeProviderPreset[] = [
     family: "kimi",
     planKey: "coding",
     regionKey: "cn",
-    primePartner: true,
     websiteUrl: "https://www.kimi.com/code/",
     apiKeyUrl: "https://platform.kimi.com/console/api-keys",
     settingsConfig: {

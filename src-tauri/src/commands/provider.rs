@@ -202,13 +202,12 @@ fn switch_provider_internal(
 ) -> Result<SwitchResult, AppError> {
     // Codex：切换前后各看一次新会话落在哪组，跨组时提示（新版 Codex 会锁住另一组）。
     let codex_bucket_before = matches!(app_type, AppType::Codex)
-        .then(crate::codex_history_migration::codex_live_history_bucket)
+        .then(crate::codex_history::codex_live_history_bucket)
         .flatten();
     let mut result = ProviderService::switch(state, app_type.clone(), id)?;
     if matches!(app_type, AppType::Codex) {
-        result.codex_history_split = crate::codex_history_migration::codex_history_split_hint(
-            codex_bucket_before.as_deref(),
-        );
+        result.codex_history_split =
+            crate::codex_history::codex_history_split_hint(codex_bucket_before.as_deref());
     }
     Ok(result)
 }
@@ -295,8 +294,6 @@ fn import_default_config_internal(state: &AppState, app_type: AppType) -> Result
                 _ => {}
             }
         }
-
-        ProviderService::migrate_legacy_common_config_usage_if_needed(state, app_type.clone())?;
     }
 
     Ok(imported)

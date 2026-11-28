@@ -75,10 +75,10 @@ describe("copilotProviderPresets", () => {
     expect(
       isCopilotByok({ provider: { baseUrl: "http://x/v1" }, models: [] }),
     ).toBe(true);
-    // 旧 env 形状只为显示仍认得出
+    // 环境变量不能替代原生 provider 节点。
     expect(
       isCopilotByok({ env: { COPILOT_PROVIDER_BASE_URL: " http://x/v1 " } }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       isCopilotOfficialCard({
         category: "custom",
@@ -102,35 +102,17 @@ describe("copilotProviderPresets", () => {
     expect(isValidCopilotProviderId("x".repeat(65))).toBe(false);
   });
 
-  it("reads legacy env cards in the new shape", () => {
+  it("does not translate environment-only BYOK data into a provider", () => {
     expect(
       copilotByokConfigOf({
         env: {
-          COPILOT_PROVIDER_BASE_URL: "https://api.example.com/v1",
-          COPILOT_PROVIDER_TYPE: "azure",
-          COPILOT_PROVIDER_WIRE_API: "responses",
-          COPILOT_PROVIDER_API_KEY: "sk-test",
-          COPILOT_PROVIDER_AZURE_API_VERSION: "2025-04-01",
-          COPILOT_PROVIDER_HEADERS: "X-A: 1\nX-B: two",
-          COPILOT_PROVIDER_WIRE_MODEL: "gpt-upstream",
-          COPILOT_PROVIDER_MAX_OUTPUT_TOKENS: "8192",
-          COPILOT_MODEL: "gpt-5.4",
+          COPILOT_PROVIDER_BASE_URL: "https://old.example",
+          COPILOT_PROVIDER_API_KEY: "old-key",
         },
-        reasoningEffort: "high",
       }),
     ).toEqual({
-      provider: {
-        baseUrl: "https://api.example.com/v1",
-        type: "azure",
-        wireApi: "responses",
-        apiKey: "sk-test",
-        azure: { apiVersion: "2025-04-01" },
-        headers: { "X-A": "1", "X-B": "two" },
-      },
-      models: [
-        { id: "gpt-5.4", wireModel: "gpt-upstream", maxOutputTokens: 8192 },
-      ],
-      reasoningEffort: "high",
+      provider: { type: "openai", wireApi: "completions", baseUrl: "" },
+      models: [],
     });
   });
 

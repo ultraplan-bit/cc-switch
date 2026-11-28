@@ -9,7 +9,7 @@ mod claude_desktop_config;
 mod claude_mcp;
 mod claude_plugin;
 mod codex_config;
-mod codex_history_migration;
+mod codex_history;
 mod codex_rollout_file;
 mod codex_state_db;
 mod commands;
@@ -89,7 +89,7 @@ pub use services::{
     provider::{
         reapply_current_codex_official_live, reapply_current_codex_third_party_live, EditorSave,
     },
-    skill::{migrate_skills_to_ssot, ImportSkillSelection},
+    skill::ImportSkillSelection,
     ConfigService, McpService, PromptService, ProviderService, SkillService,
 };
 pub use settings::{update_settings, AppSettings};
@@ -653,49 +653,6 @@ pub fn run() {
             // 初始化数据库
             let app_config_dir = crate::config::get_app_config_dir();
             let db_path = app_config_dir.join("cc-switch.db");
-            let json_path = app_config_dir.join("config.json");
-
-            // 检查是否需要从 config.json 迁移到 SQLite
-            let has_json = json_path.exists();
-            let has_db = db_path.exists();
-
-            // 如果需要迁移，先验证 config.json 是否可以加载（在创建数据库之前）
-            // 这样如果加载失败用户选择退出，数据库文件还没被创建，下次可以正常重试
-            let migration_config = if !has_db && has_json {
-                log::info!("检测到旧版配置文件，验证配置文件...");
-
-                // 循环：支持用户重试加载配置文件
-                loop {
-                    match crate::app_config::MultiAppConfig::load() {
-                        Ok(config) => {
-                            log::info!("✓ 配置文件加载成功");
-                            break Some(config);
-                        }
-                        Err(e) => {
-                            log::error!("加载旧配置文件失败: {e}");
-                            // 弹出系统对话框让用户选择
-                            if !show_migration_error_dialog(app.handle(), &e.to_string()) {
-                                // 用户选择退出（此时数据库还没创建，下次启动可以重试）
-                                log::info!("用户选择退出程序");
-                                std::process::exit(1);
-                            }
-                            // 用户选择重试，继续循环
-                            log::info!("用户选择重试加载配置文件");
-                        }
-                    }
-                }
-            } else {
-                None
-            };
-
-            // 现在创建数据库（包含 Schema 迁移）
-            //
-            // 说明：从 v3.8.* 升级的用户通常会走到这里的 SQLite schema 迁移，
-            // 若迁移失败（数据库损坏/权限不足/user_version 过新等），需要给用户明确提示，
-            // 否则表现可能只是“应用打不开/闪退”。
-            //
-            // 预检：数据库版本过新时，必须先于任何 schema 写操作（create_tables 内含
-            // DROP/ALTER 等 DDL）进入恢复界面，避免旧应用对读不懂的更新版 DB 落写。
             match crate::database::Database::stored_user_version_exceeds_supported(&db_path) {
                 Ok(Some(version)) => {
                     log::warn!("数据库版本过新（v{version}），引导用户在应用内升级应用");
@@ -761,30 +718,6 @@ pub fn run() {
                 }
             }
 
-            // 如果有预加载的配置，执行迁移
-            if let Some(config) = migration_config {
-                log::info!("开始执行数据迁移...");
-
-                match db.migrate_from_json(&config) {
-                    Ok(_) => {
-                        log::info!("✓ 配置迁移成功");
-                        // 标记迁移成功，供前端显示 Toast
-                        crate::init_status::set_migration_success();
-                        // 归档旧配置文件（重命名而非删除，便于用户恢复）
-                        let archive_path = json_path.with_extension("json.migrated");
-                        if let Err(e) = std::fs::rename(&json_path, &archive_path) {
-                            log::warn!("归档旧配置文件失败: {e}");
-                        } else {
-                            log::info!("✓ 旧配置已归档为 config.json.migrated");
-                        }
-                    }
-                    Err(e) => {
-                        // 配置加载成功但迁移失败的情况极少（磁盘满等），仅记录日志
-                        log::error!("配置迁移失败: {e}，将从现有配置导入");
-                    }
-                }
-            }
-
             let app_state = AppState::new(db);
 
             // 设置 AppHandle 用于代理故障转移时的 UI 更新
@@ -809,52 +742,10 @@ pub fn run() {
                 Err(e) => log::warn!("✗ Failed to initialize default skill repos: {e}"),
             }
 
-            // 1.1. Skills 统一管理迁移：当数据库迁移到 v3 结构后，自动从各应用目录导入到 SSOT
-            // 触发条件由 schema 迁移设置 settings.skills_ssot_migration_pending = true 控制。
-            match app_state.db.get_setting("skills_ssot_migration_pending") {
-                Ok(Some(flag)) if flag == "true" || flag == "1" => {
-                    // 安全保护：如果用户已经有 v3 结构的 Skills 数据，就不要自动清空重建。
-                    let has_existing = app_state
-                        .db
-                        .get_all_installed_skills()
-                        .map(|skills| !skills.is_empty())
-                        .unwrap_or(false);
-
-                    if has_existing {
-                        log::info!(
-                            "Detected skills_ssot_migration_pending but skills table not empty; skipping auto import."
-                        );
-                        let _ = app_state
-                            .db
-                            .set_setting("skills_ssot_migration_pending", "false");
-                    } else {
-                        match crate::services::skill::migrate_skills_to_ssot(&app_state.db) {
-                            Ok(count) => {
-                                log::info!("✓ Auto imported {count} skill(s) into SSOT");
-                                if count > 0 {
-                                    crate::init_status::set_skills_migration_result(count);
-                                }
-                                let _ = app_state
-                                    .db
-                                    .set_setting("skills_ssot_migration_pending", "false");
-                            }
-                            Err(e) => {
-                                log::warn!("✗ Failed to auto import legacy skills to SSOT: {e}");
-                                crate::init_status::set_skills_migration_error(e.to_string());
-                                // 保留 pending 标志，方便下次启动重试
-                            }
-                        }
-                    }
-                }
-                Ok(_) => {} // 未开启迁移标志，静默跳过
-                Err(e) => log::warn!("✗ Failed to read skills migration flag: {e}"),
-            }
-
             // 1.5. 自动导入 live 配置 + seed 官方预设供应商（Claude / Codex / Gemini）
             //
             // 先 import 后 seed 是有意为之：先把用户手动配置的 settings.json / auth.json / .env
             // 落成 "default" provider 设为 current，再追加官方预设（is_current=false）。
-            // 降级回旧版时，旧版的回填和整份写入仍靠这一行保住用户原来的 live 配置。
             //
             // 捕获首次运行快照：所有全新装用户都会看到欢迎弹窗介绍 CC Switch 的工作方式。
             // 读失败时默认不弹，宁可漏弹也不要因为故障打扰用户。
@@ -910,88 +801,6 @@ pub fn run() {
                 }
                 Ok(_) => {}
                 Err(e) => log::warn!("✗ Failed to seed official providers: {e}"),
-            }
-
-            {
-                let db_for_codex_history_migration = app_state.db.clone();
-                tauri::async_runtime::spawn_blocking(move || {
-                    match crate::codex_history_migration::maybe_migrate_codex_third_party_history_provider_bucket(
-                        &db_for_codex_history_migration,
-                    ) {
-                        Ok(outcome) => {
-                            if let Some(reason) = outcome.skipped_reason {
-                                log::debug!("○ Codex history provider bucket migration skipped: {reason}");
-                            } else {
-                                log::info!(
-                                    "✓ Codex history provider bucket migration completed: sources={}, jsonl_files={}, state_rows={}",
-                                    outcome.source_provider_ids.len(),
-                                    outcome.migrated_jsonl_files,
-                                    outcome.migrated_state_rows
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            log::warn!("✗ Codex history provider bucket migration failed: {e}");
-                        }
-                    }
-
-                    match crate::codex_history_migration::maybe_migrate_codex_provider_template_bucket(
-                        &db_for_codex_history_migration,
-                    ) {
-                        Ok(outcome) => {
-                            if let Some(reason) = outcome.skipped_reason {
-                                log::debug!("○ Codex provider template bucket migration skipped: {reason}");
-                            } else if !outcome.migrated_provider_ids.is_empty() {
-                                log::info!(
-                                    "✓ Codex provider template bucket migration completed: providers={}",
-                                    outcome.migrated_provider_ids.len()
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            log::warn!("✗ Codex provider template bucket migration failed: {e}");
-                        }
-                    }
-
-                    // 旧版官方路由桶（cc-switch-official）迁回 openai，须在统一迁移之前：
-                    // 开关开着时，紧接着的统一迁移会把它们按正常流程带进 custom。
-                    match crate::codex_history_migration::maybe_migrate_codex_legacy_official_history_to_openai_bucket() {
-                        Ok(outcome) => {
-                            if let Some(reason) = outcome.skipped_reason {
-                                log::debug!("○ Codex legacy official history bucket migration skipped: {reason}");
-                            } else {
-                                log::info!(
-                                    "✓ Codex legacy official history bucket migration completed: jsonl_files={}, state_rows={}",
-                                    outcome.migrated_jsonl_files,
-                                    outcome.migrated_state_rows
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            log::warn!("✗ Codex legacy official history bucket migration failed: {e}");
-                        }
-                    }
-
-                    // 统一会话开关的官方历史迁移：开关开着且勾选了迁入既有会话时，每次启动
-                    // 都把留在 openai 桶的会话迁进 custom（新版 Codex 会把它们锁成只读）；
-                    // 函数内部自门控，state DB 里没有 openai 线程时直接跳过。
-                    match crate::codex_history_migration::maybe_migrate_codex_official_history_to_unified_bucket() {
-                        Ok(outcome) => {
-                            if let Some(reason) = outcome.skipped_reason {
-                                log::debug!("○ Codex official history unify migration skipped: {reason}");
-                            } else {
-                                log::info!(
-                                    "✓ Codex official history unify migration completed: jsonl_files={}, state_rows={}",
-                                    outcome.migrated_jsonl_files,
-                                    outcome.migrated_state_rows
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            log::warn!("✗ Codex official history unify migration failed: {e}");
-                        }
-                    }
-                });
             }
 
             // 老用户 / 已确认的路径由 `fresh_install_at_startup` 自行拦截，这里不做写入。
@@ -1150,10 +959,7 @@ pub fn run() {
                 }
             }
 
-            // 迁移旧的 app_config_dir 配置到 Store
-            if let Err(e) = app_store::migrate_app_config_dir_from_settings(app.handle()) {
-                log::warn!("迁移 app_config_dir 失败: {e}");
-            }
+            app_store::refresh_app_config_dir_override(app.handle());
 
             // 启动阶段不再无条件保存,避免意外覆盖用户配置。
 
@@ -1390,28 +1196,11 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 let state = app_handle.state::<AppState>();
 
-                // 必须排在 auto-extract 之前：先把历史泄漏进 Gemini 共享片段的凭据
-                // 清干净，否则紧接着的提取会基于被污染的 live 再写一遍。
-                if let Err(e) =
-                    crate::services::provider::ProviderService::scrub_leaked_gemini_common_config(
-                        &state,
-                    )
-                    .await
-                {
-                    log::warn!("清理 Gemini 通用配置泄漏凭据失败: {e}");
-                }
-
                 initialize_common_config_snippets(&state);
 
-                // 定下各应用的直连 / 代理模式（处理旧版遗留的接管状态），再把代理模式的
+                // 定下各应用的直连 / 代理模式，再把代理模式的
                 // 应用接上。要排在通用配置片段的自动提取之后：它读的是直连的 live。
                 crate::mode::controller::startup(&state).await;
-                // #8268 测试版给 agy 装过包装脚本、改过 shell 启动文件，撤掉带标记的部分。
-                if let Err(e) =
-                    crate::services::provider::agy_direct::migrate_legacy_launcher(&state.db)
-                {
-                    log::warn!("清理旧版 agy 启动器失败: {e}");
-                }
                 // 启动流程走完：托盘这时才开始报「路由服务没在运行」，并记下退回直连的应用。
                 crate::tray::mark_startup_settled(&app_handle);
                 // Codex 官方做路由、发布了 Stack 模型时，官方模型列表过期就在后台刷新。
@@ -1575,19 +1364,15 @@ pub fn run() {
             commands::pick_directory,
             commands::open_external,
             commands::get_init_error,
-            commands::get_migration_result,
-            commands::get_skills_migration_result,
             commands::open_app_config_folder,
             commands::reveal_app_log_file,
             commands::read_live_provider_settings,
             commands::get_settings,
             commands::save_settings,
-            commands::has_codex_unify_history_backup,
             commands::codex_forces_multi_agent_v2,
             commands::get_codex_session_compression,
             commands::set_codex_session_compression,
             commands::get_codex_sessions_disk_usage,
-            commands::restore_codex_unified_history,
             commands::get_rectifier_config,
             commands::set_rectifier_config,
             commands::get_optimizer_config,
@@ -1664,7 +1449,6 @@ pub fn run() {
             // Profile management (项目配置方案)
             commands::list_profiles,
             commands::create_profile,
-            commands::migrate_legacy_agent_profiles,
             commands::import_project_profile,
             commands::duplicate_profile,
             commands::update_profile,
@@ -1747,7 +1531,7 @@ pub fn run() {
             commands::open_cc_switch_skills_dir,
             commands::open_skill_dir,
             commands::search_skills_sh,
-            // Skill management (legacy API compatibility)
+            // Skill repository management
             commands::get_skill_repos,
             commands::add_skill_repo,
             commands::remove_skill_repo,
@@ -2164,38 +1948,10 @@ fn initialize_common_config_snippets(state: &store::AppState) {
             ),
         }
     }
-
-    let should_run_legacy_migration = state
-        .db
-        .is_legacy_common_config_migrated()
-        .map(|done| !done)
-        .unwrap_or(true);
-
-    if should_run_legacy_migration {
-        for app_type in [
-            crate::app_config::AppType::Claude,
-            crate::app_config::AppType::Codex,
-            crate::app_config::AppType::Gemini,
-        ] {
-            if let Err(e) = crate::services::provider::ProviderService::migrate_legacy_common_config_usage_if_needed(
-                state,
-                app_type.clone(),
-            ) {
-                log::warn!(
-                    "✗ Failed to migrate legacy common-config usage for {}: {e}",
-                    app_type.as_str()
-                );
-            }
-        }
-
-        if let Err(e) = state.db.set_legacy_common_config_migrated(true) {
-            log::warn!("✗ Failed to persist legacy common-config migration flag: {e}");
-        }
-    }
 }
 
 // ============================================================
-// 迁移错误对话框辅助函数
+// 初始化错误对话框辅助函数
 // ============================================================
 
 /// 检测是否为中文环境
@@ -2211,58 +1967,7 @@ fn is_chinese_locale() -> bool {
         .unwrap_or(false)
 }
 
-/// 显示迁移错误对话框
-/// 返回 true 表示用户选择重试，false 表示用户选择退出
-fn show_migration_error_dialog(app: &tauri::AppHandle, error: &str) -> bool {
-    let title = if is_chinese_locale() {
-        "配置迁移失败"
-    } else {
-        "Migration Failed"
-    };
-
-    let message = if is_chinese_locale() {
-        format!(
-            "从旧版本迁移配置时发生错误：\n\n{error}\n\n\
-            您的数据尚未丢失，旧配置文件仍然保留。\n\
-            建议回退到旧版本 CC Switch 以保护数据。\n\n\
-            点击「重试」重新尝试迁移\n\
-            点击「退出」关闭程序（可回退版本后重新打开）"
-        )
-    } else {
-        format!(
-            "An error occurred while migrating configuration:\n\n{error}\n\n\
-            Your data is NOT lost - the old config file is still preserved.\n\
-            Consider rolling back to an older CC Switch version.\n\n\
-            Click 'Retry' to attempt migration again\n\
-            Click 'Exit' to close the program"
-        )
-    };
-
-    let retry_text = if is_chinese_locale() {
-        "重试"
-    } else {
-        "Retry"
-    };
-    let exit_text = if is_chinese_locale() {
-        "退出"
-    } else {
-        "Exit"
-    };
-
-    // 使用 blocking_show 同步等待用户响应
-    // OkCancelCustom: 第一个按钮（重试）返回 true，第二个按钮（退出）返回 false
-    app.dialog()
-        .message(&message)
-        .title(title)
-        .kind(MessageDialogKind::Error)
-        .buttons(MessageDialogButtons::OkCancelCustom(
-            retry_text.to_string(),
-            exit_text.to_string(),
-        ))
-        .blocking_show()
-}
-
-/// 显示数据库初始化/Schema 迁移失败对话框
+/// 显示数据库初始化失败对话框
 /// 返回 true 表示用户选择重试，false 表示用户选择退出
 fn show_database_init_error_dialog(
     app: &tauri::AppHandle,
@@ -2277,28 +1982,28 @@ fn show_database_init_error_dialog(
 
     let message = if is_chinese_locale() {
         format!(
-            "初始化数据库或迁移数据库结构时发生错误：\n\n{error}\n\n\
+            "初始化数据库时发生错误：\n\n{error}\n\n\
             数据库文件路径：\n{db}\n\n\
             您的数据尚未丢失，应用不会自动删除数据库文件。\n\
-            常见原因包括：数据库版本过新、文件损坏、权限不足、磁盘空间不足等。\n\n\
+            常见原因包括：数据库格式不受支持、文件损坏、权限不足、磁盘空间不足等。\n\n\
             建议：\n\
             1) 先备份整个配置目录（包含 cc-switch.db）\n\
             2) 如果提示“数据库版本过新”，请升级到更新版本\n\
-            3) 如果刚升级出现异常，可回退旧版本导出/备份后再升级\n\n\
+            3) 当前版本只支持当前数据格式，不会自动迁移或删除已有数据\n\n\
             点击「重试」重新尝试初始化\n\
             点击「退出」关闭程序",
             db = db_path.display()
         )
     } else {
         format!(
-            "An error occurred while initializing or migrating the database:\n\n{error}\n\n\
+            "An error occurred while initializing the database:\n\n{error}\n\n\
             Database file path:\n{db}\n\n\
             Your data is NOT lost - the app will not delete the database automatically.\n\
-            Common causes include: newer database version, corrupted file, permission issues, or low disk space.\n\n\
+            Common causes include: unsupported database format, corrupted file, permission issues, or low disk space.\n\n\
             Suggestions:\n\
             1) Back up the entire config directory (including cc-switch.db)\n\
             2) If you see “database version is newer”, please upgrade CC Switch\n\
-            3) If this happened right after upgrading, consider rolling back to export/backup then upgrade again\n\n\
+            3) Only the current data format is supported; existing data will not be migrated or deleted\n\n\
             Click 'Retry' to attempt initialization again\n\
             Click 'Exit' to close the program",
             db = db_path.display()

@@ -9,7 +9,11 @@ import {
   type Language,
 } from "@/i18n/languages";
 import type { Settings } from "@/types";
-import { sanitizeDirectoryFields } from "@/config/directoryApps";
+import {
+  DIRECTORY_APPS,
+  sanitizeDir,
+  sanitizeDirectoryFields,
+} from "@/config/directoryApps";
 
 export type SettingsFormState = Omit<Settings, "language"> & {
   language: Language;
@@ -55,6 +59,7 @@ export function useSettingsForm(): UseSettingsFormResult {
   );
 
   const initialLanguageRef = useRef<Language>("zh");
+  const previousSettingsRef = useRef<SettingsFormState | null>(null);
 
   const readPersistedLanguage = useCallback((): Language => {
     if (typeof window !== "undefined") {
@@ -101,7 +106,20 @@ export function useSettingsForm(): UseSettingsFormResult {
       language: normalizedLanguage,
     };
 
-    setSettingsState(normalized);
+    const previous = previousSettingsRef.current;
+    previousSettingsRef.current = normalized;
+    setSettingsState((current) => {
+      if (!previous || !current) return normalized;
+      const next = { ...normalized };
+      // Refetches from autosaved switches must not discard directory drafts,
+      // including drafts belonging to an Agent that is currently hidden.
+      for (const { field } of DIRECTORY_APPS) {
+        if (sanitizeDir(current[field]) !== sanitizeDir(previous[field])) {
+          next[field] = current[field];
+        }
+      }
+      return next;
+    });
     initialLanguageRef.current = normalizedLanguage;
     syncLanguage(normalizedLanguage);
   }, [data, readPersistedLanguage, syncLanguage]);
@@ -165,6 +183,7 @@ export function useSettingsForm(): UseSettingsFormResult {
         language: normalizedLanguage,
       };
 
+      previousSettingsRef.current = normalized;
       setSettingsState(normalized);
       syncLanguage(initialLanguageRef.current);
     },

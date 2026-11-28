@@ -172,7 +172,7 @@ it("previews agy wrapped and flat configs without unrelated native options", () 
   }
 });
 
-it("previews Copilot providers.json entries and legacy env configs", () => {
+it("previews Copilot providers.json entries and rejects environment-only configs", () => {
   const preview = parseDeepLinkConfigPreview({
     app: "copilot",
     config: encodeBase64(
@@ -205,11 +205,7 @@ it("previews Copilot providers.json entries and legacy env configs", () => {
       }),
     ),
   });
-  expect(legacy?.model).toBe("m1");
-  expect(legacy?.env).toEqual({
-    COPILOT_PROVIDER_API_KEY: "fixture",
-    COPILOT_PROVIDER_BASE_URL: "https://relay.example/v1",
-  });
+  expect(legacy).toBeNull();
 });
 
 it("shows the effective Copilot credential and ordered model IDs after overrides", () => {

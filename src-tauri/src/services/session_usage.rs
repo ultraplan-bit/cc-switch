@@ -623,17 +623,9 @@ fn push_committed_tail(tail_buf: &mut Vec<u8>, bytes: &[u8]) {
 ///
 /// 增量语义：游标是字节偏移（`last_byte_offset`），文件追加时 seek 到
 /// 游标只读新增尾部，避免活跃会话文件每轮被整文件重读。游标只推进到
-/// 最后一个完整行（以 `\n` 结尾）之后——按行号计数的旧游标会把未写完
-/// 的半行也计入，导致该行补全后被跳过、记录永久丢失。
+/// 最后一个完整行（以 `\n` 结尾）之后，未完成的尾行留到下轮读取。
 ///
-/// `last_byte_offset` 为 NULL（升级前的行号游标）时按旧行号跳过前 L 行、
-/// 转换为字节位置后继续增量。不能回退全量重读：`rollup_and_prune` 会把
-/// 30 天前的明细汇总后删除，request_id 去重只查明细表、对已剪条目失明，
-/// 重导会在下次 rollup 时二次累加、永久放大统计。代价是旧行号游标半行
-/// bug 吞掉的历史行无法找回（无持久账本时与已剪条目不可区分，双算比
-/// 丢行更糟）。
-///
-/// 同一双算风险决定了对非追加变化（Claude Code 正常路径纯追加，此情形
+/// 为避免已汇总明细再次计费，对非追加变化（Claude Code 正常路径纯追加，此情形
 /// 只来自外部干预）的处理：截断（游标超过文件大小）与重写（游标边界前
 /// 尾部指纹失配——同尺寸/更大的替换靠 size 检测不出来）都把游标钉到
 /// 当前 EOF、不重放任何旧区间，之后的追加恢复正常增量。
@@ -662,13 +654,10 @@ fn sync_single_file(
     let mut file =
         fs::File::open(file_path).map_err(|e| AppError::Config(format!("无法打开文件: {e}")))?;
 
-    // 非追加变化检测（仅字节游标路径）。检出后游标钉到当前 EOF、旧偏移
-    // 一概不重放（见函数文档：重放会把已剪明细双算进汇总）。指纹为 NULL
-    // （升级存量行转换后的首轮之前）时无从校验，按纯追加处理——这是旧
-    // 行号游标本就存在的暴露面，首轮写入后即有指纹。
+    // 非追加变化不重放已汇总的明细，避免重复计费。
     let mut chain = ChainNodes::new();
     let mut timings: HashMap<String, MessageTiming> = HashMap::new();
-    let (start_byte, legacy_lines, mut tail_buf) = match last_byte_offset {
+    let (start_byte, mut tail_buf) = match last_byte_offset {
         Some(offset) => {
             let truncated = !(0..=file_size).contains(&offset);
             // seed 同时用于指纹校验与滚动尾部缓冲；读取后文件位置恰好
@@ -704,14 +693,14 @@ fn sync_single_file(
                 });
             }
             read_chain_seed(&mut file, offset, &mut chain, &mut timings)?;
-            (offset, 0, seed.unwrap_or_default())
+            (offset, seed.unwrap_or_default())
         }
-        // 旧行号游标：从头按行转换（下方转换段），tail 缓冲从空积累
-        None => (
-            0,
-            cursor.map_or(0, |c| c.last_line_offset.max(0)),
-            Vec::new(),
-        ),
+        None if cursor.is_none() => (0, Vec::new()),
+        None => {
+            return Err(AppError::Config(
+                "Claude 会话游标缺少字节偏移，不支持此记录格式".into(),
+            ))
+        }
     };
 
     let mut reader = BufReader::new(file);
@@ -720,26 +709,6 @@ fn sync_single_file(
     let mut committed_offset = start_byte;
     let mut incomplete_tail = false;
     let mut buf: Vec<u8> = Vec::new();
-
-    // 旧行号 → 字节位置转换：只数字节不解析不导入。旧 `lines()` 把无换行
-    // 的尾段也计入行号，这里 read_until 的每次返回同样计一行，字节位置与
-    // 旧游标精确对齐。文件行数不足 L（截断）时停在 EOF，等价旧游标对
-    // 截断文件的"新内容行号偏小被跳过"语义。转换必须完整走完才能写游标：
-    // 中途读错误若照常落库，last_line_offset 会被清 0、剩余待跳行数丢失，
-    // 下轮会把旧代码已导入过的行当新行重导——所以这里出错直接整文件失败。
-    let mut skipped_legacy_lines: i64 = 0;
-    while skipped_legacy_lines < legacy_lines {
-        buf.clear();
-        let read = reader
-            .read_until(b'\n', &mut buf)
-            .map_err(|e| AppError::Config(format!("转换旧行号游标失败: {e}")))?;
-        if read == 0 {
-            break;
-        }
-        push_committed_tail(&mut tail_buf, &buf);
-        committed_offset += read as i64;
-        skipped_legacy_lines += 1;
-    }
 
     let mut read_error: Option<String> = None;
     let mut messages: HashMap<String, ParsedAssistantUsage> = HashMap::new();
@@ -1010,9 +979,6 @@ pub(crate) fn get_sync_state(db: &Database, file_path: &str) -> Result<(i64, i64
 }
 
 /// 返回文件 mtime 的纳秒时间戳。
-///
-/// `session_log_sync.last_modified` 旧数据是秒级时间戳；新写入纳秒值不需要
-/// schema 迁移，旧值会自然触发一次增量重扫，并继续依赖行 offset 避免重复导入。
 pub(crate) fn metadata_modified_nanos(metadata: &fs::Metadata) -> i64 {
     metadata
         .modified()
@@ -2059,88 +2025,27 @@ mod tests {
     }
 
     #[test]
-    fn test_legacy_line_cursor_converts_without_reimport() -> Result<(), AppError> {
-        // 升级路径：存量行只有行号游标（last_byte_offset 为 NULL）→ 按行号
-        // 跳过前 L 行转换为字节位置，只导入其后的新行。关键场景：msg_a 的
-        // 明细行已被 rollup_and_prune 剪掉（这里刻意不预插），request_id
-        // 去重对它失明——若退化为全量重读，msg_a 会被重导并在下次 rollup
-        // 时二次累加
+    fn sync_rejects_a_cursor_without_byte_offset_without_importing() -> Result<(), AppError> {
         let db = Database::memory()?;
-        let tmp = std::env::temp_dir().join(format!("cc-switch-test-{}", uuid::Uuid::new_v4()));
-        fs::create_dir_all(&tmp).unwrap();
-        let file = tmp.join("session.jsonl");
-        let file_path_str = file.to_string_lossy().to_string();
-
-        fs::write(
-            &file,
-            format!(
-                "{}\n{}\n",
-                assistant_line("msg_a", 5),
-                assistant_line("msg_b", 6)
-            ),
-        )
-        .unwrap();
-
-        // 旧版本游标：行号=1（msg_a 旧代码导入过、明细已剪），无字节游标，mtime 旧值
-        {
-            let conn = lock_conn!(db.conn);
-            conn.execute(
-                "INSERT INTO session_log_sync (file_path, last_modified, last_line_offset, last_synced_at)
-                 VALUES (?1, 1, 1, 1)",
-                rusqlite::params![file_path_str],
-            )?;
-        }
-
-        let result = sync_with_cursor(&db, &file)?;
-        assert_eq!(
-            (result.imported, result.skipped),
-            (1, 0),
-            "只导入行号游标之后的 msg_b，已剪的 msg_a 不重导"
-        );
-        let conn = lock_conn!(db.conn);
-        let msg_a_rows: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM proxy_request_logs WHERE request_id = ?1",
-            rusqlite::params![format!(
-                "{}msg_a",
-                crate::proxy::usage::parser::SESSION_REQUEST_ID_PREFIX
-            )],
-            |row| row.get(0),
-        )?;
-        drop(conn);
-        assert_eq!(msg_a_rows, 0, "msg_a 不得被重导");
-        let size = fs::metadata(&file).unwrap().len() as i64;
-        assert_eq!(byte_cursor(&db, &file), Some(size), "转换后写入字节游标");
-
-        fs::remove_dir_all(&tmp).ok();
-        Ok(())
-    }
-
-    #[test]
-    fn test_legacy_line_cursor_beyond_eof_imports_nothing() -> Result<(), AppError> {
-        // 行号游标超过文件行数（截断/重写后变短）：转换停在 EOF，不导入
-        // 任何行——等价旧行号游标对截断文件的"新内容行号偏小被跳过"语义
-        let db = Database::memory()?;
-        let tmp = std::env::temp_dir().join(format!("cc-switch-test-{}", uuid::Uuid::new_v4()));
-        fs::create_dir_all(&tmp).unwrap();
-        let file = tmp.join("session.jsonl");
-        let file_path_str = file.to_string_lossy().to_string();
-
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("session.jsonl");
         fs::write(&file, format!("{}\n", assistant_line("msg_a", 5))).unwrap();
         {
             let conn = lock_conn!(db.conn);
             conn.execute(
                 "INSERT INTO session_log_sync (file_path, last_modified, last_line_offset, last_synced_at)
-                 VALUES (?1, 1, 5, 1)",
-                rusqlite::params![file_path_str],
+                 VALUES (?1, 1, 1, 1)",
+                [file.to_string_lossy().as_ref()],
             )?;
         }
-
-        let result = sync_with_cursor(&db, &file)?;
-        assert_eq!((result.imported, result.skipped), (0, 0));
-        let size = fs::metadata(&file).unwrap().len() as i64;
-        assert_eq!(byte_cursor(&db, &file), Some(size), "游标停在 EOF");
-
-        fs::remove_dir_all(&tmp).ok();
+        assert!(sync_with_cursor(&db, &file).is_err());
+        assert_eq!(byte_cursor(&db, &file), None);
+        let conn = lock_conn!(db.conn);
+        assert_eq!(
+            conn.query_row("SELECT COUNT(*) FROM proxy_request_logs", [], |row| row
+                .get::<_, i64>(0))?,
+            0
+        );
         Ok(())
     }
 

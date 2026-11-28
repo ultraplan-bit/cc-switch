@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use cc_switch_lib::{AppState, AppType, McpApps, McpServer, Provider, ProviderMeta};
+use cc_switch_lib::{AppState, AppType, McpApps, McpServer, Provider};
 
 use crate::support::ensure_test_home;
 
@@ -73,20 +73,12 @@ pub fn read_home_json(rel: &str) -> Value {
     serde_json::from_str(&read_home_file(rel)).unwrap_or_else(|e| panic!("parse {rel}: {e}"))
 }
 
-/// `common_config`：`None` 表示 meta 里不写 `commonConfigEnabled`（旧行的形态）。
-pub fn provider(id: &str, settings: Value, common_config: Option<bool>) -> Provider {
-    let mut provider = Provider::with_id(id.to_string(), id.to_string(), settings, None);
-    if common_config.is_some() {
-        provider.meta = Some(ProviderMeta {
-            common_config_enabled: common_config,
-            ..Default::default()
-        });
-    }
-    provider
+pub fn provider(id: &str, settings: Value) -> Provider {
+    Provider::with_id(id.to_string(), id.to_string(), settings, None)
 }
 
 pub fn official(id: &str, settings: Value) -> Provider {
-    let mut provider = provider(id, settings, None);
+    let mut provider = provider(id, settings);
     provider.category = Some("official".to_string());
     provider
 }

@@ -140,6 +140,12 @@ function ProfileEditForm({
     const defaults = providerModelDefaults(providers[providerId ?? ""], scope);
     return {
       providerId,
+      ...(scope === "claude"
+        ? {
+            claudeProjectConnection:
+              profile.payload.claudeProjectConnection ?? "inherit",
+          }
+        : {}),
       model: profile.payload.models?.[scope] ?? defaults.model,
       modelSettings:
         profile.payload.modelSettings?.[scope] ?? defaults.modelSettings,
@@ -173,6 +179,9 @@ function ProfileEditForm({
     else onClose();
   };
   const provider = providers[config.providerId ?? ""];
+  const projectDirect =
+    scope === "claude" && config.claudeProjectConnection === "direct";
+  const missingProjectProvider = projectDirect && !provider;
   const catalogRows = Array.isArray(config.modelCatalog?.models)
     ? config.modelCatalog.models
     : [];
@@ -201,6 +210,7 @@ function ProfileEditForm({
       saving.current ||
       mutation.isPending ||
       invalidModel ||
+      missingProjectProvider ||
       nativeError
     )
       return;
@@ -293,6 +303,7 @@ function ProfileEditForm({
               !name.trim() ||
               mutation.isPending ||
               invalidModel ||
+              missingProjectProvider ||
               Boolean(nativeError)
             }
           >
@@ -359,6 +370,24 @@ function ProfileEditForm({
           void save();
         }}
       >
+        {missingProjectProvider && tab !== "models" && (
+          <div
+            role="alert"
+            className="flex flex-wrap items-center gap-2 text-sm text-danger-text"
+          >
+            <span>
+              {t("profiles.editor.projectConnectionProviderRequired")}
+            </span>
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              onClick={() => setTab("models")}
+            >
+              {t("profiles.editor.modelsTab")}
+            </Button>
+          </div>
+        )}
         {invalidModel && (
           <div
             role="alert"
@@ -418,6 +447,12 @@ function ProfileEditForm({
                   <select
                     className={selectClass}
                     value={config.providerId ?? ""}
+                    aria-invalid={missingProjectProvider || undefined}
+                    aria-describedby={
+                      missingProjectProvider
+                        ? `${id}-provider-error`
+                        : undefined
+                    }
                     onChange={(event) => {
                       const providerId = event.target.value || null;
                       setConfig((current) => ({
@@ -427,7 +462,11 @@ function ProfileEditForm({
                     }}
                   >
                     <option value="">
-                      {t("profiles.editor.inheritProvider")}
+                      {t(
+                        projectDirect
+                          ? "profiles.editor.projectConnectionProviderPlaceholder"
+                          : "profiles.editor.inheritProvider",
+                      )}
                     </option>
                     {config.providerId && !providers[config.providerId] && (
                       <option value={config.providerId}>
@@ -443,9 +482,63 @@ function ProfileEditForm({
                     ))}
                   </select>
                 </label>
-                <p className="text-xs leading-relaxed text-fg-2 sm:col-span-2">
-                  {t("profiles.editor.providerReferenceHint")}
-                </p>
+                {missingProjectProvider && (
+                  <p
+                    id={`${id}-provider-error`}
+                    role="alert"
+                    className="text-sm text-danger-text sm:col-span-2"
+                  >
+                    {t("profiles.editor.projectConnectionProviderRequired")}
+                  </p>
+                )}
+                {!projectDirect && (
+                  <p className="text-xs leading-relaxed text-fg-2 sm:col-span-2">
+                    {t("profiles.editor.providerReferenceHint")}
+                  </p>
+                )}
+                {scope === "claude" && (
+                  <div className="space-y-2 sm:col-span-2">
+                    <label className="block space-y-2 text-sm">
+                      <span>{t("profiles.editor.projectConnection")}</span>
+                      <select
+                        className={selectClass}
+                        value={config.claudeProjectConnection ?? "inherit"}
+                        aria-describedby={`${id}-project-connection-hint`}
+                        onChange={(event) =>
+                          setConfig((current) => ({
+                            ...current,
+                            claudeProjectConnection:
+                              event.target.value === "direct"
+                                ? "direct"
+                                : "inherit",
+                          }))
+                        }
+                      >
+                        <option value="inherit">
+                          {t("profiles.editor.projectConnectionInherit")}
+                        </option>
+                        <option value="direct">
+                          {t("profiles.editor.projectConnectionDirect")}
+                        </option>
+                      </select>
+                    </label>
+                    <p
+                      id={`${id}-project-connection-hint`}
+                      className="text-xs leading-relaxed text-fg-2"
+                    >
+                      {t(
+                        projectDirect
+                          ? "profiles.editor.projectConnectionDirectHint"
+                          : "profiles.editor.projectConnectionInheritHint",
+                      )}
+                    </p>
+                    {projectDirect && (
+                      <p className="text-xs leading-relaxed text-fg-2">
+                        {t("profiles.editor.projectConnectionCredentialsHint")}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
               {scope !== "claude-desktop" && (
                 <ProfileModelFields
