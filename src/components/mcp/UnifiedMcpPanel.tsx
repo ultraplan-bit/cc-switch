@@ -173,7 +173,18 @@ const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
     error: loadError,
     refetch,
   } = useAllMcpServers();
-  const connectivity = useMcpConnectivity(isError ? undefined : serversMap);
+  const connectivityServers = useMemo(
+    () =>
+      isError || !serversMap
+        ? undefined
+        : Object.fromEntries(
+            Object.entries(serversMap).filter(([, server]) =>
+              appIds.some((app) => server.apps[app]),
+            ),
+          ),
+    [appIds, isError, serversMap],
+  );
+  const connectivity = useMcpConnectivity(connectivityServers);
   const toggleAppMutation = useToggleMcpApp();
   const bulkToggleAppMutation = useBulkToggleMcpApp();
   const deleteServerMutation = useDeleteMcpServer();
@@ -405,9 +416,9 @@ const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
   };
 
   const handleResyncAll = async () => {
-    if (!beginWrite()) return;
+    if (appIds.length === 0 || !beginWrite()) return;
     try {
-      const outcomes = await resyncMutation.mutateAsync(undefined);
+      const outcomes = await resyncMutation.mutateAsync(appIds);
       const failed = applyResyncOutcomes(outcomes);
       if (failed.length === 0) {
         toast.success(t("mcpPage.toast.resynced", { count: outcomes.length }), {
@@ -523,11 +534,11 @@ const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
   };
 
   const handleImport = async () => {
-    if (!beginWrite()) return;
+    if (appIds.length === 0 || !beginWrite()) return;
     const before = new Set(Object.keys(serversMap ?? {}));
     let error: string | undefined;
     try {
-      await importMutation.mutateAsync();
+      await importMutation.mutateAsync(appIds);
     } catch (err) {
       // 后端是 best-effort：部分应用读失败时其余的已经入库
       error = extractErrorMessage(err) || String(err);
@@ -596,15 +607,16 @@ const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
     const map = new Map<AppIdWith<"mcp">, string>();
     for (const [key, failure] of Object.entries(fails)) {
       const app = key.split("\u0000")[1] as AppIdWith<"mcp">;
+      if (!appIds.includes(app)) continue;
       if (!serversMap?.[key.split("\u0000")[0]]) continue;
       if (!map.has(app)) map.set(app, failure.error);
     }
-    for (const app of APP_IDS_WITH.mcp) {
+    for (const app of appIds) {
       const error = appFails[app];
       if (error !== undefined) map.set(app, error);
     }
     return map;
-  }, [fails, appFails, serversMap]);
+  }, [appIds, fails, appFails, serversMap]);
 
   const enabledNames = (server: McpServer) =>
     APP_IDS_WITH.mcp
@@ -642,7 +654,7 @@ const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
               type="button"
               variant="quiet"
               size="regular"
-              disabled={controlsDisabled}
+              disabled={controlsDisabled || appIds.length === 0}
               onClick={() => void handleImport()}
             >
               <Download className="h-4 w-4" strokeWidth={2} />
@@ -674,7 +686,7 @@ const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
               </HoverTip>
               <DropdownMenuContent align="end" className="min-w-[240px]">
                 <DropdownMenuItem
-                  disabled={controlsDisabled}
+                  disabled={controlsDisabled || appIds.length === 0}
                   onSelect={() => void handleResyncAll()}
                 >
                   {t("mcpPage.resync")}
@@ -803,7 +815,7 @@ const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
                   type="button"
                   variant="neutral"
                   size="regular"
-                  disabled={controlsDisabled}
+                  disabled={controlsDisabled || appIds.length === 0}
                   onClick={() => void handleImport()}
                 >
                   <Download className="h-3.5 w-3.5" strokeWidth={2} />
@@ -885,9 +897,7 @@ const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
                       className="m-0 list-none p-0"
                     >
                       {filteredServerEntries.map(([id, server], index) => {
-                        const enabled = APP_IDS_WITH.mcp.some(
-                          (app) => server.apps[app],
-                        );
+                        const enabled = appIds.some((app) => server.apps[app]);
                         const connection = enabled
                           ? (connectivity.states[id] ?? "unchecked")
                           : "disabled";
@@ -1090,6 +1100,7 @@ const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
                                     </DropdownMenuItem>
                                   )}
                                   <DropdownMenuItem
+                                    disabled={appIds.length === 0}
                                     onSelect={() =>
                                       void handleRowAll(id, server, true)
                                     }
@@ -1097,6 +1108,7 @@ const UnifiedMcpPanel: React.FC<UnifiedMcpPanelProps> = ({
                                     {t("mcpPage.enableEverywhere")}
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
+                                    disabled={appIds.length === 0}
                                     onSelect={() =>
                                       void handleRowAll(id, server, false)
                                     }

@@ -53,6 +53,7 @@ import {
   V7Dialog,
 } from "@/components/mcp/formBits";
 import { APP_IDS_WITH } from "@/config/appSpecs";
+import { useVisibleAppIds } from "@/components/mcp/useVisibleAppIds";
 import {
   installedFromCatalog,
   installedIdOf,
@@ -153,7 +154,7 @@ function pluginLabel(entry: PluginEntry) {
 }
 
 export interface PluginsPageProps {
-  /** 可选的应用（只列「应用」页里设为显示的）；为空时全部列出 */
+  /** 可用的应用；空数组表示没有可操作的 Agent。 */
   apps?: PluginApp[];
   initialApp?: PluginApp;
 }
@@ -168,13 +169,63 @@ type WriteMessages = {
 
 export function PluginsPage({ apps, initialApp }: PluginsPageProps) {
   const { t } = useTranslation();
-  const queryClient = useQueryClient();
-  const appChoices = apps && apps.length > 0 ? apps : APP_IDS_WITH.plugins;
-  const appChoicesKey = appChoices.join(",");
-  const [app, setApp] = useState<PluginApp>(
-    initialApp && appChoices.includes(initialApp) ? initialApp : appChoices[0],
-  );
+  const availableApps = useVisibleAppIds(APP_IDS_WITH.plugins);
+  const appChoices = apps
+    ? apps.filter((app) => availableApps.includes(app))
+    : availableApps;
+  const [selectedApp, setApp] = useState<PluginApp | undefined>(initialApp);
   const [view, setView] = useState<PluginsView>("installed");
+  const app =
+    selectedApp && appChoices.includes(selectedApp)
+      ? selectedApp
+      : appChoices[0];
+
+  if (!app) {
+    return (
+      <>
+        <AppPageHeader
+          icon={<Puzzle className="h-5 w-5" strokeWidth={1.5} />}
+          title={t("pluginsPage.title")}
+        />
+        <div className="px-6 py-12 text-center text-body text-fg-2">
+          {t("common.noAvailableAgents")}
+          <p>{t("common.noAvailableAgentsHint")}</p>
+        </div>
+      </>
+    );
+  }
+  return (
+    <PluginsForApp
+      key={app}
+      app={app}
+      appChoices={appChoices}
+      onAppChange={setApp}
+      view={
+        view === "marketplaces" && !PLUGIN_APP_FEATURES[app].marketplaces
+          ? "installed"
+          : view
+      }
+      onViewChange={setView}
+    />
+  );
+}
+
+function PluginsForApp({
+  app,
+  appChoices,
+  onAppChange,
+  view,
+  onViewChange: setView,
+}: {
+  app: PluginApp;
+  appChoices: PluginApp[];
+  onAppChange: (app: PluginApp) => void;
+  view: PluginsView;
+  onViewChange: (view: PluginsView) => void;
+}) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const appChoicesKey = appChoices.join(",");
   const [search, setSearch] = useState("");
   // 目录有几千项：输入框先更新，过滤稍后跟上，打字不卡
   const deferredSearch = useDeferredValue(search);
@@ -199,7 +250,7 @@ export function PluginsPage({ apps, initialApp }: PluginsPageProps) {
   );
 
   const switchApp = (next: PluginApp) => {
-    setApp(next);
+    onAppChange(next);
     setSearch("");
     // 新应用没有市场页时回到已安装
     if (!PLUGIN_APP_FEATURES[next].marketplaces && view === "marketplaces") {

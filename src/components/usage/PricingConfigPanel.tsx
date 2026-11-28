@@ -40,6 +40,7 @@ import {
 } from "./format";
 import { usageTable } from "./usageTable";
 import { APP_IDS_WITH, type AppIdWith } from "@/config/appSpecs";
+import { useVisibleAppIds } from "@/components/mcp/useVisibleAppIds";
 
 type PricingModelSource = "request" | "response";
 
@@ -104,7 +105,7 @@ export function filterPricingByPrefix(
   return matches;
 }
 
-function useBillingSources() {
+function useBillingSources(apps: AppIdWith<"localProxy">[]) {
   const { t } = useTranslation();
   const [sources, setSources] = useState<SourceState>(DEFAULT_SOURCES);
   const [isLoading, setIsLoading] = useState(true);
@@ -115,7 +116,7 @@ function useBillingSources() {
       setIsLoading(true);
       try {
         const results = await Promise.all(
-          APP_IDS_WITH.localProxy.map(async (app) => {
+          apps.map(async (app) => {
             const source = await proxyApi.getPricingModelSource(app);
             return {
               app,
@@ -143,17 +144,19 @@ function useBillingSources() {
     return () => {
       isMounted = false;
     };
-  }, [t]);
+  }, [apps, t]);
 
   return { sources, setSources, isLoading };
 }
 
 function BillingDefaultsDialog({
+  apps,
   open,
   initial,
   onClose,
   onSaved,
 }: {
+  apps: AppIdWith<"localProxy">[];
   open: boolean;
   initial: SourceState;
   onClose: () => void;
@@ -167,17 +170,15 @@ function BillingDefaultsDialog({
     if (open) setDraft(initial);
   }, [open, initial]);
 
-  const isDirty = APP_IDS_WITH.localProxy.some(
-    (app) => draft[app] !== initial[app],
-  );
+  const isDirty = apps.some((app) => draft[app] !== initial[app]);
 
   const save = async () => {
     setIsSaving(true);
     try {
       await Promise.all(
-        APP_IDS_WITH.localProxy.map((app) =>
-          proxyApi.setPricingModelSource(app, draft[app]),
-        ),
+        apps
+          .filter((app) => draft[app] !== initial[app])
+          .map((app) => proxyApi.setPricingModelSource(app, draft[app])),
       );
       toast.success(t("settings.globalProxy.pricingSaved"));
       onSaved({ ...draft });
@@ -210,13 +211,12 @@ function BillingDefaultsDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col px-6 py-2">
-          {APP_IDS_WITH.localProxy.map((app, index) => (
+          {apps.map((app, index) => (
             <div
               key={app}
               className={cn(
                 "flex h-11 items-center gap-3",
-                index < APP_IDS_WITH.localProxy.length - 1 &&
-                  "border-b border-border",
+                index < apps.length - 1 && "border-b border-border",
               )}
             >
               <AppGlyph app={app} size={16} badgeClassName="bg-surface" />
@@ -281,13 +281,15 @@ function BillingDefaultsDialog({
 function BillingDefaultsRow() {
   const { t, i18n } = useTranslation();
   const lang = getResolvedLang(i18n);
-  const { sources, setSources, isLoading } = useBillingSources();
+  const apps = useVisibleAppIds(APP_IDS_WITH.localProxy);
+  const { sources, setSources, isLoading } = useBillingSources(apps);
   const [dialogOpen, setDialogOpen] = useState(false);
+  if (apps.length === 0) return null;
 
   const groups = (["response", "request"] as const)
     .map((source) => ({
       source,
-      apps: APP_IDS_WITH.localProxy
+      apps: apps
         .filter((app) => sources[app] === source)
         .map((app) => APP_DISPLAY_NAME[app]),
     }))
@@ -336,6 +338,7 @@ function BillingDefaultsRow() {
         </Button>
       </div>
       <BillingDefaultsDialog
+        apps={apps}
         open={dialogOpen}
         initial={sources}
         onClose={() => setDialogOpen(false)}

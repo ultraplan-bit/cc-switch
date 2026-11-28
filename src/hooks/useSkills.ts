@@ -638,7 +638,7 @@ export function useResyncSkillsToApps() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationKey: SKILLS_RESYNC_MUTATION_KEY,
-    mutationFn: () => skillsApi.resyncToApps(),
+    mutationFn: (apps: AppId[]) => skillsApi.resyncToApps(apps),
     onSettled: () =>
       queryClient.invalidateQueries({ queryKey: ["skills", "installed"] }),
   });

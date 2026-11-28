@@ -350,7 +350,7 @@ fn workbuddy_mcp_projects_managed_servers_and_keeps_user_entries() {
     assert!(read_mcp()["mcpServers"].get("fetch").is_some());
 
     // 导入：停用的条目进库但不勾选 WorkBuddy。
-    McpService::import_from_all_apps(&state).unwrap();
+    McpService::import_from_apps(&state, &McpService::live_sync_apps()).unwrap();
     let servers = state.db.get_all_mcp_servers().unwrap();
     assert!(servers["mine"].apps.workbuddy);
     assert_eq!(servers["mine"].server["type"], "stdio");

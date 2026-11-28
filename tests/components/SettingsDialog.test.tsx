@@ -4,7 +4,14 @@ import "@testing-library/jest-dom";
 import type { ComponentProps } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { SettingsPage } from "@/components/settings/SettingsPage";
+import { APP_IDS } from "@/config/appSpecs";
 import { createTestQueryClient } from "../utils/testQueryClient";
+
+const availability = vi.hoisted(() => ({ apps: [] as string[] }));
+vi.mock("@/components/mcp/useVisibleAppIds", () => ({
+  useVisibleAppIds: (ids: readonly string[]) =>
+    ids.filter((app) => availability.apps.includes(app)),
+}));
 
 const toastSuccessMock = vi.fn();
 const toastErrorMock = vi.fn();
@@ -182,6 +189,7 @@ const renderSettingsPage = (
 
 describe("SettingsPage", () => {
   beforeEach(() => {
+    availability.apps = [...APP_IDS];
     tMock.mockImplementation((key: string) => key);
     settingsMock = createSettingsMock();
     importExportMock = createImportExportMock();
@@ -424,7 +432,7 @@ describe("SettingsPage", () => {
     ).toBeNull();
   });
 
-  it("does not substitute another Agent's settings when none are available", () => {
+  it("keeps an available Agent without dedicated settings selected", () => {
     renderSettingsPage({ section: "appConfig", activeApp: "claude-desktop" });
     expect(
       screen.getByRole("combobox", { name: "settings.appConfig.selectAgent" }),
@@ -457,5 +465,41 @@ describe("SettingsPage", () => {
         name: "settings.appConfig.saveDirectories",
       }),
     ).toBeEnabled();
+  });
+
+  it("only offers available Agents and replaces an unavailable selection", () => {
+    availability.apps = ["codex", "pi"];
+    const { rerenderWith } = renderSettingsPage({
+      section: "appConfig",
+      activeApp: "claude",
+    });
+    const selector = screen.getByRole("combobox", {
+      name: "settings.appConfig.selectAgent",
+    });
+    expect(selector).toHaveValue("codex");
+    expect(
+      screen
+        .getAllByRole("option")
+        .map((option) => option.getAttribute("value")),
+    ).toEqual(["codex", "pi"]);
+    expect(screen.getByText("codex-auth-settings")).toBeInTheDocument();
+
+    availability.apps = ["pi"];
+    rerenderWith({});
+    expect(selector).toHaveValue("pi");
+    expect(screen.queryByText("codex-auth-settings")).toBeNull();
+    expect(
+      screen.getByPlaceholderText("settings.browsePlaceholderPi"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not mount Agent controls when no Agent is available", () => {
+    availability.apps = [];
+    renderSettingsPage({ section: "appConfig", activeApp: "codex" });
+    expect(screen.getByText("common.noAvailableAgents")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.queryByText("codex-auth-settings")).toBeNull();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.queryByRole("switch")).toBeNull();
   });
 });

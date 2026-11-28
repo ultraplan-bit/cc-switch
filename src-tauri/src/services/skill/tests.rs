@@ -1788,7 +1788,7 @@ fn kimi_and_workbuddy_unmanaged_copy_survives_resync_migration_and_uninstall() {
         write_skill(&source, "same-content");
         write_skill(&native, native_content);
         let original = fs::read(native.join("SKILL.md")).unwrap();
-        let outcomes = SkillService::resync_all_apps(&db);
+        let outcomes = SkillService::resync_apps(&db, &AppType::all().collect::<Vec<_>>());
         assert!(
             outcomes
                 .iter()
@@ -4306,7 +4306,7 @@ fn resync_all_apps_reports_each_app_and_failed_skills() {
     bad.apps = SkillApps::only(&AppType::Claude);
     db.save_skill(&bad).expect("seed poisoned row");
 
-    let outcomes = SkillService::resync_all_apps(&db);
+    let outcomes = SkillService::resync_apps(&db, &AppType::all().collect::<Vec<_>>());
 
     let apps: Vec<&str> = outcomes.iter().map(|o| o.app.as_str()).collect();
     assert!(!apps.contains(&"claude-desktop") && !apps.contains(&"pi"));
@@ -4325,6 +4325,39 @@ fn resync_all_apps_reports_each_app_and_failed_skills() {
         assert!(dir.join("good-skill").join("SKILL.md").exists());
     }
     assert!(outcomes.iter().filter(|o| o.app != "claude").all(|o| o.ok));
+}
+
+#[test]
+#[serial_test::serial]
+fn resync_selected_apps_preserves_hidden_app_files_and_bindings() {
+    let home = tempdir().expect("home");
+    let _home = TestHomeGuard::set(home.path());
+    let ssot_dir = SkillService::get_ssot_dir().unwrap();
+    write_skill(&ssot_dir.join("shared-skill"), "managed copy");
+    let db = Arc::new(Database::memory().unwrap());
+    let mut skill = poisoned_skill("local:shared", "shared-skill");
+    skill.apps = SkillApps::only(&AppType::Claude);
+    skill.apps.codex = true;
+    db.save_skill(&skill).unwrap();
+    let codex_dir = SkillService::get_app_skills_dir(&AppType::Codex).unwrap();
+    write_skill(&codex_dir.join("shared-skill"), "preserved codex copy");
+    let codex_file = codex_dir.join("shared-skill/SKILL.md");
+    let original = fs::read_to_string(&codex_file).unwrap();
+    let claude_dir = SkillService::get_app_skills_dir(&AppType::Claude).unwrap();
+
+    assert!(SkillService::resync_apps(&db, &[]).is_empty());
+    assert!(!claude_dir.join("shared-skill").exists());
+    let outcomes = SkillService::resync_apps(&db, &[AppType::Claude]);
+    assert_eq!(outcomes.len(), 1);
+    assert_eq!(outcomes[0].app, "claude");
+    assert!(outcomes[0].ok);
+    assert!(claude_dir.join("shared-skill/SKILL.md").exists());
+    assert_eq!(fs::read_to_string(codex_file).unwrap(), original);
+    assert!(
+        db.get_all_installed_skills().unwrap()["local:shared"]
+            .apps
+            .codex
+    );
 }
 
 /// OpenClaw 不支持 Skills，`~/.openclaw/skills` 归它自己：里面和受管 Skill 同名的
@@ -4349,7 +4382,7 @@ fn resync_all_apps_leaves_openclaw_skills_dir_alone() {
     skill.apps = SkillApps::only(&AppType::Claude);
     db.save_skill(&skill).expect("seed row");
 
-    let outcomes = SkillService::resync_all_apps(&db);
+    let outcomes = SkillService::resync_apps(&db, &AppType::all().collect::<Vec<_>>());
 
     assert!(outcomes.iter().all(|o| o.app != "openclaw"));
     assert!(outcomes.iter().all(|o| o.ok), "{outcomes:?}");

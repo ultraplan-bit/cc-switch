@@ -252,6 +252,24 @@ describe("UnifiedSkillsPanel", () => {
     expect(columns()).toHaveLength(2);
   });
 
+  it("clears an Agent filter when that Agent becomes unavailable", async () => {
+    m.installed = [
+      makeSkill({ id: "alpha", name: "Alpha", apps: { codex: true } }),
+      makeSkill({ id: "beta", name: "Beta", apps: { claude: true } }),
+    ];
+    const { rerender } = renderPanel();
+    await userEvent.click(columns()[1]);
+    await userEvent.click(
+      screen.getByRole("button", { name: "skillsPage.pop.onlyApp" }),
+    );
+    expect(screen.queryByText("Beta")).not.toBeInTheDocument();
+    m.visibleApps = ["claude"];
+    rerender(<UnifiedSkillsPanel />);
+    expect(screen.getByText("Beta")).toBeInTheDocument();
+    expect(columns()).toHaveLength(1);
+    expect(m.toggle).not.toHaveBeenCalled();
+  });
+
   it("distinguishes an empty list from a search miss", async () => {
     renderPanel();
     expect(screen.getByText("skillsPage.emptyTitle")).toBeInTheDocument();
@@ -1029,11 +1047,34 @@ describe("UnifiedSkillsPanel", () => {
     renderPanel();
     await openMenu("skills.moreActions", "skills.storageSheet.resync");
     await waitFor(() => expect(m.resync).toHaveBeenCalledTimes(1));
+    expect(m.resync).toHaveBeenCalledWith(["claude", "codex"]);
     expect(m.toastSuccess).toHaveBeenCalledWith(
       "skills.storageSheet.resyncDone",
       { closeButton: true },
     );
     expect(screen.queryByTestId("storage-sheet")).not.toBeInTheDocument();
+  });
+
+  it("does not enable a hidden discovered Agent when importing Skills", async () => {
+    m.installed = [makeSkill()];
+    m.visibleApps = ["claude"];
+    renderPanel();
+    await userEvent.click(
+      screen.getByRole("button", { name: "skillsPage.banner.reviewImport" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).queryByRole("checkbox", { name: "Grok Build" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "skillsPage.import.submit" }),
+    );
+    await waitFor(() => expect(m.importSkills).toHaveBeenCalledTimes(1));
+    expect(m.importSkills.mock.calls[0][0][0].apps).toMatchObject({
+      claude: true,
+      grokbuild: false,
+      codex: false,
+    });
   });
 
   it("closes the backup dialog and reports an explicit refresh failure", async () => {

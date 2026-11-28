@@ -229,7 +229,7 @@ describe("MCP management mutation hooks", () => {
 
     let mutation!: Promise<unknown>;
     act(() => {
-      mutation = result.current.mutateAsync();
+      mutation = result.current.mutateAsync(["claude"]);
     });
 
     await waitFor(() => expect(invalidateSpy).toHaveBeenCalledTimes(1));

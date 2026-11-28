@@ -490,10 +490,10 @@ impl SkillService {
 
     /// 「立即重新同步」：按数据库里的开关和当前同步方式，把 Skill 重新投影到各应用目录，
     /// 逐应用报告结果（Claude Desktop、OpenClaw、Pi、Omp 不由这里同步，不在结果里）。
-    pub fn resync_all_apps(db: &Arc<Database>) -> Vec<SkillAppSyncOutcome> {
+    pub fn resync_apps(db: &Arc<Database>, apps: &[AppType]) -> Vec<SkillAppSyncOutcome> {
         let _state_guard = skill_state_read_guard();
         AppType::all()
-            .filter(Self::is_sync_managed_app)
+            .filter(|app| apps.contains(app) && Self::is_sync_managed_app(app))
             .map(|app| {
                 let (error, failed_skills) = match Self::sync_to_app_unlocked(db, &app) {
                     Ok(failed) => (None, failed),

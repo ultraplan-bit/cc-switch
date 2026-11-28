@@ -36,6 +36,10 @@ vi.mock("@/hooks/useSettings", () => ({
   }),
 }));
 
+vi.mock("@/components/mcp/useVisibleAppIds", () => ({
+  useVisibleAppIds: () => ["claude", "codex"],
+}));
+
 vi.mock("@/hooks/useSkills", () => ({
   useInstalledSkills: () => ({ data: m.installed }),
   useCcSwitchSkillsDir: () => ({ data: "/Users/jason/.cc-switch/skills" }),

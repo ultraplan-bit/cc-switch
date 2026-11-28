@@ -4,6 +4,8 @@
     "description": "Универсальный помощник для Claude Code, Codex и Gemini CLI"
   },
   "common": {
+    "noAvailableAgents": "Нет доступных агентов",
+    "noAvailableAgentsHint": "Установите и включите агент, поддерживающий эту функцию, в разделе управления агентами.",
     "unsavedLeaveTitle": "Несохранённые изменения",
     "unsavedLeaveMessage": "Если вы уйдёте, изменения на этой странице редактора не сохранятся.",
     "unsavedLeaveConfirm": "Отменить и уйти",

@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginEntry } from "@/lib/api/plugins";
 
 const m = vi.hoisted(() => ({
+  availableApps: undefined as string[] | undefined,
   listInstalled: vi.fn(),
   listCatalog: vi.fn(),
   listMarketplaces: vi.fn(),
@@ -18,6 +19,10 @@ const m = vi.hoisted(() => ({
   refreshMarketplaces: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
+}));
+
+vi.mock("@/components/mcp/useVisibleAppIds", () => ({
+  useVisibleAppIds: (apps: string[]) => m.availableApps ?? apps,
 }));
 
 vi.mock("sonner", () => ({
@@ -224,6 +229,7 @@ describe("plugin list helpers", () => {
 
 describe("PluginsPage", () => {
   beforeEach(() => {
+    m.availableApps = undefined;
     resetPluginWriteState();
     m.listInstalled.mockReset().mockResolvedValue([plugin()]);
     m.listCatalog.mockReset().mockResolvedValue([catalogItem(), superpowers]);
@@ -237,6 +243,29 @@ describe("PluginsPage", () => {
     m.refreshMarketplaces.mockReset().mockResolvedValue({ changed: true });
     m.toastSuccess.mockReset();
     m.toastError.mockReset();
+  });
+
+  it("does not query any plugin agent when none are available", () => {
+    m.availableApps = [];
+    renderPage();
+    expect(screen.getByText("common.noAvailableAgents")).toBeInTheDocument();
+    expect(m.listInstalled).not.toHaveBeenCalled();
+    expect(m.listCatalog).not.toHaveBeenCalled();
+    expect(m.listMarketplaces).not.toHaveBeenCalled();
+  });
+
+  it("does not fall back to every agent for an explicitly empty app list", () => {
+    renderPage({ apps: [] });
+    expect(screen.getByText("common.noAvailableAgents")).toBeInTheDocument();
+    expect(m.listInstalled).not.toHaveBeenCalled();
+  });
+
+  it("selects an available agent instead of an unavailable initial agent", async () => {
+    m.availableApps = ["codex"];
+    renderPage({ initialApp: "claude" });
+    await screen.findByText("frontend-design");
+    expect(m.listInstalled.mock.calls.map(([app]) => app)).toEqual(["codex"]);
+    expect(m.listCatalog.mock.calls.map(([app]) => app)).toEqual(["codex"]);
   });
 
   it("shows the cached installed list before the CLI answers", async () => {

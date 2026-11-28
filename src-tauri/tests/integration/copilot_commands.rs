@@ -190,7 +190,7 @@ fn copilot_mcp_skills_and_prompts_follow_the_native_home() {
         json!({"disabledMcpServers":["native"]}).to_string(),
     )
     .unwrap();
-    McpService::import_from_all_apps(&state).ok();
+    McpService::import_from_apps(&state, &McpService::live_sync_apps()).ok();
     let servers = McpService::get_all_servers(&state).unwrap();
     assert!(!servers["native"].apps.copilot);
 

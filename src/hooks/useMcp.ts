@@ -109,24 +109,24 @@ export function useDeleteMcpServer() {
 }
 
 /**
- * 按这里的开关把 MCP 重新写进各应用的配置（不传 apps＝全部受管应用），逐应用返回结果
+ * 按这里的开关把 MCP 重新写进所选应用的配置，逐应用返回结果
  */
 export function useResyncMcpToApps() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (apps?: AppId[]) => mcpApi.resyncToApps(apps),
+    mutationFn: (apps: AppId[]) => mcpApi.resyncToApps(apps),
     onSettled: () =>
       queryClient.invalidateQueries({ queryKey: ["mcp", "all"] }),
   });
 }
 
 /**
- * 从所有应用导入 MCP 服务器
+ * 从所选应用导入 MCP 服务器
  */
 export function useImportMcpFromApps() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => mcpApi.importFromApps(),
+    mutationFn: (apps: AppId[]) => mcpApi.importFromApps(apps),
     // 后端是 best-effort 导入：部分应用失败会返回错误，但其余应用的
     // 服务器已经入库，失败时也要刷新列表。
     onSettled: () =>

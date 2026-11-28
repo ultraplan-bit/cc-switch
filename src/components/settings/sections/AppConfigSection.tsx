@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import type { AppId } from "@/lib/api";
 import { APP_IDS } from "@/config/appSpecs";
+import { useVisibleAppIds } from "@/components/mcp/useVisibleAppIds";
 import type {
   ResolvedDirectories,
   SettingsFormState,
@@ -44,7 +45,7 @@ interface AppConfigSectionProps {
  * 保存会提交所有目录草稿，因此待保存名单和按钮始终显示在选择器下方。
  */
 export function AppConfigSection({
-  app,
+  app: selectedApp,
   onAppChange,
   settings,
   savedSettings,
@@ -58,6 +59,8 @@ export function AppConfigSection({
   onSaveDirectories,
 }: AppConfigSectionProps) {
   const { t } = useTranslation();
+  const appIds = useVisibleAppIds(APP_IDS);
+  const app = appIds.includes(selectedApp) ? selectedApp : appIds[0];
 
   const pendingDirectories = DIRECTORY_APPS.filter(
     ({ field }) =>
@@ -87,7 +90,7 @@ export function AppConfigSection({
     </SettingsRow>
   );
 
-  const blockTitle = (
+  const blockTitle = app && (
     <span className="flex items-center gap-2">
       <AppGlyph app={app} size={16} badgeClassName="bg-app" />
       {APP_DISPLAY_NAME[app]}
@@ -97,22 +100,32 @@ export function AppConfigSection({
   return (
     <>
       <div className="space-y-3">
-        <label className="flex flex-wrap items-center gap-3 text-body font-medium text-fg-1">
-          {t("settings.appConfig.selectAgent")}
-          <select
-            value={app}
-            onChange={(event) => onAppChange(event.target.value as AppId)}
-            className="h-10 min-w-0 max-w-full rounded-control border border-border bg-surface px-3 text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {APP_IDS.map((id) => (
-              <option key={id} value={id}>
-                {APP_DISPLAY_NAME[id]}
-              </option>
-            ))}
-          </select>
-        </label>
+        {app ? (
+          <label className="flex flex-wrap items-center gap-3 text-body font-medium text-fg-1">
+            {t("settings.appConfig.selectAgent")}
+            <select
+              value={app}
+              onChange={(event) => onAppChange(event.target.value as AppId)}
+              className="h-10 min-w-0 max-w-full rounded-control border border-border bg-surface px-3 text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {appIds.map((id) => (
+                <option key={id} value={id}>
+                  {APP_DISPLAY_NAME[id]}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <p className="text-body font-medium text-fg-1">
+            {t("common.noAvailableAgents")}
+          </p>
+        )}
         <p className="text-body text-fg-2">
-          {t("settings.appConfig.selectionHint")}
+          {t(
+            app
+              ? "settings.appConfig.selectionHint"
+              : "common.noAvailableAgentsHint",
+          )}
         </p>
         {pendingDirectories.length > 0 && (
           <div className="flex flex-wrap items-center gap-3 rounded-control border border-border bg-subtle p-3">
@@ -133,55 +146,59 @@ export function AppConfigSection({
           </div>
         )}
       </div>
-      <SettingsBlock
-        key={app}
-        id={`app-config-${app}`}
-        className="rounded-panel"
-        title={blockTitle}
-      >
-        <SettingsCard>
-          {app === "claude" && (
-            <>
-              <SettingsSwitchRow
-                label={t("settings.enableClaudePluginIntegration")}
-                help={{
-                  title: t("settings.enableClaudePluginIntegration"),
-                  body: t("settings.enableClaudePluginIntegrationDescription"),
-                }}
-                checked={!!settings.enableClaudePluginIntegration}
-                onCheckedChange={(value) =>
-                  void onAutoSave({ enableClaudePluginIntegration: value })
-                }
+      {app && (
+        <SettingsBlock
+          key={app}
+          id={`app-config-${app}`}
+          className="rounded-panel"
+          title={blockTitle}
+        >
+          <SettingsCard>
+            {app === "claude" && (
+              <>
+                <SettingsSwitchRow
+                  label={t("settings.enableClaudePluginIntegration")}
+                  help={{
+                    title: t("settings.enableClaudePluginIntegration"),
+                    body: t(
+                      "settings.enableClaudePluginIntegrationDescription",
+                    ),
+                  }}
+                  checked={!!settings.enableClaudePluginIntegration}
+                  onCheckedChange={(value) =>
+                    void onAutoSave({ enableClaudePluginIntegration: value })
+                  }
+                />
+                <SettingsSwitchRow
+                  label={t("settings.skipClaudeOnboarding")}
+                  help={{
+                    title: t("settings.skipClaudeOnboarding"),
+                    body: t("settings.skipClaudeOnboardingDescription"),
+                  }}
+                  checked={!!settings.skipClaudeOnboarding}
+                  onCheckedChange={(value) =>
+                    void onAutoSave({ skipClaudeOnboarding: value })
+                  }
+                />
+              </>
+            )}
+            {app === "codex" && (
+              <CodexAuthSettings
+                settings={settings}
+                onChange={onAutoSave}
+                codexConfigDir={savedSettings?.codexConfigDir}
               />
-              <SettingsSwitchRow
-                label={t("settings.skipClaudeOnboarding")}
-                help={{
-                  title: t("settings.skipClaudeOnboarding"),
-                  body: t("settings.skipClaudeOnboardingDescription"),
-                }}
-                checked={!!settings.skipClaudeOnboarding}
-                onCheckedChange={(value) =>
-                  void onAutoSave({ skipClaudeOnboarding: value })
-                }
-              />
-            </>
-          )}
-          {app === "codex" && (
-            <CodexAuthSettings
-              settings={settings}
-              onChange={onAutoSave}
-              codexConfigDir={savedSettings?.codexConfigDir}
-            />
-          )}
-          {directoryApp ? (
-            directoryRow(directoryApp)
-          ) : (
-            <p className="px-4 py-5 text-body text-fg-2">
-              {t("settings.appConfig.empty")}
-            </p>
-          )}
-        </SettingsCard>
-      </SettingsBlock>
+            )}
+            {directoryApp ? (
+              directoryRow(directoryApp)
+            ) : (
+              <p className="px-4 py-5 text-body text-fg-2">
+                {t("settings.appConfig.empty")}
+              </p>
+            )}
+          </SettingsCard>
+        </SettingsBlock>
+      )}
     </>
   );
 }

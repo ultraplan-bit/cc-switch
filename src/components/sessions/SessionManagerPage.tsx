@@ -34,7 +34,7 @@ import {
 } from "@/lib/query";
 import { piApi, sessionsApi, type AppId } from "@/lib/api";
 import type { SessionMeta } from "@/types";
-import { DEFAULT_VISIBLE_APPS } from "@/config/appConfig";
+import { useVisibleAppIds } from "@/components/mcp/useVisibleAppIds";
 import { Button } from "@/components/ui/button";
 import { HelpTip } from "@/components/ui/help-tip";
 import { Notice } from "@/components/ui/notice";
@@ -163,9 +163,14 @@ export function SessionManagerPage({
   const { updateSettings, autoSaveSettings } = useSettings();
   const contentSearchEnabled = settings?.sessionContentSearchEnabled ?? false;
 
-  const [appFilter, setAppFilter] = useState<AppFilter>(
-    isSessionAppId(appId) ? appId : "claude",
+  const availableApps = useVisibleAppIds(SESSION_APP_IDS);
+  const [selectedApp, setAppFilter] = useState<AppFilter>(
+    isSessionAppId(appId) ? appId : "all",
   );
+  const appFilter =
+    selectedApp === "all" || availableApps.includes(selectedApp)
+      ? selectedApp
+      : "all";
   const [query, setQuery] = useState("");
   const [groupMode, setGroupMode] = useState<GroupMode>(readGroupMode);
   const [expanded, setExpanded] = useState<Set<string>>(readExpanded);
@@ -186,9 +191,27 @@ export function SessionManagerPage({
   const [isBatchDeleting, setIsBatchDeleting] = useState(false);
   const [whereOpen, setWhereOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement | null>(null);
+  const availableDeleteTargets =
+    deleteTargets?.filter(
+      (session) =>
+        isSessionAppId(session.providerId) &&
+        availableApps.includes(session.providerId),
+    ) ?? null;
 
   useEffect(() => {
-    setAppFilter(isSessionAppId(appId) ? appId : "claude");
+    setDeleteTargets((targets) =>
+      targets?.every(
+        (session) =>
+          isSessionAppId(session.providerId) &&
+          availableApps.includes(session.providerId),
+      )
+        ? targets
+        : null,
+    );
+  }, [availableApps]);
+
+  useEffect(() => {
+    setAppFilter(isSessionAppId(appId) ? appId : "all");
   }, [appId]);
 
   useEffect(() => {
@@ -216,18 +239,6 @@ export function SessionManagerPage({
     enabled: appFilter === "pi",
     staleTime: 30 * 1000,
   });
-
-  // 下拉里只列「应用」页设为显示的应用；Claude Code 的会话在 Claude Desktop 显示时也算，
-  // DeepSeek Harness（Web 与 Desktop 共用会话目录，合并成一项）在 Desktop 显示时也算
-  const availableApps = useMemo(() => {
-    const visible = { ...DEFAULT_VISIBLE_APPS, ...settings?.visibleApps };
-    return SESSION_APP_IDS.filter(
-      (app) =>
-        visible[app] ||
-        (app === "claude" && visible["claude-desktop"]) ||
-        app === appFilter,
-    );
-  }, [settings?.visibleApps, appFilter]);
 
   const scopedSessions = useMemo(
     () =>
@@ -271,7 +282,7 @@ export function SessionManagerPage({
     retry: retryContentSearch,
   } = useSessionContentSearch({
     query,
-    enabled: contentSearchEnabled,
+    enabled: contentSearchEnabled && availableApps.length > 0,
     listIsSuccess: isSuccess,
     listUpdatedAt: dataUpdatedAt,
     providerIds: contentProviderIds,
@@ -366,10 +377,11 @@ export function SessionManagerPage({
   const readerSession = useMemo(
     () =>
       readerKey
-        ? (sessions.find((session) => getSessionKey(session) === readerKey) ??
-          null)
+        ? (scopedSessions.find(
+            (session) => getSessionKey(session) === readerKey,
+          ) ?? null)
         : null,
-    [sessions, readerKey],
+    [scopedSessions, readerKey],
   );
   const readerIndex = readerSession
     ? orderedSessions.findIndex(
@@ -440,6 +452,11 @@ export function SessionManagerPage({
   );
 
   const handleLaunch = async (session: SessionMeta) => {
+    if (
+      !isSessionAppId(session.providerId) ||
+      !availableApps.includes(session.providerId)
+    )
+      return;
     const command = session.resumeCommand;
     if (!command) return;
     if (!terminalName) {
@@ -542,11 +559,11 @@ export function SessionManagerPage({
 
   const selectedSessions = useMemo(
     () =>
-      sessions.filter(
+      scopedSessions.filter(
         (session) =>
           selectedKeys.has(getSessionKey(session)) && canDeleteSession(session),
       ),
-    [sessions, selectedKeys],
+    [scopedSessions, selectedKeys],
   );
   const matchKeys = useMemo(
     () => new Set(matches.map(getSessionKey)),
@@ -570,7 +587,7 @@ export function SessionManagerPage({
 
   const handleDeleteConfirm = async () => {
     if (!deleteTargets || deleteTargets.length === 0 || isDeleting) return;
-    const targets = deleteTargets.filter(canDeleteSession);
+    const targets = (availableDeleteTargets ?? []).filter(canDeleteSession);
     const source = deleteSourceRef.current;
     setDeleteTargets(null);
     if (targets.length === 0) return;
@@ -1624,12 +1641,13 @@ export function SessionManagerPage({
       </div>
 
       <SessionDeleteDialog
-        targets={deleteTargets}
+        targets={availableDeleteTargets}
         pending={isDeleting}
         onConfirm={() => void handleDeleteConfirm()}
         onCancel={cancelDelete}
       />
       <SessionSourcesDialog
+        apps={availableApps}
         open={whereOpen}
         onClose={() => setWhereOpen(false)}
       />

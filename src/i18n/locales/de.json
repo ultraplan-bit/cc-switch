@@ -4,6 +4,8 @@
     "description": "Der All-in-One-Assistent für Claude Code, Codex & Gemini CLI"
   },
   "common": {
+    "noAvailableAgents": "Keine verfügbaren Agents",
+    "noAvailableAgentsHint": "Installieren und aktivieren Sie in der Agent-Verwaltung einen Agent, der diese Funktion unterstützt.",
     "unsavedLeaveTitle": "Nicht gespeicherte Änderungen",
     "unsavedLeaveMessage": "Wenn Sie die Seite verlassen, werden die Änderungen in diesem Editor nicht gespeichert.",
     "unsavedLeaveConfirm": "Verwerfen und verlassen",

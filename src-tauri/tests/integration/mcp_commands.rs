@@ -75,7 +75,7 @@ fn mcode_import_ignores_native_metadata_and_continues_after_conflicts() {
         "c-new":{"command":"node"}
     }});
     fs::write(&path, original.to_string()).unwrap();
-    let error = McpService::import_from_all_apps(&state)
+    let error = McpService::import_from_apps(&state, &McpService::live_sync_apps())
         .unwrap_err()
         .to_string();
     assert!(error.contains("a-conflict"));
@@ -169,7 +169,7 @@ fn mcode_automatic_sync_preserves_unmanaged_same_name_servers() {
         tags: vec![],
     };
     state.db.save_mcp_server(&server).unwrap();
-    let error = McpService::import_from_all_apps(&state).unwrap_err();
+    let error = McpService::import_from_apps(&state, &McpService::live_sync_apps()).unwrap_err();
     assert!(error.to_string().contains("context7"));
     assert!(
         !state.db.get_all_mcp_servers().unwrap()["context7"]
@@ -182,7 +182,7 @@ fn mcode_automatic_sync_preserves_unmanaged_same_name_servers() {
         native
     );
     McpService::toggle_app(&state, "context7", AppType::Mcode, true).unwrap();
-    McpService::import_from_all_apps(&state).unwrap();
+    McpService::import_from_apps(&state, &McpService::live_sync_apps()).unwrap();
     McpService::toggle_app(&state, "context7", AppType::Mcode, false).unwrap();
     let disabled: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
@@ -264,7 +264,7 @@ fn pi_disable_then_enable_round_trip_keeps_pi_settings() {
         servers.insert(id.into(), entry);
     }
     fs::write(&path, json!({"mcpServers": servers}).to_string()).unwrap();
-    McpService::import_from_all_apps(&state).unwrap();
+    McpService::import_from_apps(&state, &McpService::live_sync_apps()).unwrap();
     let read = || -> serde_json::Value {
         serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap()
     };
@@ -311,7 +311,7 @@ fn pi_import_keeps_disabled_entries_unchecked() {
         .to_string(),
     )
     .unwrap();
-    McpService::import_from_all_apps(&state).unwrap();
+    McpService::import_from_apps(&state, &McpService::live_sync_apps()).unwrap();
     let servers = state.db.get_all_mcp_servers().unwrap();
     assert!(servers["on"].apps.pi);
     assert_eq!(servers["on"].server["type"], "http");
@@ -347,7 +347,7 @@ fn pi_import_skips_entries_pi_rejects() {
         .to_string(),
     )
     .unwrap();
-    assert!(McpService::import_from_all_apps(&state).is_err());
+    assert!(McpService::import_from_apps(&state, &McpService::live_sync_apps()).is_err());
     let servers = state.db.get_all_mcp_servers().unwrap();
     assert!(servers["ok"].apps.pi);
     for id in ["remote", "bad name", "dev-tools", "dev_tools", "api-server"] {
@@ -971,7 +971,7 @@ fn import_from_all_apps_reports_broken_app_but_imports_the_rest() {
 
     let state = create_test_state().expect("create test state");
 
-    let err = McpService::import_from_all_apps(&state)
+    let err = McpService::import_from_apps(&state, &McpService::live_sync_apps())
         .expect_err("broken codex config must surface, not be swallowed as zero imports");
     let message = err.to_string();
     assert!(
@@ -1833,8 +1833,8 @@ fn sync_all_enabled_removes_known_disabled_but_preserves_unknown_live_entries() 
 }
 
 #[test]
-fn resync_targets_default_to_managed_apps_and_reject_unsupported() {
-    let all = McpService::resync_targets(None).expect("default targets");
+fn resync_targets_preserve_explicit_scope_and_reject_unsupported() {
+    let all = McpService::live_sync_apps();
     assert_eq!(
         all.iter().map(|app| app.as_str()).collect::<Vec<_>>(),
         vec![
@@ -1854,18 +1854,46 @@ fn resync_targets_default_to_managed_apps_and_reject_unsupported() {
             "workbuddy"
         ]
     );
-    assert_eq!(McpService::resync_targets(Some(&[])).unwrap(), all);
+    assert!(McpService::resync_targets(&[]).unwrap().is_empty());
 
     let only_codex =
-        McpService::resync_targets(Some(&["codex".to_string(), "codex".to_string()])).unwrap();
+        McpService::resync_targets(&["codex".to_string(), "codex".to_string()]).unwrap();
     assert_eq!(only_codex, vec![AppType::Codex]);
 
     assert_eq!(
-        McpService::resync_targets(Some(&["pi".to_string()])).unwrap(),
+        McpService::resync_targets(&["pi".to_string()]).unwrap(),
         vec![AppType::Pi]
     );
-    assert!(McpService::resync_targets(Some(&["openclaw".to_string()])).is_err());
-    assert!(McpService::resync_targets(Some(&["not-an-app".to_string()])).is_err());
+    assert!(McpService::resync_targets(&["openclaw".to_string()]).is_err());
+    assert!(McpService::resync_targets(&["not-an-app".to_string()]).is_err());
+}
+
+#[test]
+fn import_from_selected_apps_does_not_read_or_enable_hidden_apps() {
+    let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
+    reset_test_fs();
+    let state = create_test_state().unwrap();
+    let claude_path = get_claude_mcp_path();
+    fs::create_dir_all(claude_path.parent().unwrap()).unwrap();
+    fs::write(
+        &claude_path,
+        r#"{"mcpServers":{"selected-only":{"command":"echo"}}}"#,
+    )
+    .unwrap();
+    let codex_path = ensure_test_home().join(".codex/config.toml");
+    fs::create_dir_all(codex_path.parent().unwrap()).unwrap();
+    fs::write(&codex_path, "invalid = [").unwrap();
+
+    assert_eq!(McpService::import_from_apps(&state, &[]).unwrap(), 0);
+    assert!(state.db.get_all_mcp_servers().unwrap().is_empty());
+    assert_eq!(
+        McpService::import_from_apps(&state, &[AppType::Claude]).unwrap(),
+        1
+    );
+    let servers = state.db.get_all_mcp_servers().unwrap();
+    assert!(servers["selected-only"].apps.claude);
+    assert!(!servers["selected-only"].apps.codex);
+    assert_eq!(fs::read_to_string(codex_path).unwrap(), "invalid = [");
 }
 
 /// 「重新同步到各应用」逐应用报告：Codex 配置坏了只让 Codex 失败、文件不动，

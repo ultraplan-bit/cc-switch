@@ -210,6 +210,24 @@ describe("UnifiedMcpPanel", () => {
     expect(screen.getByText("mcpPage.noMatch")).toBeInTheDocument();
   });
 
+  it("does not import or resync when no Agent is available", async () => {
+    mocks.visibleApps = [];
+    renderPanel();
+    for (const button of screen.getAllByRole("button", {
+      name: "mcpPage.importFromApps",
+    })) {
+      expect(button).toBeDisabled();
+    }
+    await userEvent.click(
+      screen.getByRole("button", { name: "mcpPage.moreActions" }),
+    );
+    expect(
+      await screen.findByRole("menuitem", { name: "mcpPage.resync" }),
+    ).toHaveAttribute("data-disabled");
+    expect(mocks.importServers).not.toHaveBeenCalled();
+    expect(mocks.resync).not.toHaveBeenCalled();
+  });
+
   it("lists unreadable servers apart from the table", async () => {
     server.use(
       http.post("http://tauri.local/get_unreadable_mcp_servers", () =>
@@ -641,7 +659,7 @@ describe("UnifiedMcpPanel", () => {
     expect(mocks.toastSuccess).not.toHaveBeenCalled();
   });
 
-  it("resyncs every app from the more menu and reports the ones that failed", async () => {
+  it("resyncs only available apps from the more menu and reports failures", async () => {
     mocks.serversMap = {
       serena: makeServer("serena", { apps: { codex: true } }),
     };
@@ -658,7 +676,9 @@ describe("UnifiedMcpPanel", () => {
       await screen.findByRole("menuitem", { name: "mcpPage.resync" }),
     );
 
-    await waitFor(() => expect(mocks.resync).toHaveBeenCalledWith(undefined));
+    await waitFor(() =>
+      expect(mocks.resync).toHaveBeenCalledWith(["claude", "codex", "gemini"]),
+    );
     await waitFor(() =>
       expect(screen.getByText("mcpPage.failNoticeTitle")).toBeInTheDocument(),
     );
@@ -732,7 +752,11 @@ describe("UnifiedMcpPanel", () => {
     await waitFor(() =>
       expect(screen.getByText("mcpPage.import.title")).toBeInTheDocument(),
     );
-    expect(mocks.importServers).toHaveBeenCalled();
+    expect(mocks.importServers).toHaveBeenCalledWith([
+      "claude",
+      "codex",
+      "gemini",
+    ]);
     expect(screen.getByText("mcpPage.import.added")).toBeInTheDocument();
   });
 

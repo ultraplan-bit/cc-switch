@@ -48,8 +48,7 @@ import {
   useRequestLogs,
   useSessionUsageLastSync,
 } from "@/lib/query/usage";
-import { useSettingsQuery } from "@/lib/query";
-import { DEFAULT_VISIBLE_APPS } from "@/config/appConfig";
+import { useVisibleAppIds } from "@/components/mcp/useVisibleAppIds";
 import { useUsageEventBridge } from "@/hooks/useUsageEventBridge";
 import { useUsageAutoRefresh } from "@/hooks/useUsageAutoRefresh";
 import { usageApi } from "@/lib/api/usage";
@@ -276,7 +275,12 @@ export function UsageDashboard({
       writeRememberedChoice(USAGE_CHOICE_KEYS.range, next.preset);
     }
   };
-  const [appType, setAppType] = useState<AppTypeFilter>(initialAppType);
+  const filterApps = useVisibleAppIds(KNOWN_APP_TYPES);
+  const [selectedAppType, setAppType] = useState<AppTypeFilter>(initialAppType);
+  const appType =
+    selectedAppType === "all" || filterApps.includes(selectedAppType)
+      ? selectedAppType
+      : "all";
   const [providerName, setProviderName] = useState<string | undefined>(
     undefined,
   );
@@ -387,6 +391,7 @@ export function UsageDashboard({
   };
 
   const rebuildCodexUsage = async () => {
+    if (!filterApps.includes("codex")) return;
     setShowRebuildConfirm(false);
     setRebuildingCodex(true);
     try {
@@ -559,19 +564,6 @@ export function UsageDashboard({
 
   // ── 筛选行 ───────────────────────────────────────────────────────────
   // 选中块是单独的滑块（SegmentThumb），切换应用时滑过去
-  // 只列「应用」页设为显示的应用；Claude Code 的用量在 Claude Desktop 显示时也算，
-  // DeepSeek Harness（Web 与 Desktop 的会话用量合并记在 dsh 下）在 Desktop 显示时也算，
-  // 当前选中的即使被隐藏也留着，免得筛选状态无处可见
-  const { data: settings } = useSettingsQuery();
-  const filterApps = useMemo(() => {
-    const visible = { ...DEFAULT_VISIBLE_APPS, ...settings?.visibleApps };
-    return KNOWN_APP_TYPES.filter(
-      (app) =>
-        visible[app] ||
-        (app === "claude" && visible["claude-desktop"]) ||
-        app === appType,
-    );
-  }, [settings?.visibleApps, appType]);
   const appFilterIndicator = useSlidingIndicator<HTMLDivElement>(
     '[aria-pressed="true"]',
     appType,
@@ -1010,7 +1002,7 @@ export function UsageDashboard({
         <PricingConfigPanel />
       </FullScreenPanel>
       <ConfirmDialog
-        isOpen={showRebuildConfirm}
+        isOpen={showRebuildConfirm && filterApps.includes("codex")}
         title={t("usage.rebuildCodex.confirmTitle")}
         message={t("usage.rebuildCodex.confirmMessage")}
         confirmText={t("usage.rebuildCodex.confirmAction")}

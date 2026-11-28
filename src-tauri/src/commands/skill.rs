@@ -205,9 +205,14 @@ pub async fn check_skill_updates(
 #[tauri::command]
 pub async fn resync_skills_to_apps(
     app_state: State<'_, AppState>,
+    apps: Vec<String>,
 ) -> Result<Vec<SkillAppSyncOutcome>, String> {
+    let apps = apps
+        .iter()
+        .map(|app| parse_app_type(app).map_err(|error| error.to_string()))
+        .collect::<Result<Vec<_>, _>>()?;
     let db = app_state.db.clone();
-    tauri::async_runtime::spawn_blocking(move || SkillService::resync_all_apps(&db))
+    tauri::async_runtime::spawn_blocking(move || SkillService::resync_apps(&db, &apps))
         .await
         .map_err(|e| format!("重新同步 Skill 失败: {e}"))
 }

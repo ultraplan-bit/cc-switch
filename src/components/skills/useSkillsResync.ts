@@ -5,6 +5,8 @@ import { APP_DISPLAY_NAME } from "@/components/shell/AppGlyph";
 import type { SkillAppSyncOutcome } from "@/lib/api/skills";
 import type { AppId } from "@/lib/api/types";
 import { extractErrorMessage } from "@/utils/errorUtils";
+import { APP_IDS_WITH } from "@/config/appSpecs";
+import { useVisibleAppIds } from "@/components/mcp/useVisibleAppIds";
 
 const appName = (app: string) => APP_DISPLAY_NAME[app as AppId] ?? app;
 
@@ -13,6 +15,9 @@ const appName = (app: string) => APP_DISPLAY_NAME[app as AppId] ?? app;
 export function useSkillsResync() {
   const { t } = useTranslation();
   const resyncMutation = useResyncSkillsToApps();
+  const apps = useVisibleAppIds(APP_IDS_WITH.skills).filter(
+    (app) => app !== "pi" && app !== "omp",
+  );
   // 菜单和对话框各有一个 mutation 实例，进行中状态按 mutationKey 合并
   const isPending = useIsResyncingSkills() || resyncMutation.isPending;
 
@@ -45,9 +50,9 @@ export function useSkillsResync() {
   };
 
   const resync = async () => {
-    if (isPending) return;
+    if (isPending || apps.length === 0) return;
     try {
-      reportResync(await resyncMutation.mutateAsync());
+      reportResync(await resyncMutation.mutateAsync(apps));
     } catch (error) {
       toast.error(t("common.error"), {
         description: extractErrorMessage(error) || String(error),
@@ -55,5 +60,5 @@ export function useSkillsResync() {
     }
   };
 
-  return { resync, isPending };
+  return { resync, isPending, canResync: apps.length > 0 };
 }

@@ -6,7 +6,8 @@ import { toast } from "@/lib/toast";
 import { ChevronRight, Loader2 } from "lucide-react";
 import type { AppId } from "@/lib/api";
 import { proxyApi } from "@/lib/api/proxy";
-import { useProvidersQuery } from "@/lib/query";
+import { providersQueryOptions } from "@/lib/query";
+import { useVisibleAppIds } from "@/components/mcp/useVisibleAppIds";
 import {
   useGlobalProxyConfig,
   useProxyClientHost,
@@ -107,8 +108,13 @@ export function RoutingSection({ onOpenApp }: RoutingSectionProps) {
   const [clientHost, setClientHost] = useState("");
   const [clientHostError, setClientHostError] = useState<string | null>(null);
   const [confirmExitAll, setConfirmExitAll] = useState(false);
-  const [failoverApp, setFailoverApp] =
+  const [selectedFailoverApp, setFailoverApp] =
     useState<AppIdWith<"localProxy">>("claude");
+  const appIds = useVisibleAppIds(ROUTE_MODE_APP_IDS);
+  const failoverApps = useVisibleAppIds(APP_IDS_WITH.localProxy);
+  const failoverApp = failoverApps.includes(selectedFailoverApp)
+    ? selectedFailoverApp
+    : failoverApps[0];
 
   useEffect(() => {
     if (config) {
@@ -127,20 +133,24 @@ export function RoutingSection({ onOpenApp }: RoutingSectionProps) {
       queryFn: () => proxyApi.getAppMode(app),
     })),
   });
-  const providerQueries = {
-    claude: useProvidersQuery("claude").data,
-    codex: useProvidersQuery("codex").data,
-    gemini: useProvidersQuery("gemini").data,
-    grokbuild: useProvidersQuery("grokbuild").data,
-    "claude-desktop": useProvidersQuery("claude-desktop").data,
-  };
+  const providerQueries = useQueries({
+    queries: appIds.map(providersQueryOptions),
+  });
+
+  // Hidden Agents can still be using the shared service; keep its stop guard intact.
+  const activeRoutingCount = modeQueries.filter(
+    ({ data }) => data && data.mode !== "direct",
+  ).length;
 
   const usingApps = ROUTE_MODE_APP_IDS.flatMap((app, index) => {
+    if (!appIds.includes(app)) return [];
     const view = modeQueries[index]?.data;
     if (!view || view.mode === "direct") return [];
     const routeName =
       (view.routeProviderId &&
-        providerQueries[app]?.providers[view.routeProviderId]?.name) ||
+        providerQueries[appIds.indexOf(app)]?.data?.providers[
+          view.routeProviderId
+        ]?.name) ||
       "—";
     return [{ app, mode: view.mode as AppMode, routeName }];
   });
@@ -194,7 +204,9 @@ export function RoutingSection({ onOpenApp }: RoutingSectionProps) {
   };
 
   const stopReason =
-    running && usingCount > 0 ? t("routingSettings.stopBlocked") : undefined;
+    running && activeRoutingCount > 0
+      ? t("routingSettings.stopBlocked")
+      : undefined;
 
   return (
     <>
@@ -412,7 +424,7 @@ export function RoutingSection({ onOpenApp }: RoutingSectionProps) {
             ))}
           </SettingsCard>
         )}
-        {usingApps.length > 0 && (
+        {usingApps.length > 0 && activeRoutingCount === usingCount && (
           <Button
             variant="neutral"
             size="regular"
@@ -423,27 +435,29 @@ export function RoutingSection({ onOpenApp }: RoutingSectionProps) {
         )}
       </SettingsBlock>
 
-      <SettingsBlock
-        title={t("settings.advanced.failover.title")}
-        help={{
-          title: t("settings.advanced.failover.title"),
-          body: t("routingSettings.failoverHelp"),
-        }}
-      >
-        <div className="space-y-4 rounded-panel border border-border bg-surface p-5">
-          <SegmentedControl
-            size="sm"
-            aria-label={t("settings.advanced.failover.title")}
-            value={failoverApp}
-            onValueChange={setFailoverApp}
-            items={APP_IDS_WITH.localProxy.map((app) => ({
-              value: app,
-              label: APP_DISPLAY_NAME[app],
-            }))}
-          />
-          <AutoFailoverConfigPanel key={failoverApp} appType={failoverApp} />
-        </div>
-      </SettingsBlock>
+      {failoverApp && (
+        <SettingsBlock
+          title={t("settings.advanced.failover.title")}
+          help={{
+            title: t("settings.advanced.failover.title"),
+            body: t("routingSettings.failoverHelp"),
+          }}
+        >
+          <div className="space-y-4 rounded-panel border border-border bg-surface p-5">
+            <SegmentedControl
+              size="sm"
+              aria-label={t("settings.advanced.failover.title")}
+              value={failoverApp}
+              onValueChange={setFailoverApp}
+              items={failoverApps.map((app) => ({
+                value: app,
+                label: APP_DISPLAY_NAME[app],
+              }))}
+            />
+            <AutoFailoverConfigPanel key={failoverApp} appType={failoverApp} />
+          </div>
+        </SettingsBlock>
+      )}
 
       <SettingsBlock
         title={t("settings.advanced.rectifier.title")}
@@ -459,7 +473,7 @@ export function RoutingSection({ onOpenApp }: RoutingSectionProps) {
 
       {/* 可恢复的操作（路由目标、队列、聚合名单都保留），不用红色 */}
       <ConfirmDialog
-        isOpen={confirmExitAll}
+        isOpen={confirmExitAll && activeRoutingCount === usingCount}
         variant="info"
         title={t("routingSettings.exitAllTitle")}
         message={t("routingSettings.exitAllMessage")}

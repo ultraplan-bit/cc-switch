@@ -14,6 +14,13 @@ import type { Settings } from "@/types";
 import { setSessionFixtures, setSettings } from "../msw/state";
 import { waitForOverlayTransition } from "../utils/overlayTransition";
 
+vi.mock("@/hooks/useAgentAvailability", () => ({
+  useAgentAvailability: () => ({
+    installedApps: { codex: true },
+    isPending: false,
+  }),
+}));
+
 const toastError = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/toast", () => ({
   toast: { error: toastError, success: vi.fn() },

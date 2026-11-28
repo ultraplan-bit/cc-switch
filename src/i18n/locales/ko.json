@@ -4,6 +4,8 @@
     "description": "Claude Code / Codex / Gemini CLI용 종합 지원 도구"
   },
   "common": {
+    "noAvailableAgents": "사용 가능한 Agent가 없습니다",
+    "noAvailableAgentsHint": "Agent 관리에서 이 기능을 지원하는 Agent를 설치하고 활성화하세요.",
     "unsavedLeaveTitle": "저장되지 않은 변경 사항",
     "unsavedLeaveMessage": "이 페이지를 나가면 변경 사항이 저장되지 않습니다.",
     "unsavedLeaveConfirm": "저장하지 않고 나가기",

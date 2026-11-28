@@ -57,7 +57,7 @@ export function SkillsStorageSheet({
   const { settings, updateSettings, autoSaveSettings } = useSettings();
   const { data: installedSkills } = useInstalledSkills();
   const { data: ccSwitchDirRaw } = useCcSwitchSkillsDir(open);
-  const { resync, isPending: resyncPending } = useSkillsResync();
+  const { resync, isPending: resyncPending, canResync } = useSkillsResync();
 
   const location: SkillStorageLocation =
     settings?.skillStorageLocation ?? "cc_switch";
@@ -275,7 +275,7 @@ export function SkillsStorageSheet({
                   variant="neutral"
                   size="compact"
                   className="shrink-0"
-                  disabled={resyncPending}
+                  disabled={resyncPending || !canResync}
                   onClick={() => void resync()}
                 >
                   {resyncPending ? (

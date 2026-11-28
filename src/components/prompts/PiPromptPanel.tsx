@@ -59,6 +59,7 @@ const PiPromptPanel: React.FC<PiPromptPanelProps> = ({
   onNavigationBlockedChange,
 }) => {
   const { t } = useTranslation();
+  const available = apps.includes("pi");
   const [activeTab, setActiveTab] = useState<PiPromptTab>("global");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -66,6 +67,7 @@ const PiPromptPanel: React.FC<PiPromptPanelProps> = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [templateQuery, setTemplateQuery] = useState("");
   const [busy, setBusy] = useState(false);
+  const [nativeEditing, setNativeEditing] = useState(false);
   const templatesRef = useRef<PiPromptTemplatesHandle>(null);
 
   const {
@@ -86,17 +88,25 @@ const PiPromptPanel: React.FC<PiPromptPanelProps> = ({
 
   const dialogOpen = copyingId !== null;
   const writePending = Boolean(togglingId) || busy;
-  const interactionBlocked =
-    loading || writePending || isFormOpen || dialogOpen;
   // 系统提示 / 模板编辑页自己的保存，按 mutation key 单独看
   const nativeSaving =
     useIsMutating({ mutationKey: PI_PROMPT_SAVE_MUTATION_KEY }) > 0;
+  const interactionBlocked =
+    loading ||
+    writePending ||
+    isFormOpen ||
+    dialogOpen ||
+    nativeEditing ||
+    nativeSaving;
   // 编辑页只盖住内容区，不锁导航：离开页面就关掉它（同供应商编辑页）；保存进行中仍锁
   const navigationBlocked = writePending || dialogOpen || nativeSaving;
   // 外观上的禁用晚 300ms 才出现：点一下启用这类很快的写入不让整列按钮闪一下变灰。
   // 拦截仍看 interactionBlocked；表单、对话框打开时照常立即禁用。
   const controlsDisabled =
-    useDelayedFlag(loading || writePending) || isFormOpen || dialogOpen;
+    useDelayedFlag(loading || writePending) ||
+    isFormOpen ||
+    dialogOpen ||
+    !available;
 
   useEffect(() => {
     if (open) void reload();
@@ -142,7 +152,7 @@ const PiPromptPanel: React.FC<PiPromptPanelProps> = ({
 
   /** 包一层：写的过程中锁住页面，写完刷新别处的缓存。 */
   const runWrite = async (write: () => Promise<void>) => {
-    if (busy) return;
+    if (busy || !available) return;
     setBusy(true);
     try {
       await write();
@@ -239,6 +249,7 @@ const PiPromptPanel: React.FC<PiPromptPanelProps> = ({
   };
 
   const handleSave = async (id: string, prompt: Prompt) => {
+    if (busy || !available) return false;
     const isNew = !(id in prompts);
     try {
       setBusy(true);
@@ -273,12 +284,12 @@ const PiPromptPanel: React.FC<PiPromptPanelProps> = ({
 
   const handleCopyToApps = async (targets: AppId[]) => {
     const source = copyingId ? prompts[copyingId] : undefined;
-    if (!source) return;
+    if (!source || busy || !available) return;
     setBusy(true);
     const timestamp = Math.floor(Date.now() / 1000);
     const created: Array<{ app: AppId; id: string }> = [];
     const failed: AppId[] = [];
-    for (const target of targets) {
+    for (const target of targets.filter((app) => apps.includes(app))) {
       const id = `prompt-${Date.now()}`;
       try {
         await promptsApi.upsertPrompt(target, id, {
@@ -522,10 +533,15 @@ const PiPromptPanel: React.FC<PiPromptPanelProps> = ({
           />
         )
       ) : activeTab === "system" ? (
-        <PiSystemPromptFiles />
+        <PiSystemPromptFiles
+          available={available}
+          onEditingChange={setNativeEditing}
+        />
       ) : (
         <PiPromptTemplates
           ref={templatesRef}
+          available={available}
+          onEditingChange={setNativeEditing}
           search={templateQuery}
           onClearSearch={() => setTemplateQuery("")}
         />
@@ -534,6 +550,7 @@ const PiPromptPanel: React.FC<PiPromptPanelProps> = ({
       {isFormOpen && (
         <PromptFormPanel
           appId="pi"
+          saveDisabled={!available}
           editingId={editingId ?? undefined}
           initialData={editingId ? prompts[editingId] : undefined}
           onSave={handleSave}
