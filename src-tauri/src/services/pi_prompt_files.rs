@@ -68,15 +68,6 @@ impl PiAgentsFileGuard {
         ensure_revision(&self.path, expected_revision, "Pi AGENTS.md")?;
         atomic_write(&self.path, content.as_bytes())
     }
-
-    pub(crate) fn delete(&self, expected_revision: &str) -> Result<(), AppError> {
-        ensure_revision(&self.path, expected_revision, "Pi AGENTS.md")?;
-        match fs::remove_file(&self.path) {
-            Ok(()) => Ok(()),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(error) => Err(AppError::io(&self.path, error)),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

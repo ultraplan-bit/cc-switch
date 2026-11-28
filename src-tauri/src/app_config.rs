@@ -215,34 +215,6 @@ impl Default for McpRoot {
     }
 }
 
-/// Prompt 配置：单客户端维度
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct PromptConfig {
-    #[serde(default)]
-    pub prompts: HashMap<String, crate::prompt::Prompt>,
-}
-
-/// Prompt 根：按客户端分开维护
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct PromptRoot {
-    #[serde(default)]
-    pub claude: PromptConfig,
-    #[serde(rename = "claude-desktop", default)]
-    pub claude_desktop: PromptConfig,
-    #[serde(default)]
-    pub codex: PromptConfig,
-    #[serde(default)]
-    pub gemini: PromptConfig,
-    #[serde(default)]
-    pub grokbuild: PromptConfig,
-    #[serde(default)]
-    pub opencode: PromptConfig,
-    #[serde(default)]
-    pub openclaw: PromptConfig,
-    #[serde(default)]
-    pub hermes: PromptConfig,
-}
-
 use crate::error::AppError;
 use crate::provider::ProviderManager;
 
@@ -509,9 +481,9 @@ pub struct MultiAppConfig {
     /// MCP 配置（按客户端分治）
     #[serde(default)]
     pub mcp: McpRoot,
-    /// Prompt 配置（按客户端分治）
+    /// 跨 Agent 共享的提示词资源库
     #[serde(default)]
-    pub prompts: PromptRoot,
+    pub prompts: HashMap<String, crate::prompt::Prompt>,
     /// Claude Skills 配置
     #[serde(default)]
     pub skills: SkillStore,
@@ -542,7 +514,7 @@ impl Default for MultiAppConfig {
             version: 2,
             apps,
             mcp: McpRoot::default(),
-            prompts: PromptRoot::default(),
+            prompts: HashMap::new(),
             skills: SkillStore::default(),
             common_config_snippets: CommonConfigSnippets::default(),
         }

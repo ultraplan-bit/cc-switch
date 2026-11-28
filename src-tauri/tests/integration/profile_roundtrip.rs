@@ -52,13 +52,12 @@ fn mcp_server(id: &str, claude_enabled: bool) -> McpServer {
     .expect("construct mcp server")
 }
 
-fn prompt(id: &str, enabled: bool) -> Prompt {
+fn prompt(id: &str) -> Prompt {
     Prompt {
         id: id.to_string(),
         name: id.to_uppercase(),
         content: format!("# prompt {id}\n"),
         description: None,
-        enabled,
         created_at: Some(1_000),
         updated_at: Some(1_000),
     }
@@ -160,12 +159,13 @@ fn profile_snapshot_apply_roundtrip_restores_configuration() {
 
     state
         .db
-        .save_prompt(&AppType::Claude, &prompt("pr1", true))
+        .save_prompt(&prompt("pr1"))
         .expect("save prompt pr1");
     state
         .db
-        .save_prompt(&AppType::Claude, &prompt("pr2", false))
+        .save_prompt(&prompt("pr2"))
         .expect("save prompt pr2");
+    PromptService::enable_prompt(&state, AppType::Claude, "pr1").expect("apply initial prompt");
 
     // ---- 保存项目 A（在 Claude 页新建：只拍 Claude 当前状态）----
     let profile_a = ProfileService::create(&state, "Project A", ProfileScope::Claude)
@@ -238,14 +238,18 @@ fn profile_snapshot_apply_roundtrip_restores_configuration() {
         "skill re-enabled"
     );
 
-    let prompts = state.db.get_prompts(&AppType::Claude).expect("get prompts");
-    assert!(prompts.get("pr1").expect("pr1").enabled, "pr1 re-enabled");
-    assert!(!prompts.get("pr2").expect("pr2").enabled, "pr2 disabled");
+    assert_eq!(
+        PromptService::get_target(&state, AppType::Claude)
+            .unwrap()
+            .applied_prompt_id
+            .as_deref(),
+        Some("pr1")
+    );
 
     let live_prompt = fs::read_to_string(claude_dir.join("CLAUDE.md")).expect("read CLAUDE.md");
     assert_eq!(
         live_prompt,
-        prompt("pr1", true).content,
+        prompt("pr1").content,
         "live memory file restored"
     );
 
@@ -520,12 +524,13 @@ fn switching_profile_preserves_saved_drafts_until_explicit_resnapshot() {
 
     state
         .db
-        .save_prompt(&AppType::Claude, &prompt("pr1", true))
+        .save_prompt(&prompt("pr1"))
         .expect("save prompt pr1");
     state
         .db
-        .save_prompt(&AppType::Claude, &prompt("pr2", false))
+        .save_prompt(&prompt("pr2"))
         .expect("save prompt pr2");
+    PromptService::enable_prompt(&state, AppType::Claude, "pr1").expect("apply initial prompt");
 
     // ---- Project A：状态 X（p1 / m1 / pr1）----
     let project_a = ProfileService::create(&state, "Project A", ProfileScope::Claude)
@@ -560,9 +565,13 @@ fn switching_profile_preserves_saved_drafts_until_explicit_resnapshot() {
     let servers = state.db.get_all_mcp_servers().expect("get mcp servers");
     assert!(!servers.get("m1").expect("m1").apps.claude, "m1 disabled");
     assert!(servers.get("m2").expect("m2").apps.claude, "m2 enabled");
-    let prompts = state.db.get_prompts(&AppType::Claude).expect("get prompts");
-    assert!(!prompts.get("pr1").expect("pr1").enabled, "pr1 disabled");
-    assert!(prompts.get("pr2").expect("pr2").enabled, "pr2 enabled");
+    assert_eq!(
+        PromptService::get_target(&state, AppType::Claude)
+            .unwrap()
+            .applied_prompt_id
+            .as_deref(),
+        Some("pr2")
+    );
 
     // Project A 仍是已保存的 X，不能由当前运行状态 Y 自动覆盖
     let saved_a = state
@@ -603,9 +612,13 @@ fn switching_profile_preserves_saved_drafts_until_explicit_resnapshot() {
     let servers = state.db.get_all_mcp_servers().expect("get mcp servers");
     assert!(servers.get("m1").expect("m1").apps.claude, "m1 restored");
     assert!(!servers.get("m2").expect("m2").apps.claude, "m2 disabled");
-    let prompts = state.db.get_prompts(&AppType::Claude).expect("get prompts");
-    assert!(prompts.get("pr1").expect("pr1").enabled, "pr1 restored");
-    assert!(!prompts.get("pr2").expect("pr2").enabled, "pr2 disabled");
+    assert_eq!(
+        PromptService::get_target(&state, AppType::Claude)
+            .unwrap()
+            .applied_prompt_id
+            .as_deref(),
+        Some("pr1")
+    );
 
     // Project B 保留已保存的 Y；只有显式重拍才会保存当前 X
     let saved_b = state
@@ -638,7 +651,7 @@ fn switching_profile_preserves_saved_drafts_until_explicit_resnapshot() {
 }
 
 #[test]
-fn applying_profile_without_active_prompt_disables_current_prompt() {
+fn applying_profile_without_prompt_preserves_external_edits_and_shared_library() {
     let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
     reset_test_fs();
     let home = ensure_test_home();
@@ -646,7 +659,7 @@ fn applying_profile_without_active_prompt_disables_current_prompt() {
     let state = create_test_state().expect("create test state");
     state
         .db
-        .save_prompt(&AppType::Claude, &prompt("pr1", false))
+        .save_prompt(&prompt("pr1"))
         .expect("save prompt pr1");
 
     // 拍快照时没有启用中的提示词：记成「拍到的是无」，不是「没拍过」
@@ -667,19 +680,49 @@ fn applying_profile_without_active_prompt_disables_current_prompt() {
 
     let warnings =
         ProfileService::apply(&state, &project.id, ProfileScope::Claude).expect("apply profile");
-    assert!(warnings.is_empty(), "unexpected warnings: {warnings:?}");
-
-    let prompts = state.db.get_prompts(&AppType::Claude).expect("get prompts");
-    let pr1 = prompts.get("pr1").expect("pr1");
-    assert!(!pr1.enabled, "pr1 disabled by applying the project");
+    assert!(!warnings.is_empty(), "external edits must prevent removal");
     assert_eq!(
-        pr1.content, "# edited outside\n",
-        "external edit backfilled before disabling"
+        state.db.get_prompts().unwrap()["pr1"].content,
+        prompt("pr1").content
     );
     assert_eq!(
         fs::read_to_string(&claude_md).expect("read CLAUDE.md"),
-        "",
-        "live prompt file cleared"
+        "# edited outside\n",
+        "external edits are preserved"
+    );
+
+    fs::write(&claude_md, prompt("pr1").content).unwrap();
+    let warnings = ProfileService::apply(&state, &project.id, ProfileScope::Claude).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(fs::read_to_string(&claude_md).unwrap(), "");
+    assert!(state
+        .db
+        .get_prompt_application(&AppType::Claude)
+        .unwrap()
+        .is_none());
+}
+
+#[test]
+fn snapshot_requires_explicit_import_when_instructions_differ_from_shared_library() {
+    let _guard = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
+    reset_test_fs();
+    let state = create_test_state().unwrap();
+    let original = prompt("shared");
+    state.db.save_prompt(&original).unwrap();
+    PromptService::enable_prompt(&state, AppType::Claude, &original.id).unwrap();
+    let mut edited = original.clone();
+    edited.content = "new library revision".into();
+    state.db.save_prompt(&edited).unwrap();
+    let before = state.db.get_all_profiles().unwrap().len();
+    assert!(ProfileService::create(&state, "Stale instructions", ProfileScope::Claude).is_err());
+    assert_eq!(state.db.get_all_profiles().unwrap().len(), before);
+    assert_eq!(
+        state.db.get_prompts().unwrap()[&original.id].content,
+        edited.content
+    );
+    assert_eq!(
+        fs::read_to_string(ensure_test_home().join(".claude/CLAUDE.md")).unwrap(),
+        original.content
     );
 }
 

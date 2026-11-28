@@ -35,7 +35,7 @@ Claude Code、Codex、Gemini CLI 等 AI 编程工具各有各的配置格式。�
 - **一个应用，十二个工具** — Claude Code、Claude Desktop、Codex、Gemini CLI、Grok Build、OpenCode、OpenClaw、Hermes、Pi、MiniMax Code、Kimi Code、Oh My Pi
 - **告别手动编辑** — 90+ 供应商预设，包括 AWS Bedrock、NVIDIA NIM 和社区中转服务
 - **直连、路由、聚合，按需选择** — 直连是工具直接连供应商；路由经本机转发，能转换接口格式、自动故障转移，让 Claude Code 用 GPT、Codex 用 Claude；聚合把多家供应商的模型放进 Claude Code 或 Codex 的同一个模型列表，选哪个模型，请求就发给哪一家
-- **MCP、Skills 与提示词集中管理** — MCP 和 Skills 添加一次，按工具勾选同步；提示词按工具分别维护
+- **MCP、Skills 与提示词集中管理** — 资源统一保存，按需分发；同一份 Markdown 提示词可被多个 Agent 和 Profile 引用，明确应用后才写入各自的指令文件
 - **会话读得懂** — 把各工具的会话记录整理成阅读页：每一轮做了什么、改了哪些文件、哪一步失败了，一目了然
 - **用量与额度一目了然** — 不开本地路由也能统计 Token 用量和花费；供应商卡片和托盘上直接显示订阅额度剩余量与账户余额
 - **跨平台** — 基于 Tauri 2 构建的原生桌面应用，支持 Windows、macOS 和 Linux
@@ -123,7 +123,7 @@ paru -S cc-switch-bin
 ### MCP、提示词、Skills、项目与会话
 
 - **MCP**：点击侧栏的“MCP” → 通过模板或自定义配置添加服务器（或“导入已有”）→ 切换各工具的同步开关
-- **提示词**：点击侧栏的“提示词” → 使用 Markdown 编辑器创建提示词 → 启用后写入该工具的提示词文件
+- **提示词**：点击侧栏的“提示词” → 保存共享 Markdown 文档 → 选择目标 Agent 并明确应用到对应指令文件
 - **Skills**：点击侧栏的“Skills” →“发现技能” → 搜索 skills.sh 或浏览 GitHub 仓库 → 选择目标 Agent，或选择“仅保存到资源库”。ZIP 导入与备份恢复沿用同一目标选择；存储位置为 `~/.agents/skills` 时，仍遵循 Agent 的原生自动发现规则。
 - **Profile 与项目**：Claude Code/Codex 页头下方提供固定 Profile 入口，也可从「Agent 管理 → 配置项目」提前准备。Profile 统一编辑模型、行为、MCP、Skills 和指令；API 地址、密钥和账号引用供应商连接库。已有配置会保留源记录并迁入 Profile，支持从项目原生配置导入。保存后手动应用或部署，项目更新采用手动覆盖，不持续追踪或自动同步。Claude Desktop 支持全局连接引用与策略配置，模型路由保留原有管理能力。详见[项目级 Agent Profile](docs/project-agent-profiles-zh.md)。
 - **会话**：点击侧栏的“会话” → 浏览、搜索会话历史，打开阅读页，或恢复各工具的会话
@@ -193,7 +193,7 @@ paru -S cc-switch-bin
 ### MCP、提示词与 Skills
 
 - **统一 MCP 面板** — 一处管理所有 MCP 服务器，按工具勾选同步（Claude Code、Codex、Gemini CLI、Grok Build、OpenCode、Hermes、Pi、MiniMax Code、Kimi Code、Oh My Pi），支持从各工具导入现有配置，支持 Deep Link 导入
-- **提示词** — 按工具分别管理的提示词库，使用 Markdown 编辑器；启用后写入该工具的提示词文件（CLAUDE.md / AGENTS.md / GEMINI.md），启用前会先把文件里原有的内容存回提示词库，不会丢失。Pi 还可以编辑 SYSTEM.md、APPEND_SYSTEM.md 和提示词模板
+- **提示词** — 跨 Agent 共享 Markdown 资源库，同一份内容可被多个 Profile 引用；保存只更新资源库，明确应用后才分发到对应文件：Claude Code 使用 `CLAUDE.md`，Codex 使用 `AGENTS.md`，Gemini 使用 `GEMINI.md`。目标文件修改需主动导入，覆盖前检查冲突。Pi 还可以编辑 SYSTEM.md、APPEND_SYSTEM.md 和提示词模板
 - **Skills** — 搜索 skills.sh，或从 GitHub 仓库、ZIP 文件一键安装；检查更新并一键全部更新；同步到各工具的方式可选自动、只用软链接或只用复制，存储位置可选 `~/.agents/skills`
 - 三个面板都支持搜索，MCP 和 Skills 还可以按工具一键全部启用或停用；供应商、MCP 和提示词都在内容区整页编辑，有未保存的修改时离开会先提醒
 

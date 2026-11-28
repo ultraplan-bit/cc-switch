@@ -517,8 +517,11 @@ fn kimi_mcp_and_global_prompts_follow_the_native_home() {
     McpService::toggle_app(&state, "test", AppType::Kimi, false).unwrap();
     let value: serde_json::Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
     assert!(value["mcpServers"].get("test").is_none());
-    let prompt:Prompt=serde_json::from_value(json!({"id":"global","name":"Global","content":"Use the project conventions.","enabled":false})).unwrap();
-    PromptService::upsert_prompt(&state, AppType::Kimi, "global", prompt).unwrap();
+    let prompt: Prompt = serde_json::from_value(
+        json!({"id":"global","name":"Global","content":"Use the project conventions."}),
+    )
+    .unwrap();
+    PromptService::upsert_prompt(&state, "global", prompt).unwrap();
     PromptService::enable_prompt(&state, AppType::Kimi, "global").unwrap();
     assert_eq!(
         fs::read_to_string(home.directory.path().join("AGENTS.md")).unwrap(),

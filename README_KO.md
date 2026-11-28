@@ -35,7 +35,7 @@ Claude Code, Codex, Gemini CLI 같은 AI 코딩 도구는 저마다 설정 형�
 - **하나의 앱, 열두 가지 도구** — Claude Code, Claude Desktop, Codex, Gemini CLI, Grok Build, OpenCode, OpenClaw, Hermes, Pi, MiniMax Code, Kimi Code, Oh My Pi
 - **더 이상 수동 편집 불필요** — AWS Bedrock, NVIDIA NIM, 커뮤니티 릴레이를 포함한 90개 이상의 공급자 프리셋
 - **직접 연결, 라우팅, 통합 중 원하는 대로** — 직접 연결은 도구를 공급자에 곧바로 연결합니다. 라우팅은 요청을 내 컴퓨터를 거쳐 전달하면서 API 형식을 변환하고 자동으로 장애 조치하므로 Claude Code에서 GPT를, Codex에서 Claude를 사용할 수 있습니다. 통합은 여러 공급자의 모델을 Claude Code나 Codex의 하나의 모델 목록에 모으고, 각 요청은 선택한 모델의 공급자로 전달됩니다
-- **MCP, Skills, 프롬프트 중앙 관리** — MCP 서버와 Skills를 한 번만 추가하고 어떤 도구에 동기화할지 선택하세요. 프롬프트는 도구별로 따로 관리됩니다
+- **MCP, Skills, 프롬프트 중앙 관리** — 리소스를 한 번 저장하고 필요한 곳에 배포합니다. 하나의 공유 Markdown 문서를 여러 Agent와 Profile에서 참조할 수 있습니다
 - **읽기 쉬운 세션** — 각 도구의 세션 로그를 읽기 뷰로 바꿔 줍니다. 각 턴이 무엇을 했고, 어떤 파일이 바뀌었으며, 어느 단계가 실패했는지 한눈에 볼 수 있습니다
 - **사용량과 할당량을 한눈에** — 로컬 라우팅 없이도 토큰 사용량과 지출을 추적합니다. 남은 구독 할당량과 계정 잔액은 공급자 카드와 트레이에 바로 표시됩니다
 - **크로스 플랫폼** — Tauri 2로 만든 Windows, macOS, Linux용 네이티브 데스크톱 앱
@@ -123,7 +123,7 @@ paru -S cc-switch-bin
 ### MCP, 프롬프트, Skills, 프로젝트, 세션
 
 - **MCP**: 사이드바에서 "MCP" 클릭 → 템플릿이나 사용자 지정 설정으로(또는 "기존 가져오기"로) 서버 추가 → 도구별 동기화 켜기/끄기
-- **프롬프트**: 사이드바에서 "프롬프트" 클릭 → Markdown 편집기로 프롬프트 작성 → 활성화하면 해당 도구의 프롬프트 파일에 기록됩니다
+- **프롬프트**: 사이드바에서 프롬프트 열기 → 공유 Markdown 문서 저장 → 대상 Agent를 선택하고 명시적으로 적용
 - **Skills**: 사이드바에서 "스킬" 클릭 → "스킬 살펴보기" → skills.sh를 검색하거나 GitHub 저장소 탐색 → 지원되는 도구에 원클릭 설치
 - **프로젝트**: 먼저 "설정 → 일반"에서 "프로젝트 전환기 표시"를 켠 다음, Claude Code, Claude Desktop 또는 Codex 페이지 상단의 프로젝트 전환기를 열고 → "새 프로젝트"로 현재 설정을 저장하세요. 이후 전환기에서 선택하면 전체 구성을 한 번에 바꿀 수 있습니다
 - **세션**: 사이드바에서 "세션" 클릭 → 대화 기록을 둘러보고 검색하거나, 읽기 뷰를 열거나, 각 도구의 세션을 복원합니다
@@ -192,7 +192,7 @@ paru -S cc-switch-bin
 ### MCP, 프롬프트, Skills
 
 - **통합 MCP 패널** — 모든 MCP 서버를 한곳에서 관리하고, 각각을 어떤 도구에 동기화할지 선택하며(Claude Code, Codex, Gemini CLI, Grok Build, OpenCode, Hermes, Pi, MiniMax Code, Kimi Code, Oh My Pi), 각 도구의 기존 설정을 가져오고, Deep Link로 가져올 수 있습니다
-- **프롬프트** — Markdown 편집기를 갖춘 도구별 프롬프트 라이브러리입니다. 프롬프트를 활성화하면 해당 도구의 프롬프트 파일(CLAUDE.md / AGENTS.md / GEMINI.md)에 기록되며, 파일의 기존 내용은 먼저 라이브러리에 저장되므로 아무것도 사라지지 않습니다. Pi는 SYSTEM.md, APPEND_SYSTEM.md, 프롬프트 템플릿도 편집할 수 있습니다
+- **프롬프트** — 공유 Markdown 라이브러리입니다. 저장은 라이브러리만 변경하며, 적용할 때 Claude Code는 `CLAUDE.md`, Codex는 `AGENTS.md`, Gemini는 `GEMINI.md`에 기록합니다. 외부 수정은 직접 가져오며 덮어쓰기 전에 충돌을 확인합니다. Pi의 SYSTEM.md, APPEND_SYSTEM.md 및 기본 프롬프트 템플릿 편집기도 유지됩니다
 - **Skills** — skills.sh를 검색하거나 GitHub 저장소 또는 ZIP 파일에서 원클릭으로 설치하고, 업데이트를 확인해 한 번에 모두 업데이트하세요. 각 도구에 자동으로, 심볼릭 링크로만, 또는 복사로만 동기화할 수 있으며, 원하면 `~/.agents/skills`에 저장할 수도 있습니다
 - 세 패널 모두 검색을 지원하고, MCP와 Skills는 도구별로 한 번에 모두 켜거나 끌 수도 있습니다. 공급자, MCP 서버, 프롬프트는 콘텐츠 영역에서 전체 페이지로 편집하며, 저장하지 않은 변경 사항이 있으면 나가기 전에 경고합니다
 

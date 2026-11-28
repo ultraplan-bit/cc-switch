@@ -2,8 +2,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Download, FileText, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { APP_DISPLAY_NAME } from "@/components/shell/AppGlyph";
-import type { AppId, Prompt } from "@/lib/api";
+import type { Prompt } from "@/lib/api";
 import PromptListItem from "./PromptListItem";
 import {
   firstLine,
@@ -19,13 +18,12 @@ interface PromptLibraryProps {
   listLabel: string;
   disabled?: boolean;
   onClearSearch: () => void;
-  onToggle: (id: string, enabled: boolean) => void;
+  onApply: (id: string) => void;
+  appliedPromptId?: string | null;
+  matchesLibrary?: boolean;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
-  onCopyToApps?: (id: string) => void;
   onCopyContent?: (id: string) => void;
-  /** 删除不能用时的原因；默认启用中的不能删 */
-  getDeleteBlockedReason?: (id: string, prompt: Prompt) => string | undefined;
 }
 
 export function filterPromptEntries(
@@ -48,12 +46,12 @@ export function PromptLibrary({
   listLabel,
   disabled = false,
   onClearSearch,
-  onToggle,
+  onApply,
+  appliedPromptId,
+  matchesLibrary,
   onEdit,
   onDelete,
-  onCopyToApps,
   onCopyContent,
-  getDeleteBlockedReason,
 }: PromptLibraryProps) {
   const { t, i18n } = useTranslation();
   const entries = useMemo(() => Object.entries(prompts), [prompts]);
@@ -89,26 +87,20 @@ export function PromptLibrary({
         const detail = [summary, formatSize(utf8Bytes(prompt.content)), updated]
           .filter(Boolean)
           .join(" · ");
-        const blocked = getDeleteBlockedReason
-          ? getDeleteBlockedReason(id, prompt)
-          : prompt.enabled
-            ? t("prompts.deleteBlocked")
-            : undefined;
         return (
           <PromptListItem
             key={id}
             id={id}
             prompt={prompt}
-            active={prompt.enabled}
+            active={id === appliedPromptId}
+            pendingUpdate={id === appliedPromptId && !matchesLibrary}
             detail={detail}
             first={index === 0}
             disabled={disabled}
-            onToggle={onToggle}
+            onApply={onApply}
             onEdit={onEdit}
             onDelete={onDelete}
-            onCopyToApps={onCopyToApps}
             onCopyContent={onCopyContent}
-            deleteBlockedReason={blocked}
           />
         );
       })}
@@ -117,7 +109,6 @@ export function PromptLibrary({
 }
 
 interface PromptEmptyStateProps {
-  app: AppId;
   displayPath: string;
   /** 目标文件现在的内容；null = 文件不存在 */
   fileText: string | null;
@@ -127,11 +118,10 @@ interface PromptEmptyStateProps {
 }
 
 /**
- * 提示库还是空的（PromptsImport.dc.html）：只说启用的那条写到哪里；
- * 文件里已有内容时给「导入现有内容」（导入只存进库、不改文件，后果写在导入后的 toast 里）。
+ * A shared library can start empty even when the selected Agent has a file.
+ * Explicit import saves a reusable document without changing that file.
  */
 export function PromptEmptyState({
-  app,
   displayPath,
   fileText,
   disabled = false,
@@ -149,10 +139,10 @@ export function PromptEmptyState({
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-2 px-10 pb-10 text-center">
       <h2 className="m-0 text-section text-fg-1">
-        {t("prompts.emptyTitle", { app: APP_DISPLAY_NAME[app] })}
+        {t("prompts.library.emptyTitle")}
       </h2>
       <p className="m-0 max-w-[460px] text-body text-fg-2">
-        {renderSegs(t("prompts.emptyTarget", { path: displayPath }))}
+        {renderSegs(t("prompts.library.emptyHint"))}
       </p>
       {hasFile ? (
         <div

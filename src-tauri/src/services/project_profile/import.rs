@@ -410,7 +410,7 @@ impl ProjectProfileService {
                 input.config.skill_ids.push(skill.id);
             }
             if let Some(content) = input.instruction {
-                let prompts = state.db.get_prompts(app)?;
+                let prompts = state.db.get_prompts()?;
                 let existing = prompts.values().find(|prompt| prompt.content == content);
                 let id = if let Some(prompt) = existing {
                     prompt.id.clone()
@@ -427,11 +427,11 @@ impl ProjectProfileService {
                         ),
                         content,
                         description: None,
-                        enabled: false,
+
                         created_at: Some(now),
                         updated_at: Some(now),
                     };
-                    PromptService::upsert_prompt(state, app.clone(), &prompt.id, prompt.clone())?;
+                    PromptService::upsert_prompt(state, &prompt.id, prompt.clone())?;
                     new_prompt = Some(prompt.clone());
                     prompt.id
                 };
@@ -487,11 +487,23 @@ impl ProjectProfileService {
                 }
                 if let Some(prompt) = new_prompt {
                     let cleanup = (|| -> Result<(), AppError> {
-                        let current = state.db.get_prompts(app)?;
+                        let current = state.db.get_prompts()?;
+                        let mut applied_elsewhere = false;
+                        for target in AppType::all() {
+                            if state
+                                .db
+                                .get_prompt_application(&target)?
+                                .is_some_and(|application| application.prompt_id == prompt.id)
+                            {
+                                applied_elsewhere = true;
+                                break;
+                            }
+                        }
                         if current.get(&prompt.id).is_some_and(|current| {
                             serde_json::to_value(current).ok() == serde_json::to_value(&prompt).ok()
-                        }) {
-                            state.db.delete_prompt(app, &prompt.id)?;
+                        }) && !applied_elsewhere
+                        {
+                            state.db.delete_prompt(&prompt.id)?;
                         }
                         Ok(())
                     })();
@@ -610,9 +622,12 @@ mod tests {
             fs::read_to_string(project.path().join(".mcp.json")).unwrap(),
             mcp
         );
-        let prompt = &state.db.get_prompts(&AppType::Claude).unwrap()
-            [payload.prompts.claude.as_ref().unwrap()];
-        assert!(!prompt.enabled);
+        let prompt = &state.db.get_prompts().unwrap()[payload.prompts.claude.as_ref().unwrap()];
+        assert!(state
+            .db
+            .get_prompt_application(&AppType::Claude)
+            .unwrap()
+            .is_none());
         assert_eq!(prompt.content, "Project instructions");
         let registered = state.db.get_profile_projects().unwrap();
         assert_eq!(registered.len(), 1, "{registered:?}");
@@ -695,7 +710,7 @@ mod tests {
         assert!(warnings.iter().any(|warning| warning.contains("off")));
         let _ = import(&state, project.path(), ProfileScope::Codex);
         assert_eq!(state.db.get_all_installed_skills().unwrap().len(), 1);
-        assert_eq!(state.db.get_prompts(&AppType::Codex).unwrap().len(), 1);
+        assert_eq!(state.db.get_prompts().unwrap().len(), 1);
     }
 
     #[test]
@@ -723,7 +738,7 @@ mod tests {
         assert!(state.db.get_all_profiles().unwrap().is_empty());
         assert!(state.db.get_all_mcp_servers().unwrap().is_empty());
         assert!(state.db.get_all_installed_skills().unwrap().is_empty());
-        assert!(state.db.get_prompts(&AppType::Codex).unwrap().is_empty());
+        assert!(state.db.get_prompts().unwrap().is_empty());
         assert!(project.path().join(".agents/skills/new/SKILL.md").is_file());
     }
 

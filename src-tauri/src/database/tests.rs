@@ -709,3 +709,39 @@ fn schema_initializes_only_empty_databases_and_rejects_other_versions_without_wr
     assert!(!Database::has_column(&conn, "profiles", "project_path").unwrap());
     Database::create_tables_on_conn(&conn).unwrap();
 }
+
+#[test]
+fn schema_rejects_per_agent_prompts_and_missing_application_table_without_repair() {
+    for change in [
+        "DROP TABLE prompts;
+         CREATE TABLE prompts (
+             id TEXT NOT NULL, app_type TEXT NOT NULL, name TEXT NOT NULL, content TEXT NOT NULL,
+             description TEXT, enabled BOOLEAN NOT NULL DEFAULT 1, created_at INTEGER, updated_at INTEGER,
+             PRIMARY KEY (id, app_type)
+         );
+         INSERT INTO prompts (id, app_type, name, content) VALUES ('keep', 'claude', 'Keep', 'original');",
+        "DROP TABLE prompt_applications;",
+        "DROP TABLE prompts;
+         CREATE TABLE prompts (
+             id TEXT, name TEXT NOT NULL, content TEXT NOT NULL,
+             description TEXT, created_at INTEGER, updated_at INTEGER
+         );",
+    ] {
+        let conn = Connection::open_in_memory().unwrap();
+        Database::create_tables_on_conn(&conn).unwrap();
+        conn.execute_batch(change).unwrap();
+        let schema_before: String = conn
+            .query_row("SELECT group_concat(sql, ';') FROM sqlite_master", [], |row| row.get(0))
+            .unwrap();
+        let error = Database::create_tables_on_conn(&conn).unwrap_err();
+        assert!(error.to_string().contains("提示词格式"));
+        assert_eq!(Database::get_user_version(&conn).unwrap(), SCHEMA_VERSION);
+        assert_eq!(
+            conn.query_row("SELECT group_concat(sql, ';') FROM sqlite_master", [], |row| row.get::<_, String>(0)).unwrap(),
+            schema_before
+        );
+        if Database::has_column(&conn, "prompts", "app_type").unwrap() {
+            assert_eq!(conn.query_row("SELECT content FROM prompts WHERE id = 'keep'", [], |row| row.get::<_, String>(0)).unwrap(), "original");
+        }
+    }
+}

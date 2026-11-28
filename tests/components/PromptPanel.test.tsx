@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
   fireEvent,
@@ -9,833 +9,415 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import PromptPanel, {
-  type PromptPanelProps,
-} from "@/components/prompts/PromptPanel";
+import PromptPanel from "@/components/prompts/PromptPanel";
 import { promptsApi, type AppId, type Prompt } from "@/lib/api";
+import type { PromptTargetSnapshot } from "@/lib/api/prompts";
 import { createTestQueryClient } from "../utils/testQueryClient";
 
-const mocks = vi.hoisted(() => ({
-  state: {
-    prompts: {} as Record<string, Prompt>,
-    loading: false,
-    currentFileContent: null as string | null,
-    latest: null as Record<string, Prompt> | null,
-  },
-  reload: vi.fn(),
-  getReload: vi.fn(),
-  savePrompt: vi.fn(),
-  deletePrompt: vi.fn(),
-  toggleEnabled: vi.fn(),
-  importFromFile: vi.fn(),
-  toastSuccess: vi.fn(),
-  toastError: vi.fn(),
-}));
-
+const mocks = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, options?: Record<string, unknown>) => {
-      const value = options?.name ?? options?.path ?? options?.app;
-      return value === undefined ? key : `${key}:${String(value)}`;
-    },
+    t: (key: string, values?: Record<string, unknown>) =>
+      values?.name ? `${key}:${values.name}` : key,
     i18n: { language: "en" },
   }),
 }));
-
-vi.mock("sonner", () => ({
-  toast: Object.assign(vi.fn(), {
-    success: mocks.toastSuccess,
-    error: mocks.toastError,
-    dismiss: vi.fn(),
-  }),
+vi.mock("@/lib/toast", () => ({
+  toast: { success: mocks.success, error: mocks.error },
 }));
-
-vi.mock("@/hooks/usePromptActions", () => ({
-  usePromptActions: (appId: AppId) => ({
-    prompts: mocks.state.prompts,
-    loading: mocks.state.loading,
-    currentFileContent: mocks.state.currentFileContent,
-    togglingId: null,
-    reload: mocks.getReload(appId),
-    savePrompt: mocks.savePrompt,
-    deletePrompt: mocks.deletePrompt,
-    toggleEnabled: mocks.toggleEnabled,
-    importFromFile: mocks.importFromFile,
-    getLatestPrompts: () => mocks.state.latest,
-  }),
-}));
-
-vi.mock("@/hooks/useTauriEvent", () => ({
-  useTauriEvent: vi.fn(),
-}));
-
-vi.mock("@/components/prompts/PromptFormPanel", async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import("@/components/prompts/PromptFormPanel")
-    >();
+vi.mock("@/hooks/useTauriEvent", () => ({ useTauriEvent: vi.fn() }));
+vi.mock("@/components/prompts/PiNativePromptResources", async () => {
+  const { forwardRef } = await import("react");
   return {
-    ...actual,
-    default: ({
-      editingId,
-      initialData,
-      onSave,
-      onClose,
-    }: {
-      editingId?: string;
-      initialData?: Prompt;
-      onSave: (id: string, prompt: Prompt) => Promise<void | boolean>;
-      onClose: () => void;
-    }) => (
-      <div data-testid="prompt-form">
-        {editingId}:{initialData?.name}
-        <button
-          type="button"
-          onClick={async () => {
-            const saved = await onSave(
-              editingId ?? "new-prompt",
-              initialData ?? {
-                id: "new-prompt",
-                name: "New Prompt",
-                content: "New content",
-                enabled: false,
-              },
-            );
-            if (saved !== false) onClose();
-          }}
-        >
-          form-save
-        </button>
-        <button type="button" onClick={onClose}>
-          form-close
-        </button>
-      </div>
-    ),
+    PI_PROMPT_SAVE_MUTATION_KEY: ["pi", "promptSave"],
+    PiSystemPromptFiles: () => <div>native-system-files</div>,
+    PiPromptTemplates: forwardRef(() => <div>native-command-templates</div>),
   };
 });
 
-const createPrompts = (): Record<string, Prompt> => ({
-  "record-index-47": {
-    id: "payload-identifier-92",
-    name: "Aurora Prompt",
-    description: "Contains the nebula phrase",
-    content: "Follow the quasar instruction exactly.",
-    enabled: true,
-  },
-  "second-record": {
-    id: "second-payload",
-    name: "Harbor Prompt",
-    description: "Deployment checklist",
-    content: "Prepare the release notes.",
-    enabled: false,
-  },
-});
-
-const APPS: AppId[] = ["claude", "codex", "gemini", "hermes"];
-
-function Harness(props: Partial<PromptPanelProps> & { client: QueryClient }) {
-  const { client, ...rest } = props;
-  return (
-    <QueryClientProvider client={client}>
-      <PromptPanel
-        appId="claude"
-        apps={APPS}
-        onAppChange={() => undefined}
-        {...rest}
-      />
-    </QueryClientProvider>
-  );
+const prompt: Prompt = {
+  id: "shared",
+  name: "Team rules",
+  content: "# Shared rules",
+  createdAt: 1,
+};
+let library: Record<string, Prompt>;
+let targets: Record<string, PromptTargetSnapshot>;
+function target(
+  app: string,
+  content: string | null = null,
+): PromptTargetSnapshot {
+  const file = app === "claude" ? "CLAUDE.md" : "AGENTS.md";
+  return {
+    path: `/home/test/.${app}/${file}`,
+    displayPath: `~/.${app}/${file}`,
+    content,
+    revision: `${app}:${content ?? "missing"}`,
+    appliedPromptId: null,
+    managed: false,
+    matchesLibrary: false,
+  };
 }
-
-function renderPanel(props: Partial<PromptPanelProps> = {}) {
+function renderPanel(
+  appId: AppId = "claude",
+  onNavigationBlockedChange = vi.fn(),
+) {
   const client = createTestQueryClient();
-  const view = render(<Harness client={client} {...props} />);
+  const props = {
+    apps: ["claude", "codex", "pi"] as AppId[],
+    onAppChange: vi.fn(),
+    onNavigationBlockedChange,
+  };
+  const result = render(
+    <QueryClientProvider client={client}>
+      <PromptPanel {...props} appId={appId} />
+    </QueryClientProvider>,
+  );
   return {
-    ...view,
-    rerenderWith: (next: Partial<PromptPanelProps>) =>
-      view.rerender(<Harness client={client} {...next} />),
+    ...result,
+    client,
+    rerenderApp: (app: AppId) =>
+      result.rerender(
+        <QueryClientProvider client={client}>
+          <PromptPanel {...props} appId={app} />
+        </QueryClientProvider>,
+      ),
   };
 }
-
-function searchFor(value: string) {
-  fireEvent.change(
-    screen.getByRole("textbox", { name: "prompts.searchAriaLabel" }),
-    { target: { value } },
-  );
-}
-
-const enableButton = (name: string) =>
-  screen.getByRole("button", { name: `prompts.enableAria:${name}` });
-const disableButton = (name: string) =>
-  screen.getByRole("button", { name: `prompts.disableAria:${name}` });
-const editButton = (name: string) =>
-  screen.getByRole("button", { name: `prompts.editAria:${name}` });
-
-async function waitForPanelReady() {
-  await waitFor(() => {
-    expect(editButton("Harbor Prompt")).toBeEnabled();
+beforeEach(() => {
+  vi.restoreAllMocks();
+  mocks.success.mockReset();
+  mocks.error.mockReset();
+  library = { shared: { ...prompt } };
+  targets = {
+    claude: target("claude"),
+    codex: target("codex"),
+    pi: target("pi"),
+  };
+  vi.spyOn(promptsApi, "getPrompts").mockImplementation(async () => ({
+    ...library,
+  }));
+  vi.spyOn(promptsApi, "getPromptTarget").mockImplementation(async (app) => ({
+    ...targets[app],
+  }));
+  vi.spyOn(promptsApi, "upsertPrompt").mockImplementation(async (id, value) => {
+    library[id] = value;
   });
-}
-
-async function openRowMenu(name: string) {
-  const user = userEvent.setup();
-  await user.click(
-    screen.getByRole("button", { name: `prompts.rowMoreActions:${name}` }),
-  );
-  return { user, menu: await screen.findByRole("menu") };
-}
-
-/** 最后一次 toast.success 的「撤销」 */
-function lastUndo(): (() => void) | undefined {
-  const call = mocks.toastSuccess.mock.calls.at(-1);
-  return call?.[1]?.action?.onClick;
-}
-
-describe("PromptPanel", () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-    mocks.state.prompts = createPrompts();
-    mocks.state.loading = false;
-    mocks.state.currentFileContent = "Follow the quasar instruction exactly.";
-    mocks.state.latest = null;
-    mocks.reload.mockReset();
-    mocks.reload.mockResolvedValue(true);
-    mocks.getReload.mockReset();
-    mocks.getReload.mockImplementation(() => mocks.reload);
-    mocks.savePrompt.mockReset();
-    mocks.savePrompt.mockResolvedValue(true);
-    mocks.deletePrompt.mockReset();
-    mocks.deletePrompt.mockResolvedValue(true);
-    mocks.toggleEnabled.mockReset();
-    mocks.toggleEnabled.mockResolvedValue(true);
-    mocks.importFromFile.mockReset();
-    mocks.importFromFile.mockResolvedValue("imported-1");
-    mocks.toastSuccess.mockReset();
-    mocks.toastError.mockReset();
-    vi.spyOn(promptsApi, "getFileLocation").mockImplementation(async (app) => ({
-      path: `/Users/me/.${app}/CLAUDE.md`,
-      displayPath: `~/.${app}/CLAUDE.md`,
-    }));
-    vi.spyOn(promptsApi, "getPrompts").mockResolvedValue({});
-    vi.spyOn(promptsApi, "upsertPrompt").mockResolvedValue(undefined);
-    vi.spyOn(promptsApi, "enablePrompt").mockResolvedValue(undefined);
-    vi.spyOn(promptsApi, "deletePrompt").mockResolvedValue(undefined);
+  vi.spyOn(promptsApi, "deletePrompt").mockImplementation(async (id) => {
+    delete library[id];
   });
-
-  it.each([
-    ["record ID", "RECORD-INDEX-47"],
-    ["prompt ID", "PAYLOAD-IDENTIFIER-92"],
-    ["name", "  aUrOrA  "],
-    ["description", "NEBULA PHRASE"],
-    ["content", "QUASAR INSTRUCTION"],
-  ])("filters by %s", async (_field, query) => {
-    renderPanel();
-    await waitForPanelReady();
-
-    searchFor(query);
-
-    expect(screen.getByText("Aurora Prompt")).toBeInTheDocument();
-    expect(screen.queryByText("Harbor Prompt")).not.toBeInTheDocument();
-  });
-
-  it("distinguishes an empty prompt collection from no search matches", async () => {
-    const view = renderPanel();
-    await waitForPanelReady();
-
-    searchFor("does-not-exist");
-    expect(screen.getByText("prompts.noSearchResults")).toBeInTheDocument();
-
-    mocks.state.prompts = {};
-    view.rerenderWith({});
-
-    expect(
-      screen.getByText("prompts.emptyTitle:Claude Code"),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText("prompts.noSearchResults"),
-    ).not.toBeInTheDocument();
-    // 列表空了就不显示搜索框
-    expect(
-      screen.queryByRole("textbox", { name: "prompts.searchAriaLabel" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("clears the query from the no-match state and restores all prompts", async () => {
-    renderPanel();
-    await waitForPanelReady();
-
-    searchFor("zzz");
-    const noMatch = screen.getByText("prompts.noSearchResults").parentElement!;
-    fireEvent.click(
-      within(noMatch).getByRole("button", { name: "prompts.clearSearch" }),
-    );
-
-    expect(
-      screen.getByRole("textbox", { name: "prompts.searchAriaLabel" }),
-    ).toHaveValue("");
-    expect(screen.getByText("Aurora Prompt")).toBeInTheDocument();
-    expect(screen.getByText("Harbor Prompt")).toBeInTheDocument();
-  });
-
-  it("clears the query when the app changes", async () => {
-    const view = renderPanel();
-    await waitForPanelReady();
-    searchFor("aurora");
-
-    view.rerenderWith({ appId: "codex" });
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole("textbox", { name: "prompts.searchAriaLabel" }),
-      ).toHaveValue("");
-    });
-    expect(screen.getByText("Harbor Prompt")).toBeInTheDocument();
-  });
-
-  it("shows the target file, its size and the enabled badge", async () => {
-    renderPanel();
-    await waitForPanelReady();
-
-    expect(await screen.findByText("~/.claude/CLAUDE.md")).toBeInTheDocument();
-    expect(
-      screen.getByTitle("prompts.targetFile ~/.claude/CLAUDE.md · 38 B"),
-    ).toBeInTheDocument();
-    const activeRow = screen.getByTestId("prompt-row-record-index-47");
-    expect(within(activeRow).getByText("prompts.enabled")).toBeInTheDocument();
-    expect(
-      within(screen.getByTestId("prompt-row-second-record")).queryByText(
-        "prompts.enabled",
-      ),
-    ).not.toBeInTheDocument();
-  });
-
-  it("preserves record IDs for filtered toggle, edit, and delete actions", async () => {
-    renderPanel();
-    await waitForPanelReady();
-    searchFor("deployment");
-
-    fireEvent.click(enableButton("Harbor Prompt"));
-    expect(mocks.toggleEnabled).toHaveBeenCalledWith("second-record", true);
-    await waitForPanelReady();
-
-    fireEvent.click(editButton("Harbor Prompt"));
-    expect(screen.getByTestId("prompt-form")).toHaveTextContent(
-      "second-record:Harbor Prompt",
-    );
-    fireEvent.click(screen.getByRole("button", { name: "form-close" }));
-
-    const { user, menu } = await openRowMenu("Harbor Prompt");
-    await user.click(
-      within(menu).getByRole("menuitem", { name: "common.delete" }),
-    );
-
-    await waitFor(() => {
-      expect(mocks.deletePrompt).toHaveBeenCalledWith("second-record");
-    });
-  });
-
-  it("deletes without a confirmation and restores the same record on undo", async () => {
-    renderPanel();
-    await waitForPanelReady();
-    const original = mocks.state.prompts["second-record"];
-
-    const { user, menu } = await openRowMenu("Harbor Prompt");
-    await user.click(
-      within(menu).getByRole("menuitem", { name: "common.delete" }),
-    );
-
-    await waitFor(() =>
-      expect(mocks.toastSuccess).toHaveBeenCalledWith(
-        "prompts.toast.deleted:Harbor Prompt",
-        expect.objectContaining({
-          description: "prompts.toast.deletedSub:~/.claude/CLAUDE.md",
-        }),
-      ),
-    );
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-
-    act(() => lastUndo()?.());
-    await waitFor(() =>
-      expect(promptsApi.upsertPrompt).toHaveBeenCalledWith(
-        "claude",
-        "second-record",
-        original,
-      ),
-    );
-  });
-
-  it("keeps the enabled prompt from being deleted and says why", async () => {
-    renderPanel();
-    await waitForPanelReady();
-
-    const { menu } = await openRowMenu("Aurora Prompt");
-    const item = within(menu).getByRole("menuitem", {
-      name: /common.delete/,
-    });
-    expect(item).toHaveAttribute("data-disabled");
-    expect(within(menu).getByText("prompts.deleteBlocked")).toBeInTheDocument();
-  });
-
-  it("disabling says the file was emptied and undo re-enables it", async () => {
-    renderPanel({ appId: "hermes" });
-    await waitForPanelReady();
-
-    fireEvent.click(disableButton("Aurora Prompt"));
-
-    await waitFor(() =>
-      expect(mocks.toastSuccess).toHaveBeenCalledWith(
-        "prompts.toast.disabled:Aurora Prompt",
-        expect.objectContaining({
-          description: "prompts.toast.hermesOff",
-        }),
-      ),
-    );
-    act(() => lastUndo()?.());
-    await waitFor(() =>
-      expect(promptsApi.enablePrompt).toHaveBeenCalledWith(
-        "hermes",
-        "record-index-47",
-      ),
-    );
-  });
-
-  it("enabling reports a backup of the file and undo switches back", async () => {
-    mocks.state.latest = {
-      ...createPrompts(),
-      "backup-1": {
-        id: "backup-1",
-        name: "Original 1",
-        content: "x",
-        enabled: false,
-      },
+  vi.spyOn(promptsApi, "applyPrompt").mockImplementation(async (app, id) => {
+    targets[app] = {
+      ...targets[app],
+      content: library[id].content,
+      appliedPromptId: id,
+      managed: true,
+      matchesLibrary: true,
     };
-    renderPanel();
-    await waitForPanelReady();
-
-    fireEvent.click(enableButton("Harbor Prompt"));
-
-    await waitFor(() =>
-      expect(mocks.toastSuccess).toHaveBeenCalledWith(
-        "prompts.toast.enabled:Harbor Prompt",
-        expect.objectContaining({
-          description: "prompts.toast.backup:Original 1",
-        }),
-      ),
-    );
-    act(() => lastUndo()?.());
-    await waitFor(() =>
-      expect(promptsApi.enablePrompt).toHaveBeenCalledWith(
-        "claude",
-        "record-index-47",
-      ),
-    );
+    return targets[app];
   });
-
-  it("offers no undo when enabling would lose a hand-written file", async () => {
-    mocks.state.prompts = {
-      draft: { id: "draft", name: "Draft", content: "d", enabled: false },
-    };
-    mocks.state.currentFileContent = "hand-written";
-    mocks.state.latest = {
-      ...mocks.state.prompts,
-      "backup-9": {
-        id: "backup-9",
-        name: "Orig",
-        content: "x",
-        enabled: false,
-      },
-    };
-    renderPanel();
-    await waitFor(() => expect(enableButton("Draft")).toBeEnabled());
-
-    fireEvent.click(enableButton("Draft"));
-
-    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalled());
-    expect(lastUndo()).toBeUndefined();
-  });
-
-  it("imports the existing file from the empty state with an undo", async () => {
-    mocks.state.prompts = {};
-    mocks.state.currentFileContent = "# Rules\n\nBe brief.";
-    renderPanel({ appId: "grokbuild" });
-
-    expect(
-      await screen.findByText("prompts.emptyTitle:Grok Build"),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/# Rules\s+Be brief\./)).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: "prompts.importExisting" }),
-    );
-
-    await waitFor(() => expect(mocks.importFromFile).toHaveBeenCalledTimes(1));
-    await waitFor(() =>
-      expect(mocks.toastSuccess).toHaveBeenCalledWith(
-        "prompts.toast.imported:~/.grokbuild/CLAUDE.md",
-        expect.anything(),
-      ),
-    );
-    act(() => lastUndo()?.());
-    await waitFor(() =>
-      expect(promptsApi.deletePrompt).toHaveBeenCalledWith(
-        "grokbuild",
-        "imported-1",
-      ),
-    );
-  });
-
-  it("hides the import entry on an empty file", async () => {
-    mocks.state.prompts = {};
-    mocks.state.currentFileContent = "  \n";
-    renderPanel();
-
-    await screen.findByText("prompts.emptyTitle:Claude Code");
-    expect(
-      screen.queryByRole("button", { name: "prompts.importExisting" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("copies a prompt to other apps, leaving Hermes unchecked by default", async () => {
-    vi.mocked(promptsApi.getPrompts).mockImplementation(
-      async (app): Promise<Record<string, Prompt>> =>
-        app === "codex"
-          ? {
-              same: {
-                id: "same",
-                name: "Harbor Prompt",
-                content: "",
-                enabled: false,
-              },
-            }
-          : {},
-    );
-    renderPanel();
-    await waitForPanelReady();
-
-    const { user, menu } = await openRowMenu("Harbor Prompt");
-    await user.click(
-      within(menu).getByRole("menuitem", { name: "prompts.copyToApps" }),
-    );
-
-    const dialog = await screen.findByRole("dialog");
-    await waitFor(() =>
-      expect(within(dialog).getByLabelText(/Gemini CLI/)).toBeChecked(),
-    );
-    expect(within(dialog).getByLabelText(/Codex/)).not.toBeChecked();
-    expect(within(dialog).getByLabelText(/Hermes/)).not.toBeChecked();
-    expect(
-      within(dialog).getByText("prompts.copyDialog.sameName"),
-    ).toBeInTheDocument();
-
-    await user.click(
-      within(dialog).getByRole("button", { name: "prompts.copyDialog.go" }),
-    );
-
-    await waitFor(() =>
-      expect(promptsApi.upsertPrompt).toHaveBeenCalledWith(
-        "gemini",
-        expect.any(String),
-        expect.objectContaining({
-          name: "Harbor Prompt",
-          content: "Prepare the release notes.",
-          enabled: false,
-        }),
-      ),
-    );
-    expect(promptsApi.upsertPrompt).toHaveBeenCalledTimes(1);
-  });
-
-  it("serializes toggle writes and reports the interaction as blocked", async () => {
-    let resolveToggle!: () => void;
-    mocks.toggleEnabled.mockReturnValueOnce(
-      new Promise<void>((resolve) => {
-        resolveToggle = resolve;
-      }),
-    );
-    const onInteractionBlockedChange = vi.fn();
-    renderPanel({ onInteractionBlockedChange });
-    await waitForPanelReady();
-
-    const toggle = enableButton("Harbor Prompt");
-    fireEvent.click(toggle);
-    fireEvent.click(toggle);
-
-    expect(mocks.toggleEnabled).toHaveBeenCalledTimes(1);
-    await waitFor(() => {
-      expect(onInteractionBlockedChange).toHaveBeenLastCalledWith(true);
-    });
-    // 外观上的禁用晚 300ms 出现（useDelayedFlag），拦截本身是立即的
-    await waitFor(() => expect(toggle).toBeDisabled());
-    expect(editButton("Harbor Prompt")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "prompts.add" })).toBeDisabled();
-
-    await act(async () => {
-      resolveToggle();
-      await Promise.resolve();
-    });
-    await waitFor(() => {
-      expect(onInteractionBlockedChange).toHaveBeenLastCalledWith(false);
-    });
-  });
-
-  it("blocks all prompt actions while the collection is loading", async () => {
-    mocks.state.loading = true;
-    mocks.state.prompts = {};
-    const onInteractionBlockedChange = vi.fn();
-    renderPanel({ onInteractionBlockedChange });
-
-    await waitFor(() => {
-      expect(onInteractionBlockedChange).toHaveBeenLastCalledWith(true);
-    });
-    expect(screen.getByText("prompts.loading")).toBeInTheDocument();
-    const add = screen.getByRole("button", { name: "prompts.add" });
-    fireEvent.click(add);
-    expect(screen.queryByTestId("prompt-form")).not.toBeInTheDocument();
-    await waitFor(() => expect(add).toBeDisabled());
-    fireEvent.click(add);
-    expect(screen.queryByTestId("prompt-form")).not.toBeInTheDocument();
-    expect(mocks.toggleEnabled).not.toHaveBeenCalled();
-  });
-
-  it("queues external reloads until the active write finishes", async () => {
-    renderPanel();
-    await waitForPanelReady();
-    expect(mocks.reload).toHaveBeenCalledTimes(1);
-    mocks.reload.mockClear();
-
-    let resolveToggle!: () => void;
-    mocks.toggleEnabled.mockReturnValueOnce(
-      new Promise<void>((resolve) => {
-        resolveToggle = resolve;
-      }),
-    );
-    fireEvent.click(enableButton("Harbor Prompt"));
-
-    act(() => {
-      window.dispatchEvent(
-        new CustomEvent("prompt-imported", { detail: { app: "claude" } }),
-      );
-      window.dispatchEvent(
-        new CustomEvent("prompt-imported", { detail: { app: "claude" } }),
-      );
-    });
-    expect(mocks.reload).not.toHaveBeenCalled();
-
-    await act(async () => {
-      resolveToggle();
-      await Promise.resolve();
-    });
-    await waitFor(() => expect(mocks.reload).toHaveBeenCalledTimes(1));
-  });
-
-  it("runs one compensating reload when a toggle write cannot refresh", async () => {
-    renderPanel();
-    await waitForPanelReady();
-    mocks.reload.mockClear();
-    mocks.toggleEnabled.mockResolvedValueOnce(false);
-
-    fireEvent.click(enableButton("Harbor Prompt"));
-
-    await waitFor(() => expect(mocks.reload).toHaveBeenCalledTimes(1));
-  });
-
-  it("runs one compensating reload when a save write cannot refresh", async () => {
-    renderPanel();
-    await waitForPanelReady();
-    mocks.reload.mockClear();
-    mocks.savePrompt.mockResolvedValueOnce(false);
-
-    fireEvent.click(editButton("Harbor Prompt"));
-    fireEvent.click(screen.getByRole("button", { name: "form-save" }));
-
-    await waitFor(() => expect(mocks.reload).toHaveBeenCalledTimes(1));
-  });
-
-  it("allows navigation but blocks interactions during a pure reload", async () => {
-    let resolveReload!: (value: boolean) => void;
-    mocks.reload.mockReturnValueOnce(
-      new Promise<boolean>((resolve) => {
-        resolveReload = resolve;
-      }),
-    );
-    const onInteractionBlockedChange = vi.fn();
-    const onNavigationBlockedChange = vi.fn();
-    renderPanel({ onInteractionBlockedChange, onNavigationBlockedChange });
-
-    await waitFor(() => {
-      expect(mocks.reload).toHaveBeenCalledTimes(1);
-      expect(onInteractionBlockedChange).toHaveBeenLastCalledWith(true);
-      expect(onNavigationBlockedChange).toHaveBeenLastCalledWith(false);
-    });
-
-    await act(async () => {
-      resolveReload(true);
-      await Promise.resolve();
-    });
-    await waitFor(() => {
-      expect(onInteractionBlockedChange).toHaveBeenLastCalledWith(false);
-    });
-    expect(onNavigationBlockedChange).toHaveBeenLastCalledWith(false);
-  });
-
-  it("refreshes on window focus and removes the listener on unmount", async () => {
-    const { unmount } = renderPanel();
-    await waitForPanelReady();
-    mocks.reload.mockClear();
-
-    fireEvent(window, new Event("focus"));
-    await waitFor(() => expect(mocks.reload).toHaveBeenCalledTimes(1));
-    await waitForPanelReady();
-    unmount();
-    mocks.reload.mockClear();
-    fireEvent(window, new Event("focus"));
-    expect(mocks.reload).not.toHaveBeenCalled();
-  });
-
-  it("keeps controls enabled through a quick focus reload but still blocks clicks", async () => {
-    renderPanel();
-    await waitForPanelReady();
-
-    let resolveReload!: () => void;
-    mocks.reload.mockReturnValueOnce(
-      new Promise<void>((resolve) => {
-        resolveReload = resolve;
-      }),
-    );
-    fireEvent(window, new Event("focus"));
-    const add = screen.getByRole("button", { name: "prompts.add" });
-    expect(add).not.toBeDisabled();
-    fireEvent.click(add);
-    expect(screen.queryByTestId("prompt-form")).not.toBeInTheDocument();
-
-    await act(async () => {
-      resolveReload();
-      await Promise.resolve();
-    });
-    expect(add).not.toBeDisabled();
-  });
-
-  it.each(["focus", "prompt-imported"])(
-    "queues %s reloads while the drawer is open",
-    async (trigger) => {
-      renderPanel();
-      await waitForPanelReady();
-      mocks.reload.mockClear();
-
-      fireEvent.click(editButton("Harbor Prompt"));
-      fireEvent(
-        window,
-        trigger === "focus"
-          ? new Event("focus")
-          : new CustomEvent("prompt-imported", { detail: { app: "claude" } }),
-      );
-      expect(mocks.reload).not.toHaveBeenCalled();
-
-      fireEvent.click(screen.getByRole("button", { name: "form-close" }));
-      await waitFor(() => expect(mocks.reload).toHaveBeenCalledTimes(1));
+  vi.spyOn(promptsApi, "removePromptApplication").mockImplementation(
+    async (app) => {
+      targets[app] = target(app, "");
+      return targets[app];
     },
   );
+  vi.spyOn(promptsApi, "importFromFile").mockResolvedValue("imported");
+});
 
-  it("starts the latest app reload without waiting for an older app", async () => {
-    let resolveClaudeReload!: () => void;
-    const claudeReload = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveClaudeReload = resolve;
-        }),
-    );
-    const codexReload = vi.fn().mockResolvedValue(undefined);
-    mocks.getReload.mockImplementation((appId: AppId) =>
-      appId === "codex" ? codexReload : claudeReload,
-    );
-
+describe("shared prompt library", () => {
+  it("shows the same library when only the distribution target changes", async () => {
     const view = renderPanel();
-    await waitFor(() => expect(claudeReload).toHaveBeenCalledTimes(1));
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "prompts.add" }),
-      ).toBeDisabled(),
-    );
-
-    view.rerenderWith({ appId: "codex" });
-    await waitFor(() => expect(codexReload).toHaveBeenCalledTimes(1));
-    expect(claudeReload).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      resolveClaudeReload();
-      await Promise.resolve();
-    });
-    expect(codexReload).toHaveBeenCalledTimes(1);
+    await screen.findByText("Team rules");
+    expect(screen.getByText("~/.claude/CLAUDE.md")).toBeVisible();
+    view.rerenderApp("codex");
+    expect(screen.getByText("Team rules")).toBeVisible();
+    await screen.findByText("~/.codex/AGENTS.md");
+    expect(
+      vi
+        .mocked(promptsApi.getPrompts)
+        .mock.calls.every((args) => args.length === 0),
+    ).toBe(true);
   });
-
-  it("locks form saves and cannot close the form while a save is pending", async () => {
-    let resolveSave!: () => void;
-    mocks.savePrompt.mockReturnValueOnce(
-      new Promise<void>((resolve) => {
-        resolveSave = resolve;
+  it("saves only the library, preserves typed Markdown, and guards navigation while editing", async () => {
+    const navigation = vi.fn();
+    renderPanel("claude", navigation);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "prompts.editAria:Team rules",
       }),
     );
-    const onInteractionBlockedChange = vi.fn();
-    renderPanel({ onInteractionBlockedChange });
-    await waitForPanelReady();
-
-    fireEvent.click(editButton("Harbor Prompt"));
-    const save = screen.getByRole("button", { name: "form-save" });
-    fireEvent.click(save);
-    fireEvent.click(save);
-    fireEvent.click(screen.getByRole("button", { name: "form-close" }));
-
-    expect(mocks.savePrompt).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId("prompt-form")).toBeInTheDocument();
-    await waitFor(() => {
-      expect(onInteractionBlockedChange).toHaveBeenLastCalledWith(true);
+    await waitFor(() => expect(navigation).toHaveBeenLastCalledWith(true));
+    fireEvent.change(screen.getByLabelText("prompts.content"), {
+      target: { value: "  # Edited\n\n" },
     });
-
-    await act(async () => {
-      resolveSave();
-      await Promise.resolve();
-    });
-    await waitFor(() => {
-      expect(screen.queryByTestId("prompt-form")).not.toBeInTheDocument();
-      expect(onInteractionBlockedChange).toHaveBeenLastCalledWith(false);
-    });
-    expect(mocks.toastSuccess).toHaveBeenCalledWith(
-      "prompts.toast.saved:Harbor Prompt",
-      expect.anything(),
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    await waitFor(() =>
+      expect(promptsApi.upsertPrompt).toHaveBeenCalledWith(
+        "shared",
+        expect.objectContaining({ content: "  # Edited\n\n" }),
+      ),
+    );
+    expect(promptsApi.applyPrompt).not.toHaveBeenCalled();
+    expect(promptsApi.removePromptApplication).not.toHaveBeenCalled();
+  });
+  it("allows editing the shared library when a target cannot be read", async () => {
+    vi.mocked(promptsApi.getPromptTarget).mockRejectedValue(
+      new Error("unreadable"),
+    );
+    renderPanel();
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "prompts.editAria:Team rules",
+      }),
+    );
+    expect(screen.getByLabelText("prompts.content")).toHaveValue(
+      prompt.content,
     );
   });
-
-  it("closes stale drawers when the app changes", async () => {
-    const view = renderPanel();
-    await waitForPanelReady();
-
-    fireEvent.click(editButton("Harbor Prompt"));
-    expect(screen.getByTestId("prompt-form")).toBeInTheDocument();
-
-    view.rerenderWith({ appId: "codex" });
-    await waitFor(() => {
-      expect(screen.queryByTestId("prompt-form")).not.toBeInTheDocument();
+  it("previews CLAUDE.md and AGENTS.md and requires consent before overwriting", async () => {
+    targets.claude = target("claude", "handwritten");
+    renderPanel();
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "prompts.library.applyAria:Team rules",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "prompts.library.distributeTitle:Team rules",
     });
+    await waitFor(() =>
+      expect(within(dialog).getByText("~/.claude/CLAUDE.md")).toBeVisible(),
+    );
+    expect(within(dialog).getByText("~/.codex/AGENTS.md")).toBeVisible();
+    const apply = within(dialog).getByRole("button", {
+      name: "prompts.library.applySelected",
+    });
+    expect(apply).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "Codex" }));
+    fireEvent.click(
+      within(dialog).getByRole("checkbox", {
+        name: "prompts.library.overwriteConsent",
+      }),
+    );
+    fireEvent.click(apply);
+    await waitFor(() =>
+      expect(promptsApi.applyPrompt).toHaveBeenCalledWith(
+        "claude",
+        "shared",
+        "claude:handwritten",
+        prompt.content,
+      ),
+    );
+    expect(promptsApi.applyPrompt).toHaveBeenCalledWith(
+      "codex",
+      "shared",
+      "codex:missing",
+      prompt.content,
+    );
+    expect(promptsApi.upsertPrompt).not.toHaveBeenCalled();
   });
-
-  it("uses the Hermes rule in the page help", async () => {
-    renderPanel({ appId: "hermes" });
-    await waitForPanelReady();
-
+  it("keeps partial distribution failures visible without retrying successful targets", async () => {
+    vi.mocked(promptsApi.applyPrompt).mockImplementation(async (app) => {
+      if (app === "codex") throw new Error("target changed");
+      return targets[app];
+    });
+    renderPanel();
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "prompts.library.applyAria:Team rules",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "prompts.library.distributeTitle:Team rules",
+    });
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "Codex" }));
+    const apply = within(dialog).getByRole("button", {
+      name: "prompts.library.applySelected",
+    });
+    await waitFor(() => expect(apply).toBeEnabled());
+    fireEvent.click(apply);
+    await within(dialog).findByText("target changed");
     expect(
-      screen.getByRole("button", { name: "prompts.helpHermesTitle" }),
-    ).toBeInTheDocument();
+      within(dialog).getByRole("checkbox", { name: /Claude Code/ }),
+    ).toBeDisabled();
+    expect(apply).toBeDisabled();
+    expect(promptsApi.applyPrompt).toHaveBeenCalledTimes(2);
+    expect(within(dialog).getByText("prompts.library.appliedTo")).toBeVisible();
+    expect(mocks.success).not.toHaveBeenCalled();
+    expect(mocks.error).toHaveBeenCalledWith(
+      "prompts.library.distributionFailed",
+    );
   });
-
-  it("switches apps from the picker", async () => {
-    const onAppChange = vi.fn();
-    renderPanel({ onAppChange });
-    await waitForPanelReady();
+  it("can deselect an oversized MCode target and distribute to a different Agent", async () => {
+    library.shared = { ...prompt, content: "x".repeat(32769) };
+    targets.mcode = target("mcode");
+    renderPanel("mcode");
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "prompts.library.applyAria:Team rules",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "prompts.library.distributeTitle:Team rules",
+    });
+    const mcode = within(dialog).getByRole("checkbox", {
+      name: "MiniMax Code",
+    });
+    expect(mcode).toBeEnabled();
+    fireEvent.click(mcode);
+    fireEvent.click(
+      within(dialog).getByRole("checkbox", { name: "Claude Code" }),
+    );
+    const apply = within(dialog).getByRole("button", {
+      name: "prompts.library.applySelected",
+    });
+    await waitFor(() => expect(apply).toBeEnabled());
+    fireEvent.click(apply);
+    await waitFor(() =>
+      expect(promptsApi.applyPrompt).toHaveBeenCalledWith(
+        "claude",
+        "shared",
+        "claude:missing",
+        library.shared.content,
+      ),
+    );
+    expect(
+      vi
+        .mocked(promptsApi.applyPrompt)
+        .mock.calls.some(([app]) => app === "mcode"),
+    ).toBe(false);
+  });
+  it("reports total distribution failure without a success toast", async () => {
+    vi.mocked(promptsApi.applyPrompt).mockRejectedValue(
+      new Error("write denied"),
+    );
+    renderPanel();
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "prompts.library.applyAria:Team rules",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "prompts.library.distributeTitle:Team rules",
+    });
+    const apply = within(dialog).getByRole("button", {
+      name: "prompts.library.applySelected",
+    });
+    await waitFor(() => expect(apply).toBeEnabled());
+    fireEvent.click(apply);
+    await within(dialog).findByText("write denied");
+    expect(mocks.success).not.toHaveBeenCalled();
+    expect(mocks.error).toHaveBeenCalledWith(
+      "prompts.library.distributionFailed",
+    );
+    expect(
+      within(dialog).queryByText("prompts.library.appliedTo"),
+    ).not.toBeInTheDocument();
+  });
+  it("requires fresh overwrite consent when a preview revision changes", async () => {
+    targets.claude = target("claude", "before");
+    const { client } = renderPanel();
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "prompts.library.applyAria:Team rules",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "prompts.library.distributeTitle:Team rules",
+    });
+    const consent = within(dialog).getByRole("checkbox", {
+      name: "prompts.library.overwriteConsent",
+    });
+    fireEvent.click(consent);
+    const apply = within(dialog).getByRole("button", {
+      name: "prompts.library.applySelected",
+    });
+    await waitFor(() => expect(apply).toBeEnabled());
+    targets.claude = target("claude", "changed after preview");
+    await act(async () => {
+      await client.invalidateQueries({
+        queryKey: ["prompts", "target", "claude"],
+      });
+    });
+    // Query invalidation resolves before the observers' scheduled render.
+    await within(dialog).findByText("changed after preview");
+    await waitFor(() => {
+      expect(consent).not.toBeChecked();
+      expect(apply).toBeDisabled();
+    });
+    expect(promptsApi.applyPrompt).not.toHaveBeenCalled();
+  });
+  it("deletes a library document without withdrawing deployed content", async () => {
+    targets.claude = {
+      ...target("claude", prompt.content),
+      appliedPromptId: prompt.id,
+      managed: true,
+      matchesLibrary: true,
+    };
+    renderPanel();
     const user = userEvent.setup();
-
-    await user.click(screen.getByRole("button", { name: /Claude Code/ }));
-    await user.click(await screen.findByRole("button", { name: /Hermes/ }));
-
-    expect(onAppChange).toHaveBeenCalledWith("hermes");
+    await user.click(
+      await screen.findByRole("button", {
+        name: "prompts.rowMoreActions:Team rules",
+      }),
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "common.delete" }),
+    );
+    expect(promptsApi.deletePrompt).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", {
+      name: "prompts.library.deleteTitle",
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "common.confirm" }),
+    );
+    await waitFor(() =>
+      expect(promptsApi.deletePrompt).toHaveBeenCalledWith("shared"),
+    );
+    expect(promptsApi.removePromptApplication).not.toHaveBeenCalled();
+  });
+  it("withdraws only after confirmation using the reviewed revision", async () => {
+    targets.claude = {
+      ...target("claude", prompt.content),
+      appliedPromptId: prompt.id,
+      managed: true,
+      matchesLibrary: true,
+    };
+    renderPanel();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "prompts.library.remove" }),
+    );
+    const dialog = screen.getByRole("dialog", {
+      name: "prompts.library.remove",
+    });
+    expect(promptsApi.removePromptApplication).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "common.confirm" }),
+    );
+    await waitFor(() =>
+      expect(promptsApi.removePromptApplication).toHaveBeenCalledWith(
+        "claude",
+        "claude:# Shared rules",
+      ),
+    );
+  });
+  it("keeps Pi native system and command templates next to the same shared library", async () => {
+    renderPanel("pi");
+    await screen.findByText("Team rules");
+    fireEvent.click(
+      screen.getByRole("button", { name: "pi.prompts.systemTab" }),
+    );
+    expect(screen.getByText("native-system-files")).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "pi.prompts.templatesTab" }),
+    );
+    expect(screen.getByText("native-command-templates")).toBeVisible();
+    fireEvent.click(
+      within(
+        screen.getByRole("group", { name: "pi.prompts.kindLabel" }),
+      ).getByRole("button", { name: "prompts.library.title" }),
+    );
+    expect(screen.getByText("Team rules")).toBeVisible();
   });
 });

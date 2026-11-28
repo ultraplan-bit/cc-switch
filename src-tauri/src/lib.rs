@@ -930,35 +930,6 @@ pub fn run() {
                 }
             }
 
-            // 4. 导入提示词文件（表空时触发）
-            if app_state.db.is_prompts_table_empty().unwrap_or(false) {
-                log::info!("Prompts table empty, importing from live configurations...");
-
-                for app in [
-                    crate::app_config::AppType::Claude,
-                    crate::app_config::AppType::Codex,
-                    crate::app_config::AppType::Gemini,
-                    crate::app_config::AppType::GrokBuild,
-                    crate::app_config::AppType::OpenCode,
-                    crate::app_config::AppType::OpenClaw,
-                    crate::app_config::AppType::Hermes,
-                    crate::app_config::AppType::Pi,
-                    crate::app_config::AppType::Mcode,
-                    crate::app_config::AppType::WorkBuddy,
-                ] {
-                    match crate::services::prompt::PromptService::import_from_file_on_first_launch(
-                        &app_state,
-                        app.clone(),
-                    ) {
-                        Ok(count) if count > 0 => {
-                            log::info!("✓ Imported {count} prompt(s) for {}", app.as_str());
-                        }
-                        Ok(_) => log::debug!("○ No prompt file found for {}", app.as_str()),
-                        Err(e) => log::warn!("✗ Failed to import prompt for {}: {e}", app.as_str()),
-                    }
-                }
-            }
-
             app_store::refresh_app_config_dir_override(app.handle());
 
             // 启动阶段不再无条件保存,避免意外覆盖用户配置。
@@ -1430,10 +1401,10 @@ pub fn run() {
             commands::get_prompts,
             commands::upsert_prompt,
             commands::delete_prompt,
-            commands::enable_prompt,
+            commands::apply_prompt,
+            commands::get_prompt_target,
+            commands::remove_prompt_application,
             commands::import_prompt_from_file,
-            commands::get_current_prompt_file_content,
-            commands::get_prompt_file_location,
             commands::get_pi_prompt_file,
             commands::replace_pi_prompt_file,
             commands::delete_pi_prompt_file,

@@ -1390,6 +1390,102 @@ fn every_sync_preserved_table_is_skipped_from_remote_payloads() {
 
 #[test]
 #[serial]
+fn prompt_library_backup_roundtrip_and_sync_keep_application_ownership_local(
+) -> Result<(), AppError> {
+    use crate::app_config::AppType;
+    use crate::prompt::{Prompt, PromptApplication};
+
+    let _test_home = TestHomeGuard::new();
+    let source = Database::memory()?;
+    let prompt = Prompt {
+        id: "shared-rules".into(),
+        name: "Shared rules".into(),
+        content: "# Rules\nKeep tests passing.\n".into(),
+        description: Some("Reusable across Agents".into()),
+        created_at: Some(1),
+        updated_at: Some(2),
+    };
+    let remote_application = PromptApplication {
+        prompt_id: prompt.id.clone(),
+        path: "/remote/.claude/CLAUDE.md".into(),
+        content_hash: "remote-file-hash".into(),
+    };
+    source.save_prompt(&prompt)?;
+    source.save_prompt_application(&AppType::Claude, &remote_application)?;
+
+    let manual_backup = source.export_sql_string()?;
+    let restored = Database::memory()?;
+    restored.import_sql_string(&manual_backup)?;
+    let restored_prompts = restored.get_prompts()?;
+    assert_eq!(restored_prompts.len(), 1);
+    assert_eq!(restored_prompts[&prompt.id].content, prompt.content);
+    assert_eq!(restored_prompts[&prompt.id].updated_at, Some(2));
+    assert_eq!(
+        restored.get_prompt_application(&AppType::Claude)?,
+        Some(remote_application)
+    );
+
+    let sync_payload = source.export_sql_string_for_sync()?;
+    let remote_snapshot = Connection::open_in_memory()?;
+    remote_snapshot.execute_batch(&sync_payload)?;
+    assert_eq!(
+        remote_snapshot.query_row("SELECT count(*) FROM prompt_applications", [], |row| row
+            .get::<_, i64>(0))?,
+        0
+    );
+    assert_eq!(
+        remote_snapshot.query_row("SELECT count(*) FROM prompts", [], |row| row
+            .get::<_, i64>(0))?,
+        1
+    );
+
+    let local = Database::memory()?;
+    let local_application = PromptApplication {
+        prompt_id: "locally-deployed-prompt".into(),
+        path: "/local/.codex/AGENTS.md".into(),
+        content_hash: "local-file-hash".into(),
+    };
+    local.save_prompt_application(&AppType::Codex, &local_application)?;
+    local.import_sql_string_for_sync(&sync_payload)?;
+    assert_eq!(local.get_prompts()?[&prompt.id].content, prompt.content);
+    assert_eq!(
+        local.get_prompt_application(&AppType::Codex)?,
+        Some(local_application)
+    );
+    assert!(local.get_prompt_application(&AppType::Claude)?.is_none());
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn import_rejects_per_agent_prompt_schema_even_with_the_current_version_marker(
+) -> Result<(), AppError> {
+    let _test_home = TestHomeGuard::new();
+    let source = Database::memory()?;
+    {
+        let conn = crate::database::lock_conn!(source.conn);
+        conn.execute_batch(
+            "DROP TABLE prompts;
+             CREATE TABLE prompts (
+                 id TEXT NOT NULL, app_type TEXT NOT NULL, name TEXT NOT NULL, content TEXT NOT NULL,
+                 description TEXT, enabled BOOLEAN NOT NULL DEFAULT 1, created_at INTEGER, updated_at INTEGER,
+                 PRIMARY KEY (id, app_type)
+             );
+             INSERT INTO prompts (id, app_type, name, content) VALUES ('original', 'claude', 'Old', 'keep');"
+        )?;
+    }
+    let sql = source.export_sql_string()?;
+    let target = Database::memory()?;
+    target.set_setting("sentinel", "keep")?;
+    let error = target.import_sql_string(&sql).unwrap_err();
+    assert!(error.to_string().contains("提示词格式"));
+    assert_eq!(target.get_setting("sentinel")?.as_deref(), Some("keep"));
+    assert!(target.get_prompts()?.is_empty());
+    Ok(())
+}
+
+#[test]
+#[serial]
 fn sync_import_preserves_local_only_tables() -> Result<(), AppError> {
     let _test_home = TestHomeGuard::new();
     let remote_db = Database::memory()?;

@@ -1602,7 +1602,7 @@ fn desired_instruction(
     if prompt_id == NO_ACTIVE_PROMPT {
         return Ok(Some(None));
     }
-    let prompts = state.db.get_prompts(app)?;
+    let prompts = state.db.get_prompts()?;
     match prompts.get(prompt_id) {
         Some(prompt) => Ok(Some(Some(prompt.content.clone()))),
         None => {
@@ -4239,6 +4239,85 @@ mod tests {
             .unwrap();
     }
 
+    #[test]
+    #[serial]
+    fn shared_prompt_deploys_to_agent_specific_project_files_and_changes_only_on_reapply() {
+        let (_home, state) = test_state();
+        let project = tempfile::tempdir().unwrap();
+        let root = project.path().canonicalize().unwrap();
+        let mut prompt = crate::prompt::Prompt {
+            id: "shared-instructions".into(),
+            name: "Shared instructions".into(),
+            content: "Shared project rules".into(),
+            description: None,
+            created_at: None,
+            updated_at: None,
+        };
+        state.db.save_prompt(&prompt).unwrap();
+        seed_profile(
+            &state,
+            &root,
+            ProfileScope::Claude,
+            Some(vec![]),
+            Some(vec![]),
+        );
+        let mut profile = state.db.get_profile("profile").unwrap().unwrap();
+        let mut payload: ProfilePayload = serde_json::from_str(&profile.payload).unwrap();
+        payload.mcp.codex = Some(vec![]);
+        payload.skills.codex = Some(vec![]);
+        payload.prompts.claude = Some(prompt.id.clone());
+        payload.prompts.codex = Some(prompt.id.clone());
+        profile.payload = serde_json::to_string(&payload).unwrap();
+        state.db.save_profile(&profile).unwrap();
+        for scope in [ProfileScope::Claude, ProfileScope::Codex] {
+            assert!(matches!(
+                test_projects::deploy(&state, &profile.id, scope, None).unwrap(),
+                ProjectDeployResult::Applied { .. }
+            ));
+        }
+        for filename in ["CLAUDE.md", "AGENTS.md"] {
+            assert_eq!(
+                fs::read_to_string(root.join(filename)).unwrap(),
+                prompt.content
+            );
+        }
+        prompt.content = "New library revision".into();
+        state.db.save_prompt(&prompt).unwrap();
+        assert_eq!(
+            fs::read_to_string(root.join("CLAUDE.md")).unwrap(),
+            "Shared project rules"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("AGENTS.md")).unwrap(),
+            "Shared project rules"
+        );
+        test_projects::deploy(&state, &profile.id, ProfileScope::Claude, None).unwrap();
+        assert_eq!(
+            fs::read_to_string(root.join("CLAUDE.md")).unwrap(),
+            prompt.content
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("AGENTS.md")).unwrap(),
+            "Shared project rules"
+        );
+        state.db.delete_prompt(&prompt.id).unwrap();
+        let result = test_projects::deploy(&state, &profile.id, ProfileScope::Codex, None).unwrap();
+        assert!(
+            matches!(result, ProjectDeployResult::Applied { warnings, .. } if !warnings.is_empty())
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("CLAUDE.md")).unwrap(),
+            prompt.content
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("AGENTS.md")).unwrap(),
+            "Shared project rules"
+        );
+        for app in [AppType::Claude, AppType::Codex] {
+            assert!(state.db.get_prompt_application(&app).unwrap().is_none());
+        }
+    }
+
     fn test_state() -> (TempUserHome, AppState) {
         let home = TempUserHome::new();
         let state = AppState::new(std::sync::Arc::new(Database::memory().unwrap()));
@@ -4261,18 +4340,17 @@ mod tests {
         state.db.save_skill(&skill).unwrap();
         state
             .db
-            .save_prompt(
-                &AppType::Claude,
-                &crate::prompt::Prompt {
-                    id: "prompt-id".into(),
-                    name: "Project instructions".into(),
-                    content: "Keep these instructions".into(),
-                    description: None,
-                    enabled: true,
-                    created_at: None,
-                    updated_at: None,
-                },
-            )
+            .save_prompt(&crate::prompt::Prompt {
+                id: "prompt-id".into(),
+                name: "Project instructions".into(),
+                content: "Keep these instructions".into(),
+                description: None,
+
+                created_at: None,
+                updated_at: None,
+            })
+            .unwrap();
+        crate::services::PromptService::enable_prompt(&state, AppType::Claude, "prompt-id")
             .unwrap();
         let mut profile =
             ProfileService::create(&state, "Named resources", ProfileScope::Claude).unwrap();
@@ -4376,10 +4454,7 @@ mod tests {
 
         state.db.delete_mcp_server("filesystem").unwrap();
         state.db.delete_skill("skill-id").unwrap();
-        state
-            .db
-            .delete_prompt(&AppType::Claude, "prompt-id")
-            .unwrap();
+        state.db.delete_prompt("prompt-id").unwrap();
         let edited = ProfileService::update_config(
             &state,
             &profile.id,
@@ -4734,18 +4809,15 @@ mod tests {
         crate::settings::set_current_provider(&app, Some("model-provider")).unwrap();
         state
             .db
-            .save_prompt(
-                &app,
-                &crate::prompt::Prompt {
-                    id: "project-prompt".into(),
-                    name: "Project prompt".into(),
-                    content: "project instructions".into(),
-                    description: None,
-                    enabled: false,
-                    created_at: None,
-                    updated_at: None,
-                },
-            )
+            .save_prompt(&crate::prompt::Prompt {
+                id: "project-prompt".into(),
+                name: "Project prompt".into(),
+                content: "project instructions".into(),
+                description: None,
+
+                created_at: None,
+                updated_at: None,
+            })
             .unwrap();
         seed_profile(state, root, scope, Some(vec![]), Some(vec![]));
         let mut profile = state.db.get_profile("profile").unwrap().unwrap();
@@ -4835,7 +4907,7 @@ mod tests {
                 .as_deref(),
                 Some("model-provider")
             );
-            assert!(!state.db.get_prompts(&app).unwrap()["project-prompt"].enabled);
+            assert!(state.db.get_prompt_application(&app).unwrap().is_none());
         }
     }
 
@@ -6748,18 +6820,15 @@ mod tests {
         seed_profile(&state, &root, ProfileScope::Codex, Some(vec![]), None);
         state
             .db
-            .save_prompt(
-                &AppType::Codex,
-                &crate::prompt::Prompt {
-                    id: "instructions".into(),
-                    name: "Instructions".into(),
-                    content: "profile instructions".into(),
-                    description: None,
-                    enabled: false,
-                    created_at: None,
-                    updated_at: None,
-                },
-            )
+            .save_prompt(&crate::prompt::Prompt {
+                id: "instructions".into(),
+                name: "Instructions".into(),
+                content: "profile instructions".into(),
+                description: None,
+
+                created_at: None,
+                updated_at: None,
+            })
             .unwrap();
         let mut profile = state.db.get_profile("profile").unwrap().unwrap();
         let mut payload: ProfilePayload = serde_json::from_str(&profile.payload).unwrap();

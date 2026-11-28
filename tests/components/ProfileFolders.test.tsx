@@ -62,7 +62,7 @@ vi.mock("@/lib/api", async () => ({
     getAll: (app: string) => mocks.invoke("get_providers", { app }),
   },
   promptsApi: {
-    getPrompts: (app: string) => mocks.invoke("get_prompts", { app }),
+    getPrompts: () => mocks.invoke("get_prompts"),
   },
 }));
 vi.mock("@/lib/toast", () => ({
@@ -278,7 +278,6 @@ beforeEach(() => {
             id: "prompt-a",
             name: "Instructions A",
             content: "Project instruction",
-            enabled: true,
           },
         });
       case "apply_profile":

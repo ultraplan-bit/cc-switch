@@ -989,7 +989,7 @@ fn test_import_prompt_allows_space_in_base64_content() {
 
     let prompt_id = import_prompt_from_deeplink(&state, request.clone()).expect("import prompt");
 
-    let prompts = state.db.get_prompts(&AppType::Codex).expect("get prompts");
+    let prompts = state.db.get_prompts().expect("get prompts");
     let prompt = prompts.get(&prompt_id).expect("prompt saved");
 
     assert_eq!(prompt.content, ">>>");
@@ -2199,7 +2199,7 @@ fn agy_deeplink_prompt_import_respects_activation() {
         let request = parse_deeplink_url(&format!("ccswitch://v1/import?resource=prompt&app=agy&name=Test-{enabled}&content={content}&enabled={enabled}")).unwrap();
         let id = import_prompt_from_deeplink(&state, request).unwrap();
         assert_eq!(
-            state.db.get_prompts(&AppType::Agy).unwrap()[&id].content,
+            state.db.get_prompts().unwrap()[&id].content,
             "Agy instructions"
         );
         assert_eq!(path.exists(), enabled);

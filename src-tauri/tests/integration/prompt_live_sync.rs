@@ -2,217 +2,140 @@ use crate::support::{create_test_state, ensure_test_home, reset_test_fs, test_mu
 use cc_switch_lib::{update_settings, AppSettings, AppType, Prompt, PromptService};
 use std::fs;
 
+fn shared_prompt() -> Prompt {
+    Prompt {
+        id: "shared".into(),
+        name: "Shared instructions".into(),
+        content: "Follow project conventions.".into(),
+        description: Some("One definition for all Agents".into()),
+        created_at: Some(1),
+        updated_at: Some(1),
+    }
+}
+
 #[test]
-fn prompt_list_refreshes_external_edits_without_changing_inactive_templates() {
+fn shared_library_changes_and_reads_never_write_or_backfill_agent_files() {
     let _guard = test_mutex().lock().unwrap();
     reset_test_fs();
     let home = ensure_test_home();
     let state = create_test_state().unwrap();
-
-    for (app, relative_path) in [
+    let original = shared_prompt();
+    PromptService::upsert_prompt(&state, &original.id, original.clone()).unwrap();
+    assert!(!home.join(".claude/CLAUDE.md").exists());
+    assert!(!home.join(".codex/AGENTS.md").exists());
+    for app in [AppType::Claude, AppType::Codex] {
+        PromptService::enable_prompt(&state, app, &original.id).unwrap();
+    }
+    let mut edited = original.clone();
+    edited.content = "Updated shared instructions.".into();
+    PromptService::upsert_prompt(&state, &edited.id, edited.clone()).unwrap();
+    for (app, relative) in [
         (AppType::Claude, ".claude/CLAUDE.md"),
         (AppType::Codex, ".codex/AGENTS.md"),
     ] {
-        let active = Prompt {
-            id: "active".into(),
-            name: "My instructions".into(),
-            content: "original".into(),
-            description: Some("Keep my metadata".into()),
-            enabled: true,
-            created_at: Some(1),
-            updated_at: Some(1),
-        };
-        let inactive = Prompt {
-            id: "inactive".into(),
-            enabled: false,
-            ..active.clone()
-        };
-        state.db.save_prompt(&app, &inactive).unwrap();
-        PromptService::upsert_prompt(&state, app.clone(), &active.id, active.clone()).unwrap();
-        let path = home.join(relative_path);
-
-        for content in ["externally edited\n", "another edit\n"] {
-            fs::write(&path, content).unwrap();
-            let prompts = PromptService::get_prompts(&state, app.clone()).unwrap();
-            assert_eq!(prompts["active"].content, content);
-            assert_eq!(prompts["active"].name, active.name);
-            assert_eq!(prompts["active"].description, active.description);
-            assert_eq!(prompts["active"].created_at, active.created_at);
-            assert!(prompts["active"].enabled);
-            assert_eq!(prompts["inactive"].content, "original");
-            assert_eq!(fs::read_to_string(&path).unwrap(), content);
-            assert_eq!(
-                state.db.get_prompts(&app).unwrap()["active"].content,
-                content
-            );
-        }
-
-        let mut saved = state.db.get_prompts(&app).unwrap()["active"].clone();
-        saved.content = "saved instructions".into();
-        fs::write(&path, &saved.content).unwrap();
-        saved.updated_at = Some(42);
-        state.db.save_prompt(&app, &saved).unwrap();
-        assert_eq!(
-            PromptService::get_prompts(&state, app.clone()).unwrap()["active"].updated_at,
-            Some(42)
+        let path = home.join(relative);
+        assert_eq!(fs::read_to_string(&path).unwrap(), original.content);
+        assert!(
+            !PromptService::get_target(&state, app.clone())
+                .unwrap()
+                .matches_library
         );
-
-        for content in ["", " \t\r\n"] {
-            fs::write(&path, content).unwrap();
-            let prompts = PromptService::get_prompts(&state, app.clone()).unwrap();
-            assert_eq!(prompts["active"].content, saved.content);
-            assert_eq!(prompts["active"].updated_at, Some(42));
-            assert_eq!(prompts["inactive"].content, "original");
-            assert_eq!(fs::read_to_string(&path).unwrap(), content);
-            assert_eq!(
-                state.db.get_prompts(&app).unwrap()["active"].content,
-                saved.content
-            );
-        }
-
-        // An editor may save UTF-16: the live read fails, but saved templates
-        // must remain available so the user can repair the file from the UI.
-        let utf16 = [0xff, 0xfe, b'A', 0];
-        fs::write(&path, utf16).unwrap();
-        let prompts = PromptService::get_prompts(&state, app.clone()).unwrap();
-        assert_eq!(prompts["active"].content, saved.content);
-        assert_eq!(prompts["active"].updated_at, Some(42));
-        assert_eq!(prompts["inactive"].content, "original");
-        assert_eq!(fs::read(&path).unwrap(), utf16);
+        fs::write(&path, "edited outside").unwrap();
         assert_eq!(
-            state.db.get_prompts(&app).unwrap()["active"].updated_at,
-            Some(42)
+            PromptService::get_prompts(&state).unwrap()[&edited.id].content,
+            edited.content
         );
+        assert_eq!(fs::read_to_string(&path).unwrap(), "edited outside");
+        assert!(PromptService::enable_prompt(&state, app.clone(), &edited.id).is_err());
+        // An unreadable document cannot stop the independent library loading.
+        fs::write(&path, [0xff, 0xfe, b'A', 0]).unwrap();
         assert_eq!(
-            state.db.get_prompts(&app).unwrap()["active"].content,
-            saved.content
+            PromptService::get_prompts(&state).unwrap()[&edited.id].content,
+            edited.content
         );
-        assert!(PromptService::get_current_file_content(app.clone()).is_err());
-
-        fs::remove_file(&path).unwrap();
-        assert_eq!(
-            PromptService::get_prompts(&state, app.clone()).unwrap()["active"].updated_at,
-            Some(42)
-        );
-        assert!(!path.exists());
-
-        saved.enabled = false;
-        state.db.save_prompt(&app, &saved).unwrap();
-        fs::write(&path, "unmanaged instructions").unwrap();
-        assert_eq!(
-            PromptService::get_prompts(&state, app).unwrap()["active"].content,
-            saved.content
-        );
-        assert_eq!(fs::read_to_string(path).unwrap(), "unmanaged instructions");
+        assert!(PromptService::get_current_file_content(app).is_err());
     }
+    PromptService::delete_prompt(&state, &edited.id).unwrap();
+    assert!(PromptService::get_prompts(&state).unwrap().is_empty());
+    assert_eq!(
+        fs::read(home.join(".claude/CLAUDE.md")).unwrap(),
+        [0xff, 0xfe, b'A', 0]
+    );
+    assert_eq!(
+        fs::read(home.join(".codex/AGENTS.md")).unwrap(),
+        [0xff, 0xfe, b'A', 0]
+    );
 }
 
 #[test]
-fn saving_inactive_prompts_keeps_a_hand_written_file_until_the_last_enabled_one_is_disabled() {
+fn explicit_import_deduplicates_across_agents_without_claiming_or_changing_files() {
     let _guard = test_mutex().lock().unwrap();
     reset_test_fs();
     let home = ensure_test_home();
-    let hermes_dir = home.join(".hermes");
-    update_settings(AppSettings::default()).unwrap();
     let state = create_test_state().unwrap();
-
-    for (app, path) in [
-        (AppType::Claude, home.join(".claude/CLAUDE.md")),
-        (AppType::Codex, home.join(".codex/AGENTS.md")),
-        (AppType::Hermes, hermes_dir.join("SOUL.md")),
+    let mut ids = Vec::new();
+    for (app, relative) in [
+        (AppType::Claude, ".claude/CLAUDE.md"),
+        (AppType::Codex, ".codex/AGENTS.md"),
     ] {
-        let hand_written = "hand-written instructions\n";
+        let path = home.join(relative);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(&path, hand_written).unwrap();
-
-        // Adding a new prompt from the UI saves it disabled.
-        let draft = Prompt {
-            id: "draft".into(),
-            name: "Draft".into(),
-            content: "draft content".into(),
-            description: None,
-            enabled: false,
-            created_at: Some(1),
-            updated_at: Some(1),
-        };
-        PromptService::upsert_prompt(&state, app.clone(), &draft.id, draft.clone()).unwrap();
-        assert_eq!(fs::read_to_string(&path).unwrap(), hand_written);
-
-        // Re-saving an inactive prompt leaves the file alone as well.
-        let edited = Prompt {
-            content: "edited draft".into(),
-            ..draft.clone()
-        };
-        PromptService::upsert_prompt(&state, app.clone(), "draft", edited).unwrap();
-        assert_eq!(fs::read_to_string(&path).unwrap(), hand_written);
-
-        // Importing copies the file into the database without emptying it.
-        let imported_id = PromptService::import_from_file(&state, app.clone()).unwrap();
-        assert_eq!(fs::read_to_string(&path).unwrap(), hand_written);
+        fs::write(&path, "Handwritten shared rules").unwrap();
+        let id = PromptService::import_from_file(&state, app.clone()).unwrap();
+        ids.push(id);
         assert_eq!(
-            state.db.get_prompts(&app).unwrap()[&imported_id].content,
-            hand_written
+            fs::read_to_string(path).unwrap(),
+            "Handwritten shared rules"
         );
-
-        // A deeplink saves disabled and then enables: the hand-written file
-        // must still be readable when enable_prompt backs it up.
-        fs::write(&path, "fresh hand-written\n").unwrap();
-        let linked = Prompt {
-            id: "linked".into(),
-            content: "linked content".into(),
-            ..draft.clone()
-        };
-        PromptService::upsert_prompt(&state, app.clone(), &linked.id, linked.clone()).unwrap();
-        PromptService::enable_prompt(&state, app.clone(), &linked.id).unwrap();
-        assert_eq!(fs::read_to_string(&path).unwrap(), "linked content");
-        assert!(state
-            .db
-            .get_prompts(&app)
-            .unwrap()
-            .values()
-            .any(|prompt| !prompt.enabled && prompt.content == "fresh hand-written\n"));
-
-        // Disabling the last enabled prompt still empties the file.
-        let disabled = Prompt {
-            enabled: false,
-            ..state.db.get_prompts(&app).unwrap()["linked"].clone()
-        };
-        PromptService::upsert_prompt(&state, app.clone(), "linked", disabled).unwrap();
-        assert_eq!(fs::read_to_string(&path).unwrap(), "");
+        assert!(state.db.get_prompt_application(&app).unwrap().is_none());
     }
-
-    update_settings(AppSettings::default()).unwrap();
-    let _ = fs::remove_dir_all(&hermes_dir);
+    assert_eq!(ids[0], ids[1]);
+    assert_eq!(PromptService::get_prompts(&state).unwrap().len(), 1);
 }
 
 #[test]
-fn omp_prompts_write_agents_md_in_the_agent_directory() {
+fn distribution_preserves_agent_specific_instruction_filenames() {
     let _guard = test_mutex().lock().unwrap();
     reset_test_fs();
+    update_settings(AppSettings::default()).unwrap();
     let home = ensure_test_home();
-    let agent_dir = home.join("custom-omp/agent");
+    let state = create_test_state().unwrap();
+    let prompt = shared_prompt();
+    PromptService::upsert_prompt(&state, &prompt.id, prompt.clone()).unwrap();
+    for (app, relative) in [
+        (AppType::Claude, ".claude/CLAUDE.md"),
+        (AppType::Codex, ".codex/AGENTS.md"),
+        (AppType::Gemini, ".gemini/GEMINI.md"),
+        (AppType::Hermes, ".hermes/SOUL.md"),
+        (AppType::Pi, ".pi/agent/AGENTS.md"),
+    ] {
+        PromptService::enable_prompt(&state, app, &prompt.id).unwrap();
+        assert_eq!(
+            fs::read_to_string(home.join(relative)).unwrap(),
+            prompt.content
+        );
+    }
+    assert!(!home.join(".claude/AGENTS.md").exists());
+    assert!(!home.join(".codex/CLAUDE.md").exists());
+}
+
+#[test]
+fn omp_prompts_write_agents_md_in_the_configured_agent_directory() {
+    let _guard = test_mutex().lock().unwrap();
+    reset_test_fs();
+    let agent_dir = ensure_test_home().join("custom-omp/agent");
     update_settings(AppSettings {
         omp_config_dir: Some(agent_dir.to_string_lossy().into_owned()),
         ..AppSettings::default()
     })
     .unwrap();
     let state = create_test_state().unwrap();
-
-    let prompt = Prompt {
-        id: "global".into(),
-        name: "Global".into(),
-        content: "Use the project conventions.".into(),
-        description: None,
-        enabled: false,
-        created_at: None,
-        updated_at: None,
-    };
-    PromptService::upsert_prompt(&state, AppType::Omp, "global", prompt).unwrap();
-    PromptService::enable_prompt(&state, AppType::Omp, "global").unwrap();
+    let prompt = shared_prompt();
+    PromptService::upsert_prompt(&state, &prompt.id, prompt.clone()).unwrap();
+    PromptService::enable_prompt(&state, AppType::Omp, &prompt.id).unwrap();
     assert_eq!(
         fs::read_to_string(agent_dir.join("AGENTS.md")).unwrap(),
-        "Use the project conventions."
+        prompt.content
     );
-
     update_settings(AppSettings::default()).unwrap();
 }

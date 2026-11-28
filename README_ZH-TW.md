@@ -35,7 +35,7 @@ Claude Code、Codex、Gemini CLI 等 AI 程式開發工具各有自己的設定�
 - **一個應用程式，十二種工具** — Claude Code、Claude Desktop、Codex、Gemini CLI、Grok Build、OpenCode、OpenClaw、Hermes、Pi、MiniMax Code、Kimi Code 與 Oh My Pi
 - **告別手動編輯** — 90+ 個供應商預設，包含 AWS Bedrock、NVIDIA NIM 與社群中轉服務
 - **直連、路由或聚合，隨你選擇** — 直連讓工具直接連到供應商；路由則讓請求經由你的電腦轉發，轉換 API 格式並自動故障轉移，讓你能在 Claude Code 中使用 GPT、在 Codex 中使用 Claude；聚合會把多個供應商的模型放進 Claude Code 或 Codex 的同一份模型清單，每個請求都會送往你所選模型所屬的供應商
-- **集中管理 MCP、Skills 與提示詞** — MCP 伺服器和 Skills 只需新增一次，再選擇要同步到哪些工具；提示詞則依各工具分別維護
+- **集中管理 MCP、Skills 與提示詞** — 資源統一儲存並按需分發；同一份 Markdown 提示詞可被多個 Agent 和 Profile 引用
 - **看得懂的工作階段** — 把各工具的工作階段日誌整理成閱讀檢視：每一輪做了什麼、改了哪些檔案、哪一步失敗，一目了然
 - **用量與額度一目了然** — 即使沒有啟用本地路由也能追蹤 Token 用量與花費；訂閱剩餘額度與帳戶餘額直接顯示在供應商卡片與系統匣上
 - **跨平台** — 以 Tauri 2 打造的原生桌面應用程式，支援 Windows、macOS 與 Linux
@@ -123,7 +123,7 @@ paru -S cc-switch-bin
 ### MCP、提示詞、Skills、專案與工作階段
 
 - **MCP**：點擊側欄的「MCP」→ 透過範本或自訂設定新增伺服器（或「匯入已有」）→ 為每個工具切換同步開關
-- **提示詞**：點擊側欄的「提示詞」→ 用 Markdown 編輯器建立提示詞 → 啟用其中一個，即可寫入該工具的提示詞檔案
+- **提示詞**：開啟側欄的「提示詞」→ 儲存共享 Markdown 文件 → 選擇目標 Agent 並明確套用至對應指令檔案
 - **Skills**：點擊側欄的「Skills」→「發現技能」→ 搜尋 skills.sh 或瀏覽 GitHub 儲存庫 → 一鍵安裝到支援的工具
 - **專案**：先在「設定 → 通用」中開啟「顯示專案切換」，然後在 Claude Code、Claude Desktop 或 Codex 頁面，開啟頂端的專案切換器 →「新建專案」以儲存目前的設定；之後從切換器中選擇它，就能一次切換整套設定
 - **工作階段**：點擊側欄的「工作階段」→ 瀏覽並搜尋對話歷史、開啟閱讀檢視，或還原各工具的工作階段
@@ -192,7 +192,7 @@ paru -S cc-switch-bin
 ### MCP、提示詞與 Skills
 
 - **統一的 MCP 面板** — 在同一處管理所有 MCP 伺服器，選擇每個伺服器要同步到哪些工具（Claude Code、Codex、Gemini CLI、Grok Build、OpenCode、Hermes、Pi、MiniMax Code、Kimi Code、Oh My Pi），從各工具匯入現有設定，並可透過 Deep Link 匯入
-- **提示詞** — 依工具分別建立的提示詞庫，附 Markdown 編輯器；啟用提示詞時會將其寫入該工具的提示詞檔案（CLAUDE.md / AGENTS.md / GEMINI.md），並先把檔案現有的內容存回提示詞庫，確保不會遺失任何內容。Pi 還可編輯 SYSTEM.md、APPEND_SYSTEM.md 與提示詞範本
+- **提示詞** — 跨 Agent 共享 Markdown 資源庫。儲存只更新資源庫，明確套用後才寫入目標：Claude Code 使用 `CLAUDE.md`、Codex 使用 `AGENTS.md`、Gemini 使用 `GEMINI.md`。外部修改需主動匯入，覆寫前檢查衝突。Pi 仍可編輯 SYSTEM.md、APPEND_SYSTEM.md 與原生提示詞範本
 - **Skills** — 搜尋 skills.sh，或從 GitHub 儲存庫或 ZIP 檔案一鍵安裝；可檢查更新並一鍵全部更新；可自動同步到各工具、僅用符號連結，或僅用複本；也可選擇存放在 `~/.agents/skills`
 - 三個面板都支援搜尋，MCP 與 Skills 還可依工具一次全部啟用或停用；供應商、MCP 伺服器與提示詞都在內容區以整頁方式編輯，離開時若有未儲存的變更會先提醒你
 
