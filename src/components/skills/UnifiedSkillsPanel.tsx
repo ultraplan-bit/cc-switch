@@ -126,7 +126,7 @@ function isEditableTarget(target: EventTarget | null) {
 
 /**
  * Skills 全局页（v7）：「已安装」矩阵 +「发现」合成一页。
- * Pi 列常驻（应用页里隐藏 Pi 时才不显示）；Pi 的状态来自后端对 ~/.pi/agent/skills 的目录检查，
+ * 只显示已安装且启用的应用列；Pi 的状态来自后端对 ~/.pi/agent/skills 的目录检查，
  * get_installed_skills 返回前会用这个检查结果覆盖 apps.pi，所以这里显示的不是数据库里的开关。
  */
 const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
@@ -148,7 +148,12 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
   }, [view]);
   const [discoverQuery, setDiscoverQuery] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [selectedStatusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const statusFilter =
+    selectedStatusFilter.startsWith("app:") &&
+    !appIds.includes(selectedStatusFilter.slice(4) as (typeof appIds)[number])
+      ? "all"
+      : selectedStatusFilter;
   const [sourceFilter, setSourceFilter] = useState("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [fails, setFails] = useState<Record<string, WriteFailure>>({});
@@ -209,7 +214,11 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
   const skillUpdates = updateCheck?.updates;
   const updateRepoFailures = updateCheck?.failures ?? [];
   const updateSkillMutation = useUpdateSkill();
-  const { resync: resyncToApps, isPending: resyncPending } = useSkillsResync();
+  const {
+    resync: resyncToApps,
+    isPending: resyncPending,
+    canResync,
+  } = useSkillsResync();
 
   const mutationPending =
     deleteBackupMutation.isPending ||
@@ -322,7 +331,7 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
   }, [installedSkills]);
 
   const enabledCount = (skill: InstalledSkill) =>
-    APP_IDS_WITH.skills.filter((app) => skill.apps[app]).length;
+    appIds.filter((app) => skill.apps[app]).length;
 
   const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
   const filteredSkills = useMemo(() => {
@@ -350,6 +359,7 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
       ].some((value) => value?.toLocaleLowerCase().includes(normalizedQuery));
     });
   }, [
+    appIds,
     installedSkills,
     statusFilter,
     sourceFilter,
@@ -1015,7 +1025,12 @@ const UnifiedSkillsPanel: React.FC<UnifiedSkillsPanelProps> = ({
                 {t("skillsPage.moreMenu.repos")}
               </DropdownMenuItem>
               <DropdownMenuItem
-                disabled={controlsDisabled || resyncPending || nInstalled === 0}
+                disabled={
+                  controlsDisabled ||
+                  resyncPending ||
+                  nInstalled === 0 ||
+                  !canResync
+                }
                 onSelect={() => void handleResyncToApps()}
               >
                 {t("skills.storageSheet.resync")}
@@ -1843,7 +1858,7 @@ function InstalledRow({
   onUninstall,
 }: InstalledRowProps) {
   const { t } = useTranslation();
-  const enabled = APP_IDS_WITH.skills.some((app) => skill.apps[app]);
+  const enabled = appIds.some((app) => skill.apps[app]);
   const failedApp = appIds.find((app) => fails[failKey(skill.id, app)]);
   const failure = failedApp ? fails[failKey(skill.id, failedApp)] : undefined;
   const failId = `sk-fail-${skill.id}`;

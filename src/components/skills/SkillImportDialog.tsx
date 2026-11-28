@@ -82,14 +82,17 @@ export function SkillImportDialog({
 
   const submit = () => {
     // 默认勾的应用只给在那里发现过的 Skill；另外勾的应用给全部
-    const extra = [...apps].filter((app) => !defaultApps.has(app));
+    const selectedApps = new Set<AppId>(
+      appChoices.filter((app) => apps.has(app)),
+    );
+    const extra = [...selectedApps].filter((app) => !defaultApps.has(app));
     onImport(
       skills
         .filter((skill) => selected.has(skill.directory))
         .map((skill) => {
           const chosen = new Set<AppId>(extra);
           for (const found of skill.foundIn) {
-            if (isAppId(found) && apps.has(found)) chosen.add(found);
+            if (isAppId(found) && selectedApps.has(found)) chosen.add(found);
           }
           return {
             directory: skill.directory,

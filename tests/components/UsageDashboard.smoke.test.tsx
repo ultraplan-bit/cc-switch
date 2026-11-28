@@ -5,6 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { UsageDashboard } from "@/components/usage/UsageDashboard";
 import { emitTauriEvent } from "../msw/tauriMocks";
 import { createTestQueryClient } from "../utils/testQueryClient";
+import { APP_IDS } from "@/config/appSpecs";
+
+vi.mock("@/hooks/useAgentAvailability", () => ({
+  useAgentAvailability: () => ({
+    installedApps: Object.fromEntries(APP_IDS.map((app) => [app, true])),
+    isPending: false,
+  }),
+}));
 
 /**
  * 不 mock 子组件，把整页（指标、趋势图、四个页签）真渲染一遍，接口用假数据。

@@ -9,6 +9,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_VISIBLE_APPS } from "@/config/appConfig";
+import { APP_IDS } from "@/config/appSpecs";
 import { UNKNOWN_PROJECT_DIR_KEY } from "@/components/sessions/utils";
 import { SessionManagerPage } from "@/components/sessions/SessionManagerPage";
 import { piApi } from "@/lib/api/pi";
@@ -20,6 +21,15 @@ import { setSessionFixtures, setSettings } from "../msw/state";
 const toastSuccessMock = vi.fn();
 const toastErrorMock = vi.fn();
 const platform = vi.hoisted(() => ({ mac: false }));
+const availability = vi.hoisted(() => ({
+  installedApps: {} as Record<string, boolean>,
+}));
+vi.mock("@/hooks/useAgentAvailability", () => ({
+  useAgentAvailability: () => ({
+    installedApps: availability.installedApps,
+    isPending: false,
+  }),
+}));
 
 vi.mock("sonner", () => ({
   toast: {
@@ -154,6 +164,9 @@ const setupZetaSession = (word = "zeta") => {
 
 describe("SessionManagerPage", () => {
   beforeEach(() => {
+    availability.installedApps = Object.fromEntries(
+      APP_IDS.map((app) => [app, true]),
+    );
     // 固定在本地时间的中午：会话时间都是「现在往前几小时」，凌晨跑时会跨到昨天，
     // 「按时间」分组就不稳定。只假 Date 且照常走时，计时器保持真实。
     vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
@@ -660,6 +673,58 @@ describe("SessionManagerPage", () => {
     expect(within(menu).getAllByRole("menuitemradio")[0]).toHaveTextContent(
       "全部应用4",
     );
+  });
+
+  it("excludes uninstalled agents from filters and session source paths", async () => {
+    availability.installedApps.codex = false;
+    renderPage("codex");
+    await screen.findByText("Claude Session");
+    expect(screen.queryByText("Alpha Session")).not.toBeInTheDocument();
+    await openAppMenu();
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).queryByText("Codex")).not.toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(
+      screen.getByRole("button", { name: "会话的更多操作" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: /会话记录在哪里/ }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).queryByText("Codex")).not.toBeInTheDocument();
+  });
+
+  it("dismisses a pending delete and reader when their agent becomes unavailable", async () => {
+    const remove = vi.spyOn(sessionsApi, "delete");
+    const view = renderPage("codex");
+    await screen.findByText("Alpha Session");
+    openRow("Alpha Session");
+    await screen.findByRole("heading", { level: 1, name: "Alpha Session" });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Alpha Session 的更多操作" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: "删除…" }),
+    );
+    await screen.findByRole("alertdialog");
+
+    availability.installedApps = {
+      ...availability.installedApps,
+      codex: false,
+    };
+    view.rerender(
+      <QueryClientProvider client={view.client}>
+        <SessionManagerPage appId="codex" />
+      </QueryClientProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("heading", { level: 1, name: "Alpha Session" }),
+    ).not.toBeInTheDocument();
+    expect(remove).not.toHaveBeenCalled();
+    remove.mockRestore();
   });
 
   it("shows the Claude Desktop note when coming from Claude Desktop", async () => {

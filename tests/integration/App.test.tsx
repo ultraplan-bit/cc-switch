@@ -191,6 +191,17 @@ vi.mock("@/components/settings/SettingsPage", () => ({
   SettingsPage: () => <div data-testid="settings-page" />,
 }));
 
+vi.mock("@/components/prompts/PromptPanel", () => ({
+  default: ({ apps }: { apps: AppId[] }) => (
+    <div data-testid="prompt-agent-options">{apps.join(",")}</div>
+  ),
+}));
+vi.mock("@/components/plugins/PluginsPage", () => ({
+  PluginsPage: ({ apps }: { apps: AppId[] }) => (
+    <div data-testid="plugin-agent-options">{apps.join(",")}</div>
+  ),
+}));
+
 vi.mock("@/components/profiles/ProfilesPage", () => ({
   ProfilesPage: () => (
     <section data-testid="profile-context">Profile context</section>
@@ -315,6 +326,35 @@ describe("App integration with MSW", () => {
       nav.queryByRole("button", { name: "Gemini CLI", hidden: true }),
     ).not.toBeInTheDocument();
     expect(getSettings().visibleApps?.codex).toBe(false);
+  });
+
+  it("uses the same available Agents for plugin and prompt controls as the sidebar", async () => {
+    availabilityMocks.state = {
+      installedApps: {
+        claude: true,
+        codex: true,
+        gemini: false,
+        "claude-desktop": true,
+      },
+      isPending: false,
+    };
+    setSettings({
+      visibleApps: {
+        ...Object.fromEntries(APP_IDS.map((app) => [app, true])),
+        claude: false,
+      } as VisibleApps,
+    });
+    localStorage.setItem("cc-switch-last-app", "claude-desktop");
+    localStorage.setItem("cc-switch-last-view", "prompts");
+    const { default: App } = await import("@/App");
+    renderApp(App);
+    expect(await screen.findByTestId("prompt-agent-options")).toHaveTextContent(
+      /^codex$/,
+    );
+    fireEvent.click(sidebarApp("nav.plugins"));
+    expect(await screen.findByTestId("plugin-agent-options")).toHaveTextContent(
+      /^codex$/,
+    );
   });
 
   it.each(["not installed", "disabled"])(

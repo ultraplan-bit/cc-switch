@@ -23,6 +23,7 @@ interface PromptFormPanelProps {
   appId: AppId;
   editingId?: string;
   initialData?: Prompt;
+  saveDisabled?: boolean;
   onSave: (id: string, prompt: Prompt) => Promise<void | boolean>;
   onClose: () => void;
 }
@@ -54,6 +55,7 @@ const PromptFormPanel: React.FC<PromptFormPanelProps> = ({
   appId,
   editingId,
   initialData,
+  saveDisabled = false,
   onSave,
   onClose,
 }) => {
@@ -94,7 +96,7 @@ const PromptFormPanel: React.FC<PromptFormPanelProps> = ({
   const showBodyError = attempted && Boolean(bodyError);
 
   const handleSave = async () => {
-    if (savingRef.current) return;
+    if (savingRef.current || saveDisabled) return;
     if (nameError || bodyError) {
       setAttempted(true);
       (nameError ? nameRef : bodyRef).current?.focus();
@@ -174,6 +176,11 @@ const PromptFormPanel: React.FC<PromptFormPanelProps> = ({
         </SheetDescription>
 
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto scroll-stable overscroll-contain px-6 pb-6 pt-5">
+          {saveDisabled && (
+            <p role="status" className="text-body text-fg-2">
+              {t("common.noAvailableAgentsHint")}
+            </p>
+          )}
           <div className="flex shrink-0 flex-col gap-1.5">
             <label
               htmlFor={`${baseId}-name`}
@@ -297,7 +304,7 @@ const PromptFormPanel: React.FC<PromptFormPanelProps> = ({
             variant="solid"
             size="regular"
             onClick={() => void handleSave()}
-            disabled={saving}
+            disabled={saving || saveDisabled}
           >
             {saving ? t("common.saving") : submitLabel}
           </Button>

@@ -23,6 +23,8 @@ import type { UsageDisplaySettings } from "@/types";
 import { useGlobalProxyConfig } from "@/lib/query/proxy";
 import { APP_DISPLAY_NAME } from "@/components/shell/AppGlyph";
 import { KNOWN_APP_TYPES } from "@/types/usage";
+import { useVisibleAppIds } from "@/components/mcp/useVisibleAppIds";
+import { APP_IDS_WITH } from "@/config/appSpecs";
 import { cn } from "@/lib/utils";
 import { getResolvedLang, joinNames } from "./format";
 import { UsageDisplaySection } from "./UsageDisplaySection";
@@ -157,6 +159,8 @@ export function UsageSettingsSheet({
   onOpenPricing,
 }: UsageSettingsSheetProps) {
   const { t, i18n } = useTranslation();
+  const availableApps = useVisibleAppIds(KNOWN_APP_TYPES);
+  const routingApps = useVisibleAppIds(APP_IDS_WITH.localProxy);
   const coveredApps = joinNames(
     KNOWN_APP_TYPES.map((app) => APP_DISPLAY_NAME[app]),
     getResolvedLang(i18n),
@@ -259,69 +263,73 @@ export function UsageSettingsSheet({
               </SettingsRow>
 
               {/* 只读状态 + 去别处修改：整行就是入口（「已开启 ›」），不再单放一个按钮 */}
-              <div className="relative">
-                {onOpenRoutingSettings && (
-                  <button
-                    type="button"
-                    aria-label={t("usage.sources.editLogging")}
-                    className="absolute inset-0 transition-colors hover:bg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                    onClick={() => {
-                      onOpenChange(false);
-                      onOpenRoutingSettings();
-                    }}
-                  />
-                )}
-                <div className="pointer-events-none relative px-4 py-3.5">
-                  <RowHeader
-                    title={t("routingSettings.logging")}
-                    help={{
-                      title: t("usage.sources.loggingHelpTitle"),
-                      body: t("usage.sources.loggingHelp"),
-                    }}
-                    trailing={
-                      <span className="flex items-center gap-0.5">
-                        {open ? <LoggingStatus /> : null}
-                        {onOpenRoutingSettings && (
-                          <ChevronRight
-                            aria-hidden="true"
-                            className="h-4 w-4 text-fg-3"
-                          />
-                        )}
-                      </span>
-                    }
-                  />
+              {routingApps.length > 0 && (
+                <div className="relative">
+                  {onOpenRoutingSettings && (
+                    <button
+                      type="button"
+                      aria-label={t("usage.sources.editLogging")}
+                      className="absolute inset-0 transition-colors hover:bg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                      onClick={() => {
+                        onOpenChange(false);
+                        onOpenRoutingSettings();
+                      }}
+                    />
+                  )}
+                  <div className="pointer-events-none relative px-4 py-3.5">
+                    <RowHeader
+                      title={t("routingSettings.logging")}
+                      help={{
+                        title: t("usage.sources.loggingHelpTitle"),
+                        body: t("usage.sources.loggingHelp"),
+                      }}
+                      trailing={
+                        <span className="flex items-center gap-0.5">
+                          {open ? <LoggingStatus /> : null}
+                          {onOpenRoutingSettings && (
+                            <ChevronRight
+                              aria-hidden="true"
+                              className="h-4 w-4 text-fg-3"
+                            />
+                          )}
+                        </span>
+                      }
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <SettingsRow
-                title={t("usage.rebuildCodex.title")}
-                help={{
-                  title: t("usage.sources.codexHelpTitle"),
-                  body: t("usage.rebuildCodex.description"),
-                }}
-                trailing={
-                  <Button
-                    type="button"
-                    variant="neutral"
-                    size="compact"
-                    className="shrink-0"
-                    disabled={rebuildingCodex}
-                    onClick={onRebuildCodex}
-                  >
-                    {rebuildingCodex && (
-                      <Loader2
-                        aria-hidden="true"
-                        className="h-3.5 w-3.5 motion-safe:animate-spin"
-                      />
-                    )}
-                    {t("usage.rebuildCodex.actionEllipsis")}
-                  </Button>
-                }
-              >
-                <p className="m-0 text-caption text-fg-2">
-                  {t("usage.rebuildCodex.warning")}
-                </p>
-              </SettingsRow>
+              {availableApps.includes("codex") && (
+                <SettingsRow
+                  title={t("usage.rebuildCodex.title")}
+                  help={{
+                    title: t("usage.sources.codexHelpTitle"),
+                    body: t("usage.rebuildCodex.description"),
+                  }}
+                  trailing={
+                    <Button
+                      type="button"
+                      variant="neutral"
+                      size="compact"
+                      className="shrink-0"
+                      disabled={rebuildingCodex}
+                      onClick={onRebuildCodex}
+                    >
+                      {rebuildingCodex && (
+                        <Loader2
+                          aria-hidden="true"
+                          className="h-3.5 w-3.5 motion-safe:animate-spin"
+                        />
+                      )}
+                      {t("usage.rebuildCodex.actionEllipsis")}
+                    </Button>
+                  }
+                >
+                  <p className="m-0 text-caption text-fg-2">
+                    {t("usage.rebuildCodex.warning")}
+                  </p>
+                </SettingsRow>
+              )}
             </div>
           </SettingsGroup>
 

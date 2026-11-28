@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  useEffect,
   useId,
   useImperativeHandle,
   useMemo,
@@ -144,11 +145,13 @@ function PiInstructionFileEditor({
   snapshot,
   onClose,
   onDelete,
+  available,
 }: {
   file: (typeof EDITABLE_FILES)[number];
   snapshot: PiPromptFileSnapshot;
   onClose: () => void;
   onDelete: (snapshot: PiPromptFileSnapshot) => void;
+  available: boolean;
 }) {
   const { t } = useTranslation();
   const baseId = useId();
@@ -186,6 +189,7 @@ function PiInstructionFileEditor({
     file.kind === "system_override" && !baseSnapshot.exists;
 
   const requestSave = () => {
+    if (!available || busy) return;
     if (blank) {
       setAttempted(true);
       bodyRef.current?.focus();
@@ -222,8 +226,8 @@ function PiInstructionFileEditor({
                 type="button"
                 variant="quiet"
                 size="regular"
-                onClick={() => onDelete(baseSnapshot)}
-                disabled={busy}
+                onClick={() => available && onDelete(baseSnapshot)}
+                disabled={busy || !available}
                 className="-ms-2.5 text-danger-text"
               >
                 {t("pi.prompts.deleteFile")}
@@ -244,7 +248,7 @@ function PiInstructionFileEditor({
               variant="solid"
               size="regular"
               onClick={requestSave}
-              disabled={busy}
+              disabled={busy || !available}
             >
               {save.isPending && (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -256,6 +260,11 @@ function PiInstructionFileEditor({
           </>
         }
       >
+        {!available && (
+          <p role="status" className="text-body text-fg-2">
+            {t("common.noAvailableAgentsHint")}
+          </p>
+        )}
         {file.kind === "system_override" ? (
           <div className="flex shrink-0 items-start gap-2.5 rounded-panel bg-warning-soft px-3.5 py-2.5">
             <AlertTriangle
@@ -314,7 +323,7 @@ function PiInstructionFileEditor({
       </PromptDrawer>
 
       <ConfirmDialog
-        isOpen={confirmCreate}
+        isOpen={confirmCreate && available}
         title={t("pi.prompts.activateOverrideTitle", {
           filename: file.filename,
         })}
@@ -325,7 +334,9 @@ function PiInstructionFileEditor({
         variant="info"
         zIndex="top"
         pending={busy}
-        onConfirm={() => save.mutate()}
+        onConfirm={() => {
+          if (available && !busy) save.mutate();
+        }}
         onCancel={() => setConfirmCreate(false)}
       />
     </>
@@ -333,10 +344,22 @@ function PiInstructionFileEditor({
 }
 
 /** Pi · 系统提示：两个固定文件，文件存在就生效，不加启用开关（Pi 规范 §5）。 */
-export function PiSystemPromptFiles() {
+interface PiResourceAvailabilityProps {
+  available?: boolean;
+  onEditingChange?: (editing: boolean) => void;
+}
+
+export function PiSystemPromptFiles({
+  available = true,
+  onEditingChange,
+}: PiResourceAvailabilityProps = {}) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<EditablePiPromptFileKind | null>(null);
+  useEffect(() => {
+    onEditingChange?.(editing !== null);
+    return () => onEditingChange?.(false);
+  }, [editing, onEditingChange]);
   const files = [
     useQuery({
       queryKey: promptFileKey("system_append"),
@@ -478,7 +501,7 @@ export function PiSystemPromptFiles() {
                 size="compact"
                 aria-describedby={statusId}
                 aria-label={`${t(data?.exists ? "common.edit" : "pi.prompts.create")} ${file.filename}`}
-                disabled={!data || remove.isPending}
+                disabled={!available || !data || remove.isPending}
                 onClick={() => setEditing(file.kind)}
                 className="min-w-16 shrink-0"
               >
@@ -488,12 +511,13 @@ export function PiSystemPromptFiles() {
 
             {editing === file.kind && data ? (
               <PiInstructionFileEditor
+                available={available}
                 file={file}
                 snapshot={data}
                 onClose={() => setEditing(null)}
-                onDelete={(snapshot) =>
-                  remove.mutate({ kind: file.kind, snapshot })
-                }
+                onDelete={(snapshot) => {
+                  if (available) remove.mutate({ kind: file.kind, snapshot });
+                }}
               />
             ) : null}
           </li>
@@ -506,6 +530,7 @@ export function PiSystemPromptFiles() {
 const SAVE_TO_PREFIX = "~/.pi/agent/prompts/";
 
 interface PiPromptTemplateEditorProps {
+  available: boolean;
   template?: PiPromptTemplate;
   existingSlugs: Set<string>;
   onClose: () => void;
@@ -513,6 +538,7 @@ interface PiPromptTemplateEditorProps {
 }
 
 function PiPromptTemplateEditor({
+  available,
   template,
   existingSlugs,
   onClose,
@@ -592,6 +618,7 @@ function PiPromptTemplateEditor({
 
   const busy = save.isPending;
   const requestSave = () => {
+    if (!available || busy) return;
     if (slugError) {
       setAttempted(true);
       slugRef.current?.focus();
@@ -633,7 +660,7 @@ function PiPromptTemplateEditor({
             type="button"
             variant="solid"
             size="regular"
-            disabled={busy}
+            disabled={busy || !available}
             onClick={requestSave}
           >
             {save.isPending && (
@@ -644,6 +671,11 @@ function PiPromptTemplateEditor({
         </>
       }
     >
+      {!available && (
+        <p role="status" className="text-body text-fg-2">
+          {t("common.noAvailableAgentsHint")}
+        </p>
+      )}
       <div className="flex shrink-0 flex-col gap-1.5">
         <label
           htmlFor={`${baseId}-slug`}
@@ -758,7 +790,7 @@ export interface PiPromptTemplatesHandle {
   openCreate: () => void;
 }
 
-interface PiPromptTemplatesProps {
+interface PiPromptTemplatesProps extends PiResourceAvailabilityProps {
   /** 搜索框在页面工具行里，这里只按它过滤 */
   search?: string;
   onClearSearch?: () => void;
@@ -768,17 +800,26 @@ interface PiPromptTemplatesProps {
 export const PiPromptTemplates = forwardRef<
   PiPromptTemplatesHandle,
   PiPromptTemplatesProps
->(function PiPromptTemplates({ search = "", onClearSearch }, ref) {
+>(function PiPromptTemplates(
+  { search = "", onClearSearch, available = true, onEditingChange },
+  ref,
+) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [editor, setEditor] = useState<
     { mode: "create" } | { mode: "edit"; template: PiPromptTemplate } | null
   >(null);
+  useEffect(() => {
+    onEditingChange?.(editor !== null);
+    return () => onEditingChange?.(false);
+  }, [editor, onEditingChange]);
 
   const templates = usePiPromptTemplatesQuery();
 
   useImperativeHandle(ref, () => ({
-    openCreate: () => setEditor({ mode: "create" }),
+    openCreate: () => {
+      if (available) setEditor({ mode: "create" });
+    },
   }));
 
   const refresh = async () => {
@@ -872,6 +913,7 @@ export const PiPromptTemplates = forwardRef<
               variant="neutral"
               size="regular"
               onClick={() => setEditor({ mode: "create" })}
+              disabled={!available}
             >
               <Plus className="h-3.5 w-3.5" />
               {t("pi.prompts.newTemplate")}
@@ -912,6 +954,7 @@ export const PiPromptTemplates = forwardRef<
             <li
               key={template.slug}
               onClick={(event) => {
+                if (!available) return;
                 const el = event.target as HTMLElement;
                 if (el.closest("button, a, input, label, [role='menu']")) {
                   return;
@@ -953,6 +996,7 @@ export const PiPromptTemplates = forwardRef<
                       name: `/${template.slug}`,
                     })}
                     onClick={() => setEditor({ mode: "edit", template })}
+                    disabled={!available}
                   >
                     <Pencil className="h-[15px] w-[15px]" strokeWidth={1.5} />
                   </Button>
@@ -999,12 +1043,14 @@ export const PiPromptTemplates = forwardRef<
                     </DropdownMenuItem>
                     <DropdownMenuSeparator className="mx-1.5 my-1 bg-border" />
                     <DropdownMenuItem
-                      disabled={remove.isPending}
+                      disabled={remove.isPending || !available}
                       className={cn(
                         promptMenuItemClass,
                         "text-danger-text focus:text-danger-text",
                       )}
-                      onSelect={() => remove.mutate(template)}
+                      onSelect={() => {
+                        if (available) remove.mutate(template);
+                      }}
                     >
                       {t("common.delete")}
                     </DropdownMenuItem>
@@ -1023,6 +1069,7 @@ export const PiPromptTemplates = forwardRef<
       {body}
       {editor && (
         <PiPromptTemplateEditor
+          available={available}
           template={editor.mode === "edit" ? editor.template : undefined}
           existingSlugs={existingSlugs}
           onClose={() => setEditor(null)}

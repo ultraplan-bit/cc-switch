@@ -31,10 +31,12 @@ export async function deleteEnvVars(
  * 检查所有应用的环境变量冲突
  * @returns 按应用类型分组的环境变量冲突
  */
-export async function checkAllEnvConflicts(): Promise<
-  Record<string, EnvConflict[]>
-> {
-  const apps = ["claude", "codex", "gemini", "grokbuild"];
+export async function checkAllEnvConflicts(
+  availableApps: readonly string[],
+): Promise<Record<string, EnvConflict[]>> {
+  const apps = ["claude", "codex", "gemini", "grokbuild"].filter((app) =>
+    availableApps.includes(app),
+  );
   const results: Record<string, EnvConflict[]> = {};
 
   await Promise.all(

@@ -67,18 +67,18 @@ export const mcpApi = {
   },
 
   /**
-   * 从所有应用导入 MCP 服务器
+   * 从所选应用导入 MCP 服务器
    */
-  async importFromApps(): Promise<number> {
-    return await invoke("import_mcp_from_apps");
+  async importFromApps(apps: AppId[]): Promise<number> {
+    return await invoke("import_mcp_from_apps", { apps });
   },
 
   /**
    * 按这里的开关把 MCP 重新写进各应用的配置，逐应用返回结果。
-   * 不传 apps 时同步全部受管应用；单个应用失败不影响其余应用。
+   * 只同步所选应用；单个应用失败不影响其余应用。
    */
-  async resyncToApps(apps?: AppId[]): Promise<McpAppSyncOutcome[]> {
-    return await invoke("resync_mcp_to_apps", { apps: apps ?? null });
+  async resyncToApps(apps: AppId[]): Promise<McpAppSyncOutcome[]> {
+    return await invoke("resync_mcp_to_apps", { apps });
   },
 };
 

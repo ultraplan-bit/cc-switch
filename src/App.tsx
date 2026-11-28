@@ -36,9 +36,10 @@ import {
   type AppId,
   type ProviderSwitchEvent,
 } from "@/lib/api";
-import { checkAllEnvConflicts, checkEnvConflicts } from "@/lib/api/env";
+import { checkAllEnvConflicts } from "@/lib/api/env";
 import { useProviderActions } from "@/hooks/useProviderActions";
 import { useAgentAvailability } from "@/hooks/useAgentAvailability";
+import { useVisibleAppIds } from "@/components/mcp/useVisibleAppIds";
 import { openclawKeys, useOpenClawHealth } from "@/hooks/useOpenClaw";
 import { hermesKeys, useOpenHermesWebUI } from "@/hooks/useHermes";
 import { hermesApi } from "@/lib/api/hermes";
@@ -281,8 +282,9 @@ function App() {
 
   const { data: settingsData, isPending: isSettingsPending } =
     useSettingsQuery();
-  const { installedApps, isPending: isAvailabilityPending } =
-    useAgentAvailability();
+  const { isPending: isAvailabilityPending } = useAgentAvailability();
+  const availableAppIds = useVisibleAppIds(APP_IDS);
+  const promptApps = useVisibleAppIds(APP_IDS_WITH.prompts);
   // Windows 一律去掉系统标题栏，用页头里的应用内窗口按钮；Linux 由设置决定
   const useAppWindowControls =
     isWindows() || (isLinux() && (settingsData?.useAppWindowControls ?? false));
@@ -298,12 +300,9 @@ function App() {
   const sidebarVisibleApps = useMemo<VisibleApps>(
     () =>
       Object.fromEntries(
-        APP_IDS.map((app) => [
-          app,
-          !isSettingsPending && visibleApps[app] && installedApps[app] === true,
-        ]),
+        APP_IDS.map((app) => [app, availableAppIds.includes(app)]),
       ) as VisibleApps,
-    [installedApps, isSettingsPending, visibleApps],
+    [availableAppIds],
   );
   const activeAppVisible = sidebarVisibleApps[activeApp];
   const firstVisibleApp = orderAppIds(settingsData?.appOrder).find(
@@ -376,7 +375,12 @@ function App() {
   const [terminalProvider, setTerminalProvider] = useState<Provider | null>(
     null,
   );
-  const [envConflicts, setEnvConflicts] = useState<EnvConflict[]>([]);
+  const [envConflictsByApp, setEnvConflicts] = useState<
+    Record<string, EnvConflict[]>
+  >({});
+  const envConflicts = availableAppIds.flatMap(
+    (app) => envConflictsByApp[app] ?? [],
+  );
   const [showEnvBanner, setShowEnvBanner] = useState(false);
 
   const effectiveUsageProvider = useLastValidValue(usageProvider);
@@ -825,13 +829,15 @@ function App() {
   }, [useAppWindowControls]);
 
   useEffect(() => {
+    let cancelled = false;
     const checkEnvOnStartup = async () => {
       try {
-        const allConflicts = await checkAllEnvConflicts();
+        const allConflicts = await checkAllEnvConflicts(availableAppIds);
+        if (cancelled) return;
+        setEnvConflicts(allConflicts);
         const flatConflicts = Object.values(allConflicts).flat();
 
         if (flatConflicts.length > 0) {
-          setEnvConflicts(flatConflicts);
           const dismissed = sessionStorage.getItem("env_banner_dismissed");
           if (!dismissed) {
             setShowEnvBanner(true);
@@ -846,47 +852,10 @@ function App() {
     };
 
     checkEnvOnStartup();
-  }, []);
-
-  useEffect(() => {
-    const checkEnvOnSwitch = async () => {
-      try {
-        if (
-          activeApp === "mcode" ||
-          activeApp === "dsh" ||
-          activeApp === "kimi" ||
-          activeApp === "agy" ||
-          activeApp === "copilot" ||
-          activeApp === "workbuddy"
-        )
-          return;
-        const conflicts = await checkEnvConflicts(activeApp);
-
-        if (conflicts.length > 0) {
-          setEnvConflicts((prev) => {
-            const existingKeys = new Set(
-              prev.map((c) => `${c.varName}:${c.sourcePath}`),
-            );
-            const newConflicts = conflicts.filter(
-              (c) => !existingKeys.has(`${c.varName}:${c.sourcePath}`),
-            );
-            return [...prev, ...newConflicts];
-          });
-          const dismissed = sessionStorage.getItem("env_banner_dismissed");
-          if (!dismissed) {
-            setShowEnvBanner(true);
-          }
-        }
-      } catch (error) {
-        console.error(
-          "[App] Failed to check environment conflicts on app switch:",
-          error,
-        );
-      }
+    return () => {
+      cancelled = true;
     };
-
-    checkEnvOnSwitch();
-  }, [activeApp]);
+  }, [activeApp, availableAppIds]);
 
   const currentViewRef = useRef(currentView);
   const managementBusy =
@@ -1900,7 +1869,7 @@ function App() {
       case "plugins":
         return (
           <PluginsPage
-            apps={APP_IDS_WITH.plugins.filter((app) => visibleApps[app])}
+            apps={APP_IDS_WITH.plugins.filter((app) => sidebarVisibleApps[app])}
             initialApp={appHas(activeApp, "plugins") ? activeApp : "claude"}
           />
         );
@@ -1909,12 +1878,7 @@ function App() {
           <div id="main-content" className="flex min-h-0 flex-1 flex-col">
             <PromptPanel
               appId={promptsApp}
-              apps={APP_IDS_WITH.prompts.filter(
-                (app) =>
-                  visibleApps[app] ||
-                  (app === "claude" && visibleApps["claude-desktop"]) ||
-                  app === promptsApp,
-              )}
+              apps={promptApps}
               onAppChange={setPromptsApp}
               onNavigationBlockedChange={setPromptNavigationBusy}
             />
@@ -1993,9 +1957,10 @@ function App() {
               }}
               onDeleted={async () => {
                 try {
-                  const allConflicts = await checkAllEnvConflicts();
+                  const allConflicts =
+                    await checkAllEnvConflicts(availableAppIds);
                   const flatConflicts = Object.values(allConflicts).flat();
-                  setEnvConflicts(flatConflicts);
+                  setEnvConflicts(allConflicts);
                   if (flatConflicts.length === 0) {
                     setShowEnvBanner(false);
                   }

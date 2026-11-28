@@ -4,6 +4,8 @@
     "description": "Claude Code, Codex ve Gemini CLI için Hepsi Bir Arada Asistan"
   },
   "common": {
+    "noAvailableAgents": "Kullanılabilir Agent yok",
+    "noAvailableAgentsHint": "Agent Yönetimi'nde bu özelliği destekleyen bir Agent yükleyip etkinleştirin.",
     "unsavedLeaveTitle": "Kaydedilmemiş değişiklikler",
     "unsavedLeaveMessage": "Ayrılırsanız bu editör sayfasındaki değişiklikler kaydedilmeyecektir.",
     "unsavedLeaveConfirm": "Değişiklikleri at ve ayrıl",

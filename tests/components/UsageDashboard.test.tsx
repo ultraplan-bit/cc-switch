@@ -10,6 +10,17 @@ import {
 import type { UsageRangeSelection } from "@/types/usage";
 import { setSettings } from "../msw/state";
 import { createTestQueryClient } from "../utils/testQueryClient";
+import { APP_IDS } from "@/config/appSpecs";
+
+const availability = vi.hoisted(() => ({
+  installedApps: {} as Record<string, boolean>,
+}));
+vi.mock("@/hooks/useAgentAvailability", () => ({
+  useAgentAvailability: () => ({
+    installedApps: availability.installedApps,
+    isPending: false,
+  }),
+}));
 
 const useProviderStatsMock = vi.hoisted(() => vi.fn());
 const useModelStatsMock = vi.hoisted(() => vi.fn());
@@ -182,6 +193,9 @@ const syncButton = () =>
 
 describe("UsageDashboard", () => {
   beforeEach(() => {
+    availability.installedApps = Object.fromEntries(
+      APP_IDS.map((app) => [app, true]),
+    );
     resetUsageSyncClockForTests();
     useProviderStatsMock.mockReset();
     useModelStatsMock.mockReset();
@@ -314,7 +328,7 @@ describe("UsageDashboard", () => {
     const user = userEvent.setup();
     renderDashboard();
 
-    await user.click(screen.getByRole("button", { name: "Pi" }));
+    await user.click(await screen.findByRole("button", { name: "Pi" }));
 
     await waitFor(() =>
       expect(useProviderStatsMock).toHaveBeenLastCalledWith(
@@ -343,7 +357,7 @@ describe("UsageDashboard", () => {
 
     // Two products, two filters: the chip must query appType "omp" and must
     // not be confused with Pi's.
-    await user.click(screen.getByRole("button", { name: "Oh My Pi" }));
+    await user.click(await screen.findByRole("button", { name: "Oh My Pi" }));
 
     await waitFor(() =>
       expect(useProviderStatsMock).toHaveBeenLastCalledWith(
@@ -361,18 +375,19 @@ describe("UsageDashboard", () => {
     ).toBeInTheDocument();
   });
 
-  it("starts with the app filter passed in from an app page", () => {
+  it("starts with the available app filter passed in from an app page", async () => {
     renderDashboard({ initialAppType: "codex" });
 
     expect(
-      screen.getByRole("button", { name: /Codex/, pressed: true }),
+      await screen.findByRole("button", { name: /Codex/, pressed: true }),
     ).toBeInTheDocument();
     expect(usageHeroMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ appType: "codex" }),
     );
   });
 
-  it("lists only the apps shown on the Apps page, keeping the selected one", async () => {
+  it("excludes disabled and uninstalled apps and drops an unavailable initial selection", async () => {
+    availability.installedApps.codex = false;
     setSettings({
       visibleApps: {
         claude: false,
@@ -390,7 +405,7 @@ describe("UsageDashboard", () => {
         agy: false,
         omp: false,
         copilot: false,
-        workbuddy: false,
+        workbuddy: true,
       },
     });
     renderDashboard({ initialAppType: "gemini" });
@@ -400,16 +415,28 @@ describe("UsageDashboard", () => {
         screen.queryByRole("button", { name: "Pi" }),
       ).not.toBeInTheDocument(),
     );
-    // Claude Desktop 显示时 Claude Code 的用量也列；选中的 Gemini 虽被隐藏也留着
+    await screen.findByRole("button", { name: /WorkBuddy/ });
     expect(
-      screen.getByRole("button", { name: "Claude Code" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Codex/ })).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Claude Code" }),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Gemini/, pressed: true }),
+      screen.queryByRole("button", { name: /Codex/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Gemini/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "usage.appFilter.all",
+        pressed: true,
+      }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Grok/ }),
+    ).not.toBeInTheDocument();
+    await openSettings(userEvent.setup());
+    expect(
+      screen.queryByText("usage.rebuildCodex.title"),
     ).not.toBeInTheDocument();
   });
 

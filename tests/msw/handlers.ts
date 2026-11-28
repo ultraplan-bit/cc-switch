@@ -244,19 +244,8 @@ export const handlers = [
 
   // MCP APIs
   http.post(`${TAURI_ENDPOINT}/resync_mcp_to_apps`, async ({ request }) => {
-    const { apps } = await withJson<{ apps?: AppId[] | null }>(request);
-    const targets = apps?.length
-      ? apps
-      : [
-          "claude",
-          "codex",
-          "gemini",
-          "grokbuild",
-          "opencode",
-          "hermes",
-          "mcode",
-        ];
-    return success(targets.map((app) => ({ app, ok: true })));
+    const { apps } = await withJson<{ apps: AppId[] }>(request);
+    return success(apps.map((app) => ({ app, ok: true })));
   }),
 
   // Skills / 用量：新加的只读或重投影命令，测试里默认都成功

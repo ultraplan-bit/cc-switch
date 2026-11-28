@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { BookOpen } from "lucide-react";
+import { AppPageHeader } from "@/components/shell/AppPageHeader";
 import { toast } from "@/lib/toast";
 import { APP_DISPLAY_NAME } from "@/components/shell/AppGlyph";
 import { promptsApi, type AppId, type Prompt } from "@/lib/api";
@@ -26,7 +28,7 @@ import {
 
 export interface PromptPanelProps {
   appId: AppId;
-  /** 应用下拉里的应用（只列「应用」页里设为显示、且支持提示词的） */
+  /** 已安装、已启用且支持提示词的 Agent。 */
   apps: AppId[];
   onAppChange: (app: AppId) => void;
   open?: boolean;
@@ -43,6 +45,7 @@ const StandardPromptPanel: React.FC<PromptPanelProps> = ({
   onNavigationBlockedChange,
 }) => {
   const { t } = useTranslation();
+  const available = apps.includes(appId);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -82,6 +85,7 @@ const StandardPromptPanel: React.FC<PromptPanelProps> = ({
   // 不让整列按钮闪一下变灰。拦截仍看 interactionBlocked 和写锁；表单、对话框打开时照常立即禁用。
   const controlsDisabled =
     useDelayedFlag(loading || reloadPending || writePending) ||
+    !available ||
     isFormOpen ||
     dialogOpen;
 
@@ -122,7 +126,8 @@ const StandardPromptPanel: React.FC<PromptPanelProps> = ({
   }, []);
 
   const beginWrite = () => {
-    if (loading || reloadLockRef.current || writeLockRef.current) return false;
+    if (!available || loading || reloadLockRef.current || writeLockRef.current)
+      return false;
     writeLockRef.current = true;
     setWritePending(true);
     return true;
@@ -405,7 +410,7 @@ const StandardPromptPanel: React.FC<PromptPanelProps> = ({
     const timestamp = Math.floor(Date.now() / 1000);
     const created: Array<{ app: AppId; id: string }> = [];
     const failed: AppId[] = [];
-    for (const target of targets) {
+    for (const target of targets.filter((app) => apps.includes(app))) {
       const id = `prompt-${Date.now()}`;
       try {
         await promptsApi.upsertPrompt(target, id, {
@@ -556,6 +561,7 @@ const StandardPromptPanel: React.FC<PromptPanelProps> = ({
       {isFormOpen && (
         <PromptFormPanel
           appId={appId}
+          saveDisabled={!available}
           editingId={editingId || undefined}
           initialData={editingId ? prompts[editingId] : undefined}
           onSave={handleSave}
@@ -581,19 +587,61 @@ const StandardPromptPanel: React.FC<PromptPanelProps> = ({
 };
 
 const PromptPanel: React.FC<PromptPanelProps> = (props) => {
-  if (props.appId === "pi") {
+  const { t } = useTranslation();
+  const [blockedApp, setBlockedApp] = useState<AppId | null>(null);
+  // 保留正在编辑的草稿或写入，关闭编辑器/写入结束后再改选可用目标。
+  const appId = props.apps.includes(props.appId)
+    ? props.appId
+    : (blockedApp ?? props.apps[0]);
+  const onInteractionBlockedChange = React.useCallback(
+    (blocked: boolean) => {
+      setBlockedApp(blocked ? (appId ?? null) : null);
+      props.onInteractionBlockedChange?.(blocked);
+    },
+    [appId, props.onInteractionBlockedChange],
+  );
+  useEffect(() => {
+    if (appId && appId !== props.appId) props.onAppChange(appId);
+  }, [appId, props.appId, props.onAppChange]);
+
+  if (!appId) {
+    return (
+      <>
+        <AppPageHeader
+          icon={<BookOpen className="h-5 w-5" />}
+          title={t("nav.prompts")}
+        />
+        <div
+          className="px-6 py-12 text-center text-body text-fg-2"
+          role="status"
+        >
+          <p>{t("common.noAvailableAgents")}</p>
+          <p className="mt-2">{t("common.noAvailableAgentsHint")}</p>
+        </div>
+      </>
+    );
+  }
+
+  if (appId === "pi") {
     return (
       <PiPromptPanel
         open={props.open ?? true}
         apps={props.apps}
         onAppChange={props.onAppChange}
-        onInteractionBlockedChange={props.onInteractionBlockedChange}
+        onInteractionBlockedChange={onInteractionBlockedChange}
         onNavigationBlockedChange={props.onNavigationBlockedChange}
       />
     );
   }
 
-  return <StandardPromptPanel {...props} />;
+  return (
+    <StandardPromptPanel
+      key={appId}
+      {...props}
+      appId={appId}
+      onInteractionBlockedChange={onInteractionBlockedChange}
+    />
+  );
 };
 
 export default PromptPanel;

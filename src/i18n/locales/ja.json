@@ -4,6 +4,8 @@
     "description": "Claude Code・Codex・Gemini CLI のためのオールインワンアシスタント"
   },
   "common": {
+    "noAvailableAgents": "利用可能な Agent がありません",
+    "noAvailableAgentsHint": "Agent 管理で、この機能をサポートする Agent をインストールして有効にしてください。",
     "unsavedLeaveTitle": "未保存の変更があります",
     "unsavedLeaveMessage": "移動すると、この編集ページの変更は保存されません。",
     "unsavedLeaveConfirm": "破棄して移動",

@@ -1,12 +1,25 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   PricingConfigPanel,
   filterPricingByPrefix,
 } from "@/components/usage/PricingConfigPanel";
 import type { ModelPricing } from "@/types/usage";
+import { proxyApi } from "@/lib/api/proxy";
+
+const availability = vi.hoisted(() => ({
+  apps: ["claude", "codex", "gemini", "grokbuild"],
+}));
+vi.mock("@/components/mcp/useVisibleAppIds", () => ({
+  useVisibleAppIds: () => availability.apps,
+}));
+beforeEach(() => {
+  availability.apps = ["claude", "codex", "gemini", "grokbuild"];
+  vi.mocked(proxyApi.getPricingModelSource).mockClear();
+  vi.mocked(proxyApi.setPricingModelSource).mockClear();
+});
 
 // t 必须是稳定引用：useBillingSources 的 effect 依赖 [t]，每次渲染换新函数会无限重跑。
 const i18nMock = vi.hoisted(() => ({
@@ -123,6 +136,29 @@ describe("filterPricingByPrefix", () => {
 });
 
 describe("PricingConfigPanel search", () => {
+  it("loads and edits billing defaults only for available agents", async () => {
+    availability.apps = ["codex"];
+    const user = userEvent.setup();
+    render(<PricingConfigPanel />);
+    await user.click(
+      await screen.findByRole("button", { name: "usage.pricing.edit" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Codex")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Claude Code")).not.toBeInTheDocument();
+    expect(vi.mocked(proxyApi.getPricingModelSource).mock.calls).toEqual([
+      ["codex"],
+    ]);
+  });
+
+  it("hides billing defaults when no routing agent is available", () => {
+    availability.apps = [];
+    render(<PricingConfigPanel />);
+    expect(
+      screen.queryByText("settings.globalProxy.pricingDefaultsTitle"),
+    ).not.toBeInTheDocument();
+    expect(proxyApi.getPricingModelSource).not.toHaveBeenCalled();
+  });
   it("filters the table as the user types", async () => {
     const user = userEvent.setup();
     render(<PricingConfigPanel />);

@@ -4,6 +4,8 @@
     "description": "Claude Code / Codex / Gemini CLI 全方位輔助工具"
   },
   "common": {
+    "noAvailableAgents": "暫無可用 Agent",
+    "noAvailableAgentsHint": "請在 Agent 管理中安裝並啟用支援此功能的 Agent。",
     "unsavedLeaveTitle": "有未儲存的修改",
     "unsavedLeaveMessage": "離開後，目前編輯頁裡的修改不會儲存。",
     "unsavedLeaveConfirm": "放棄修改並離開",

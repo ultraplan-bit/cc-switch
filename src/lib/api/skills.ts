@@ -282,8 +282,8 @@ export const skillsApi = {
   },
 
   /** 立即重新同步：按开关和当前同步方式把 Skill 重新投影到各应用目录 */
-  async resyncToApps(): Promise<SkillAppSyncOutcome[]> {
-    return await invoke("resync_skills_to_apps");
+  async resyncToApps(apps: AppId[]): Promise<SkillAppSyncOutcome[]> {
+    return await invoke("resync_skills_to_apps", { apps });
   },
 
   /** 更新单个 Skill */

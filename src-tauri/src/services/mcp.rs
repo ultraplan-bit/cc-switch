@@ -494,13 +494,10 @@ impl McpService {
             .collect()
     }
 
-    /// 解析「重新同步」的目标应用：缺省或空列表＝全部受管应用；
+    /// 解析导入 / 重新同步的目标应用；空列表不选择任何应用。
     /// 不认识或不支持 MCP 的应用直接报错，不静默跳过。
-    pub fn resync_targets(apps: Option<&[String]>) -> Result<Vec<AppType>, AppError> {
+    pub fn resync_targets(apps: &[String]) -> Result<Vec<AppType>, AppError> {
         let managed = Self::live_sync_apps();
-        let Some(apps) = apps.filter(|apps| !apps.is_empty()) else {
-            return Ok(managed);
-        };
         let mut targets = Vec::new();
         for raw in apps {
             let app = <AppType as std::str::FromStr>::from_str(raw)?;
@@ -640,33 +637,18 @@ impl McpService {
         Ok(new_count)
     }
 
-    /// 从所有支持 MCP 的应用导入服务器，返回新导入的数量。
+    /// 从选定的应用导入 MCP 服务器，返回新导入的数量。
     ///
     /// Best-effort：单个应用导入失败（如坏 config.toml）不阻断其余应用；
     /// 全部跑完后若有失败，聚合成一个错误上报——历史实现逐应用
     /// `unwrap_or(0)` 吞错，坏文件只会表现为"导入成功 0 个"，用户
     /// 无从得知哪个应用出了问题。
-    pub fn import_from_all_apps(state: &AppState) -> Result<usize, AppError> {
+    pub fn import_from_apps(state: &AppState, apps: &[AppType]) -> Result<usize, AppError> {
         let mut total = 0;
         let mut failures: Vec<String> = Vec::new();
 
-        for app in [
-            AppType::Claude,
-            AppType::Codex,
-            AppType::Gemini,
-            AppType::GrokBuild,
-            AppType::OpenCode,
-            AppType::Hermes,
-            AppType::Mcode,
-            AppType::Kimi,
-            AppType::Dsh,
-            AppType::WorkBuddy,
-            AppType::Agy,
-            AppType::Pi,
-            AppType::Omp,
-            AppType::Copilot,
-        ] {
-            match Self::import_from_app(state, &app) {
+        for app in apps {
+            match Self::import_from_app(state, app) {
                 Ok(count) => total += count,
                 Err(err) => {
                     log::warn!("从 {} 导入 MCP 失败: {err}", app.as_str());

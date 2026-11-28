@@ -1,5 +1,11 @@
 import { QueryClientProvider, useMutation } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import PromptPanel from "@/components/prompts/PromptPanel";
@@ -14,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   reload: vi.fn(),
   toggleEnabled: vi.fn(),
   importFromFile: vi.fn(),
+  savePrompt: vi.fn(),
   toastSuccess: vi.fn(),
 }));
 
@@ -40,7 +47,7 @@ vi.mock("@/hooks/usePromptActions", () => ({
     currentFileContent: mocks.state.currentFileContent,
     togglingId: null,
     reload: mocks.reload,
-    savePrompt: vi.fn(),
+    savePrompt: mocks.savePrompt,
     deletePrompt: vi.fn(),
     toggleEnabled: mocks.toggleEnabled,
     importFromFile: mocks.importFromFile,
@@ -72,6 +79,8 @@ describe("Pi prompts page", () => {
     mocks.toggleEnabled.mockResolvedValue(true);
     mocks.importFromFile.mockReset();
     mocks.importFromFile.mockResolvedValue("imported");
+    mocks.savePrompt.mockReset();
+    mocks.savePrompt.mockResolvedValue(true);
     mocks.toastSuccess.mockReset();
     vi.spyOn(promptsApi, "getFileLocation").mockResolvedValue({
       path: "/Users/me/.pi/agent/AGENTS.md",
@@ -197,5 +206,123 @@ describe("Pi prompts page", () => {
         }),
       ),
     );
+  });
+
+  it("preserves an unavailable Pi library draft and prevents a new save", async () => {
+    const client = createTestQueryClient();
+    const onAppChange = vi.fn();
+    const panel = (apps: ("pi" | "claude")[]) => (
+      <QueryClientProvider client={client}>
+        <PromptPanel appId="pi" apps={apps} onAppChange={onAppChange} />
+      </QueryClientProvider>
+    );
+    const view = render(panel(["pi", "claude"]));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "prompts.editAria:Team" }),
+    );
+    fireEvent.change(screen.getByLabelText("prompts.content"), {
+      target: { value: "my draft" },
+    });
+    view.rerender(panel(["claude"]));
+    expect(screen.getByLabelText("prompts.content")).toHaveValue("my draft");
+    expect(screen.getByRole("button", { name: "common.save" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    expect(mocks.savePrompt).not.toHaveBeenCalled();
+    expect(onAppChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "common.cancel" }));
+    await waitFor(() => expect(onAppChange).toHaveBeenCalledWith("claude"));
+  });
+
+  it.each(["system", "templates"] as const)(
+    "keeps a Pi %s draft when Pi disappears",
+    async (kind) => {
+      const client = createTestQueryClient();
+      const onAppChange = vi.fn();
+      const replace = vi
+        .spyOn(promptsApi, "replacePiPromptFile")
+        .mockResolvedValue({
+          exists: true,
+          revision: "saved",
+          content: "draft",
+        });
+      const upsert = vi
+        .spyOn(promptsApi, "upsertPiPromptTemplate")
+        .mockResolvedValue({ slug: "draft", revision: "saved", content: "" });
+      const panel = (apps: ("pi" | "claude")[]) => (
+        <QueryClientProvider client={client}>
+          <PromptPanel appId="pi" apps={apps} onAppChange={onAppChange} />
+        </QueryClientProvider>
+      );
+      const view = render(panel(["pi", "claude"]));
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name:
+            kind === "system"
+              ? "pi.prompts.systemTab"
+              : "pi.prompts.templatesTab",
+        }),
+      );
+      if (kind === "system") {
+        const create = await screen.findByRole("button", {
+          name: "pi.prompts.create APPEND_SYSTEM.md",
+        });
+        await waitFor(() => expect(create).toBeEnabled());
+        fireEvent.click(create);
+        fireEvent.change(
+          screen.getByPlaceholderText("pi.prompts.instructionPlaceholder"),
+          { target: { value: "native draft" } },
+        );
+      } else {
+        fireEvent.click(
+          (
+            await screen.findAllByRole("button", {
+              name: "pi.prompts.newTemplate",
+            })
+          )[0],
+        );
+        fireEvent.change(
+          screen.getByPlaceholderText("pi.prompts.templateSlug"),
+          { target: { value: "draft" } },
+        );
+      }
+      view.rerender(panel(["claude"]));
+      const save = screen.getByRole("button", {
+        name: kind === "system" ? "common.save" : "pi.prompts.createTemplate",
+      });
+      expect(save).toBeDisabled();
+      fireEvent.click(save);
+      expect(replace).not.toHaveBeenCalled();
+      expect(upsert).not.toHaveBeenCalled();
+      expect(onAppChange).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: "common.cancel" }));
+      await waitFor(() => expect(onAppChange).toHaveBeenCalledWith("claude"));
+    },
+  );
+
+  it("allows an already-started Pi library save to finish after Pi disappears", async () => {
+    let finishSave!: () => void;
+    mocks.savePrompt.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishSave = resolve;
+      }),
+    );
+    const client = createTestQueryClient();
+    const onAppChange = vi.fn();
+    const panel = (apps: ("pi" | "claude")[]) => (
+      <QueryClientProvider client={client}>
+        <PromptPanel appId="pi" apps={apps} onAppChange={onAppChange} />
+      </QueryClientProvider>
+    );
+    const view = render(panel(["pi", "claude"]));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "prompts.editAria:Team" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    expect(mocks.savePrompt).toHaveBeenCalledTimes(1);
+    view.rerender(panel(["claude"]));
+    expect(screen.getByLabelText("prompts.content")).toHaveValue("# Team");
+    expect(onAppChange).not.toHaveBeenCalled();
+    await act(async () => finishSave());
+    await waitFor(() => expect(onAppChange).toHaveBeenCalledWith("claude"));
   });
 });

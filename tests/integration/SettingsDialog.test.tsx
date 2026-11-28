@@ -4,6 +4,7 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { http, HttpResponse } from "msw";
 import type { Settings } from "@/types";
+import { APP_IDS } from "@/config/appSpecs";
 import { SettingsPage } from "@/components/settings/SettingsPage";
 import {
   resetProviderState,
@@ -15,6 +16,13 @@ import { server } from "../msw/server";
 
 const toastSuccessMock = vi.fn();
 const toastErrorMock = vi.fn();
+
+vi.mock("@/hooks/useAgentAvailability", () => ({
+  useAgentAvailability: () => ({
+    installedApps: Object.fromEntries(APP_IDS.map((app) => [app, true])),
+    isPending: false,
+  }),
+}));
 
 vi.mock("sonner", () => ({
   toast: {

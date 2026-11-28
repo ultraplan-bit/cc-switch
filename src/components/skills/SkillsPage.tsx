@@ -310,7 +310,7 @@ export function SkillsPage({
   }, [installedSkills]);
 
   const enabledAppCount = (skill: InstalledSkill) =>
-    APP_IDS_WITH.skills.filter((app) => skill.apps[app]).length;
+    visibleAppIds.filter((app) => skill.apps[app]).length;
 
   const sourceLabel = (skill: InstalledSkill) =>
     skill.repoOwner && skill.repoName

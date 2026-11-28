@@ -223,6 +223,35 @@ describe("PromptPanel", () => {
     vi.spyOn(promptsApi, "deletePrompt").mockResolvedValue(undefined);
   });
 
+  it("shows an empty state without querying or configuring an unavailable Agent", () => {
+    renderPanel({ appId: "claude", apps: [] });
+    expect(screen.getByText("common.noAvailableAgents")).toBeInTheDocument();
+    expect(screen.queryByText("prompts.add")).not.toBeInTheDocument();
+    expect(mocks.getReload).not.toHaveBeenCalled();
+    expect(promptsApi.getFileLocation).not.toHaveBeenCalled();
+  });
+
+  it("replaces an unavailable selection and never restores it as a picker option", async () => {
+    const onAppChange = vi.fn();
+    const { rerenderWith } = renderPanel({
+      appId: "claude",
+      apps: ["codex"],
+      onAppChange,
+    });
+    await waitForPanelReady();
+    expect(onAppChange).toHaveBeenCalledWith("codex");
+    expect(mocks.getReload).not.toHaveBeenCalledWith("claude");
+    expect(
+      screen.getByRole("button", { name: /prompts.appLabel/ }),
+    ).toHaveTextContent("Codex");
+
+    rerenderWith({ appId: "codex", apps: [], onAppChange });
+    expect(screen.getByText("common.noAvailableAgents")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /prompts.appLabel/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it.each([
     ["record ID", "RECORD-INDEX-47"],
     ["prompt ID", "PAYLOAD-IDENTIFIER-92"],
@@ -458,7 +487,7 @@ describe("PromptPanel", () => {
   it("imports the existing file from the empty state with an undo", async () => {
     mocks.state.prompts = {};
     mocks.state.currentFileContent = "# Rules\n\nBe brief.";
-    renderPanel({ appId: "grokbuild" });
+    renderPanel({ appId: "grokbuild", apps: ["grokbuild"] });
 
     expect(
       await screen.findByText("prompts.emptyTitle:Grok Build"),
@@ -816,6 +845,49 @@ describe("PromptPanel", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("prompt-form")).not.toBeInTheDocument();
     });
+  });
+
+  it("keeps a draft and pending save on its original Agent when availability changes", async () => {
+    let finishSave!: () => void;
+    mocks.savePrompt.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishSave = resolve;
+      }),
+    );
+    const onAppChange = vi.fn();
+    const view = renderPanel({ onAppChange });
+    await waitForPanelReady();
+    fireEvent.click(editButton("Harbor Prompt"));
+    fireEvent.click(screen.getByRole("button", { name: "form-save" }));
+    view.rerenderWith({ appId: "claude", apps: ["codex"], onAppChange });
+    expect(screen.getByTestId("prompt-form")).toHaveTextContent(
+      "Harbor Prompt",
+    );
+    expect(onAppChange).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: /prompts.appLabel/ }),
+    ).toHaveTextContent("Claude Code");
+    await act(async () => finishSave());
+    await waitFor(() => expect(onAppChange).toHaveBeenCalledWith("codex"));
+    expect(screen.queryByTestId("prompt-form")).not.toBeInTheDocument();
+  });
+
+  it("keeps a disappeared Agent's draft without starting a new save", async () => {
+    const onAppChange = vi.fn();
+    const view = renderPanel({ onAppChange });
+    await waitForPanelReady();
+    fireEvent.click(editButton("Harbor Prompt"));
+    view.rerenderWith({ appId: "claude", apps: ["codex"], onAppChange });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "form-save" }));
+    });
+    expect(mocks.savePrompt).not.toHaveBeenCalled();
+    expect(screen.getByTestId("prompt-form")).toHaveTextContent(
+      "Harbor Prompt",
+    );
+    expect(onAppChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "form-close" }));
+    await waitFor(() => expect(onAppChange).toHaveBeenCalledWith("codex"));
   });
 
   it("uses the Hermes rule in the page help", async () => {

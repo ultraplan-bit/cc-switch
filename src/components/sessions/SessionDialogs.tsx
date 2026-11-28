@@ -169,12 +169,14 @@ export function SessionDeleteDialog({
 interface SessionSourcesDialogProps {
   open: boolean;
   onClose: () => void;
+  apps: readonly SessionAppId[];
 }
 
 /** 「会话记录在哪里」：列出 9 个来源的默认位置。 */
 export function SessionSourcesDialog({
   open,
   onClose,
+  apps,
 }: SessionSourcesDialogProps) {
   const { t } = useTranslation();
   return (
@@ -199,7 +201,7 @@ export function SessionSourcesDialog({
             </DialogDescription>
           </div>
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
-            {SESSION_APP_IDS.map((app) => (
+            {apps.map((app) => (
               <li key={app} className="flex items-start gap-2.5 text-body">
                 <span className="flex h-5 w-4 shrink-0 items-center">
                   <AppGlyph app={app} size={14} badgeClassName="bg-surface" />

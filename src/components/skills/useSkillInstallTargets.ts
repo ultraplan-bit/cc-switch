@@ -55,7 +55,7 @@ export function useSkillInstallTargets(visibleAppIds: readonly AppId[]) {
     install: (firstApp: AppId | null) => Promise<T[]>,
     apps: AppId[] = targets,
   ) => {
-    const [first, ...rest] = apps;
+    const [first, ...rest] = apps.filter((app) => visibleAppIds.includes(app));
     const installed = await install(first ?? null);
     const failures: Array<{ id: string; app: AppId; error: unknown }> = [];
     for (const skill of installed) {
