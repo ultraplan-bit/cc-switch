@@ -28,6 +28,11 @@ export function ProfileCard({
   const { t } = useTranslation();
   const nameId = useId();
   const desktop = scope === "claude-desktop";
+  const project = profile.target === "project";
+  const projectDirect =
+    project &&
+    scope === "claude" &&
+    profile.payload.claudeProjectConnection === "direct";
   const model = profile.payload.models?.[scope];
   const mcpCount = profile.payload.mcp[scope]?.length ?? 0;
   const skillCount = profile.payload.skills[scope]?.length ?? 0;
@@ -67,12 +72,20 @@ export function ProfileCard({
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-fg-2">
           <span className="inline-flex min-w-0 items-center gap-1">
             <Plug aria-hidden="true" size={13} className="shrink-0" />
-            <span className="break-all">{providerName}</span>
+            <span className="break-all">
+              {project && !projectDirect
+                ? t("profiles.editor.projectConnectionInherit")
+                : providerName}
+            </span>
           </span>
-          {scope === "claude" &&
-            profile.payload.claudeProjectConnection === "direct" && (
-              <span>{t("profiles.editor.projectConnectionDirect")}</span>
-            )}
+          {projectDirect && (
+            <span>{t("profiles.editor.projectConnectionDirect")}</span>
+          )}
+          {project && !projectDirect && profile.payload.providers[scope] && (
+            <span className="break-all">
+              {t("profiles.editor.projectModelProvider")}: {providerName}
+            </span>
+          )}
           {!desktop && (
             <span className="inline-flex min-w-0 items-center gap-1">
               <Cpu aria-hidden="true" size={13} className="shrink-0" />

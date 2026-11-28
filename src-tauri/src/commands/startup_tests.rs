@@ -233,18 +233,26 @@ fn remaining_database_commands_yield_during_session_sync_contention() {
     );
     assert!(!batch.is_empty());
 
-    let profile = query!(create_profile, "Test profile".into(), "claude".into(), None);
+    let profile = query!(
+        create_profile,
+        "Test profile".into(),
+        "claude".into(),
+        None,
+        crate::database::ProfileTarget::Global
+    );
     let blank = query!(
         create_profile,
         "Blank".into(),
         "claude".into(),
-        Some(crate::services::profile::ProfileSource::Blank)
+        Some(crate::services::profile::ProfileSource::Blank),
+        crate::database::ProfileTarget::Global
     );
     let copy = query!(
         duplicate_profile,
         blank.id.clone(),
         "Copy".into(),
-        "claude".into()
+        "claude".into(),
+        crate::database::ProfileTarget::Global
     );
     query!(delete_profile, copy.id, "claude".into());
     query!(delete_profile, blank.id, "claude".into());
@@ -305,7 +313,8 @@ fn remaining_database_commands_yield_during_session_sync_contention() {
         app.state(),
         "x".into(),
         "nope".into(),
-        None
+        None,
+        crate::database::ProfileTarget::Global
     ))
     .is_err());
 }
@@ -418,7 +427,13 @@ fn profile_and_universal_mutations_wait_for_their_serial_locks() {
     let profile = while_serialized(
         &super::profile::PROFILE_LOCK,
         "create_profile",
-        super::create_profile(app.state(), "Serialized".into(), "claude".into(), None),
+        super::create_profile(
+            app.state(),
+            "Serialized".into(),
+            "claude".into(),
+            None,
+            crate::database::ProfileTarget::Global,
+        ),
     )
     .unwrap();
     while_serialized(

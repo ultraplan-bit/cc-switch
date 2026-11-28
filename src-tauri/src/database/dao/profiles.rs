@@ -1,6 +1,6 @@
 //! 项目 Profile 数据访问对象
 //!
-//! profiles 表存放全应用共享的项目实体（供应商/MCP/Skills/Prompt 快照），
+//! profiles 表存放用途独立的全局/项目配置方案，
 //! payload 为原始 JSON 文本（按 app 分槽），解析在 service 层进行。
 //! 各应用分组（scope）独立的 current 标记存放于 settings 表（key-value）。
 
@@ -8,12 +8,41 @@ use crate::database::{lock_conn, Database};
 use crate::error::AppError;
 use rusqlite::params;
 
+/// A Profile's immutable purpose; copying can create a new record for another target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProfileTarget {
+    Global,
+    Project,
+}
+
+impl ProfileTarget {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Global => "global",
+            Self::Project => "project",
+        }
+    }
+}
+
+impl rusqlite::types::FromSql for ProfileTarget {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        match value.as_str()? {
+            "global" => Ok(Self::Global),
+            "project" => Ok(Self::Project),
+            value => Err(rusqlite::types::FromSqlError::Other(
+                format!("不支持的 Profile 用途: {value}；记录保持原样").into(),
+            )),
+        }
+    }
+}
+
 /// 每个 scope 的 current 标记 key = 前缀 + scope（如 current_profile_id_claude）
 const CURRENT_PROFILE_ID_KEY_PREFIX: &str = "current_profile_id_";
 /// The current Profile was edited, or applied with warnings, and no longer
 /// describes the live configuration exactly.
 const CURRENT_PROFILE_STALE_KEY_PREFIX: &str = "current_profile_stale_";
-/// JSON array of normalized project directories any Profile can be deployed to.
+/// JSON array of normalized directories available to project Profiles.
 const PROFILE_PROJECTS_KEY: &str = "profile_projects_v1";
 
 fn current_profile_key(scope: &str) -> String {
@@ -60,11 +89,12 @@ fn read_setting(
     }
 }
 
-/// 项目 Profile 记录（全应用共享，无所属分组）
+/// 全局或项目 Profile 记录；用途固定，配置按 Agent 分槽。
 #[derive(Debug, Clone)]
 pub struct Profile {
     pub id: String,
     pub name: String,
+    pub target: ProfileTarget,
     /// 原始 JSON 快照文本（ProfilePayload），解析在 service 层
     pub payload: String,
     pub sort_order: Option<i64>,
@@ -78,7 +108,7 @@ impl Database {
         let conn = lock_conn!(self.conn);
         let mut stmt = conn
             .prepare(
-                "SELECT id, name, payload, sort_order, created_at, updated_at
+                "SELECT id, name, payload, sort_order, created_at, updated_at, target
                  FROM profiles
                  ORDER BY sort_order IS NULL, sort_order, created_at, id",
             )
@@ -93,6 +123,7 @@ impl Database {
                     sort_order: row.get(3)?,
                     created_at: row.get(4)?,
                     updated_at: row.get(5)?,
+                    target: row.get(6)?,
                 })
             })
             .map_err(|e| AppError::Database(e.to_string()))?;
@@ -109,7 +140,7 @@ impl Database {
         let conn = lock_conn!(self.conn);
         let mut stmt = conn
             .prepare(
-                "SELECT id, name, payload, sort_order, created_at, updated_at
+                "SELECT id, name, payload, sort_order, created_at, updated_at, target
                  FROM profiles WHERE id = ?1",
             )
             .map_err(|e| AppError::Database(e.to_string()))?;
@@ -122,6 +153,7 @@ impl Database {
                 sort_order: row.get(3)?,
                 created_at: row.get(4)?,
                 updated_at: row.get(5)?,
+                target: row.get(6)?,
             })
         }) {
             Ok(profile) => Ok(Some(profile)),
@@ -133,26 +165,34 @@ impl Database {
     /// 保存配置方案（插入或更新全部受管字段）。
     pub fn save_profile(&self, profile: &Profile) -> Result<(), AppError> {
         let conn = lock_conn!(self.conn);
-        conn.execute(
-            "INSERT INTO profiles
-             (id, name, payload, sort_order, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+        let changed = conn
+            .execute(
+                "INSERT INTO profiles
+             (id, name, payload, sort_order, created_at, updated_at, target)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
              ON CONFLICT(id) DO UPDATE SET
                 name = excluded.name,
                 payload = excluded.payload,
                 sort_order = excluded.sort_order,
                 created_at = excluded.created_at,
-                updated_at = excluded.updated_at",
-            params![
-                profile.id,
-                profile.name,
-                profile.payload,
-                profile.sort_order,
-                profile.created_at,
-                profile.updated_at,
-            ],
-        )
-        .map_err(|e| AppError::Database(e.to_string()))?;
+                updated_at = excluded.updated_at
+             WHERE profiles.target = excluded.target",
+                params![
+                    profile.id,
+                    profile.name,
+                    profile.payload,
+                    profile.sort_order,
+                    profile.created_at,
+                    profile.updated_at,
+                    profile.target.as_str(),
+                ],
+            )
+            .map_err(|e| AppError::Database(e.to_string()))?;
+        if changed == 0 {
+            return Err(AppError::InvalidInput(
+                "不能更改已有方案的用途；请复制为另一用途的方案".into(),
+            ));
+        }
         Ok(())
     }
 
@@ -350,6 +390,7 @@ mod tests {
     fn sample(id: &str, name: &str, sort_order: Option<i64>) -> Profile {
         Profile {
             id: id.to_string(),
+            target: crate::database::ProfileTarget::Global,
             name: name.to_string(),
             payload: r#"{"providers":{"claude":null,"codex":null}}"#.to_string(),
             sort_order,

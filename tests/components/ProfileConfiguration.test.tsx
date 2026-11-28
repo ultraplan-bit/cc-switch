@@ -50,11 +50,16 @@ vi.mock("@/components/JsonEditor", () => ({
   ),
 }));
 
-function profile(scope: ProfileScope, nativeConfig: string): Profile {
+function profile(
+  scope: ProfileScope,
+  nativeConfig: string,
+  target: Profile["target"] = "global",
+): Profile {
   const empty = { claude: null, codex: null, "claude-desktop": null };
   return {
     id: "profile",
     name: "My configuration",
+    target,
     payload: {
       providers: { ...empty, [scope]: "first" },
       models: {
@@ -76,10 +81,32 @@ beforeEach(() => {
 });
 
 describe("Profile owns Agent configuration", () => {
-  it("inherits the global connection by default and saves only the project connection choice", async () => {
+  it("keeps global editing free of project connection settings and saves no project choice", async () => {
     renderWithQueryClient(
       <ProfileEditPanel
         profile={profile("claude", "{}")}
+        scope="claude"
+        onClose={vi.fn()}
+      />,
+    );
+    await screen.findByLabelText("profiles.editor.provider");
+    expect(
+      screen.queryByLabelText("profiles.editor.projectConnection"),
+    ).toBeNull();
+    expect(
+      screen.queryByLabelText("profiles.editor.projectModelProvider"),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledOnce());
+    expect(mocks.save.mock.calls[0][0].config).not.toHaveProperty(
+      "claudeProjectConnection",
+    );
+  });
+
+  it("inherits the global connection by default and saves only the project connection choice", async () => {
+    renderWithQueryClient(
+      <ProfileEditPanel
+        profile={profile("claude", "{}", "project")}
         scope="claude"
         onClose={vi.fn()}
       />,
@@ -107,7 +134,7 @@ describe("Profile owns Agent configuration", () => {
   });
 
   it("requires an existing provider for direct access and permits returning to inheritance", async () => {
-    const snapshot = profile("claude", "{}");
+    const snapshot = profile("claude", "{}", "project");
     snapshot.payload.claudeProjectConnection = "direct";
     snapshot.payload.providers.claude = "removed-provider";
     renderWithQueryClient(

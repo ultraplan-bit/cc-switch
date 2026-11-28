@@ -723,6 +723,7 @@ mod tests {
         payload.native_config.codex = Some("[features]\nfuture=true".into());
         let profile = crate::database::Profile {
             id: "active".into(),
+            target: crate::database::ProfileTarget::Global,
             name: "Active".into(),
             payload: serde_json::to_string(&payload).unwrap(),
             sort_order: None,
@@ -785,6 +786,7 @@ mod tests {
         payload.native_config.claude = Some("{}".into());
         let profile = crate::database::Profile {
             id: "removed-default".into(),
+            target: crate::database::ProfileTarget::Global,
             name: "Removed default".into(),
             payload: serde_json::to_string(&payload).unwrap(),
             sort_order: None,
@@ -884,6 +886,7 @@ mod tests {
             });
             let profile = crate::database::Profile {
                 id: format!("clear-{}", app.as_str()),
+                target: crate::database::ProfileTarget::Global,
                 name: "Clear overrides".into(),
                 payload: serde_json::to_string(&payload).unwrap(),
                 sort_order: None,

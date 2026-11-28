@@ -4,6 +4,7 @@ import { Copy, MoreHorizontal, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -25,15 +26,19 @@ import {
 } from "@/lib/query/profiles";
 import type { Profile, ProfileScope } from "@/lib/api/profiles";
 
-type Action = "rename" | "duplicate" | "capture" | "delete";
+type Action = "rename" | "duplicate" | "copyTarget" | "capture" | "delete";
 
 /** Occasional actions on one profile. Everything here changes the saved profile only. */
 export function ProfileActionsMenu({
   profile,
   scope,
+  onCopied,
+  allowTargetCopy = true,
 }: {
   profile: Profile;
   scope: ProfileScope;
+  onCopied: (profile: Profile) => void;
+  allowTargetCopy?: boolean;
 }) {
   const { t } = useTranslation();
   const [action, setAction] = useState<Action | null>(null);
@@ -42,7 +47,13 @@ export function ProfileActionsMenu({
   const duplicateMutation = useDuplicateProfileMutation();
   const deleteMutation = useDeleteProfileMutation();
   const close = () => setAction(null);
-  const naming = action === "rename" || action === "duplicate";
+  const naming =
+    action === "rename" || action === "duplicate" || action === "copyTarget";
+  const otherTarget = profile.target === "global" ? "project" : "global";
+  const copyLabel =
+    otherTarget === "global"
+      ? "profiles.copyToGlobal"
+      : "profiles.copyToProject";
   const namePending = updateMutation.isPending || duplicateMutation.isPending;
 
   const submitName = () => {
@@ -55,8 +66,18 @@ export function ProfileActionsMenu({
       );
     } else {
       duplicateMutation.mutate(
-        { sourceId: profile.id, name: trimmed, scope },
-        { onSuccess: close },
+        {
+          sourceId: profile.id,
+          name: trimmed,
+          scope,
+          target: action === "copyTarget" ? otherTarget : profile.target,
+        },
+        {
+          onSuccess: (copied) => {
+            close();
+            if (action === "copyTarget") onCopied(copied);
+          },
+        },
       );
     }
   };
@@ -96,10 +117,23 @@ export function ProfileActionsMenu({
             <Copy className="h-4 w-4" />
             {t("profiles.duplicate")}
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setAction("capture")}>
-            <RefreshCw className="h-4 w-4" />
-            {t("profiles.captureCurrent")}
-          </DropdownMenuItem>
+          {allowTargetCopy && scope !== "claude-desktop" && (
+            <DropdownMenuItem
+              onSelect={() => {
+                setName(t("profiles.duplicateName", { name: profile.name }));
+                setAction("copyTarget");
+              }}
+            >
+              <Copy className="h-4 w-4" />
+              {t(copyLabel)}
+            </DropdownMenuItem>
+          )}
+          {profile.target === "global" && (
+            <DropdownMenuItem onSelect={() => setAction("capture")}>
+              <RefreshCw className="h-4 w-4" />
+              {t("profiles.captureCurrent")}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             className="text-destructive focus:text-destructive"
@@ -124,9 +158,16 @@ export function ProfileActionsMenu({
                 {t(
                   action === "rename"
                     ? "profiles.rename"
-                    : "profiles.duplicateTitle",
+                    : action === "copyTarget"
+                      ? copyLabel
+                      : "profiles.duplicateTitle",
                 )}
               </DialogTitle>
+              {action === "copyTarget" && (
+                <DialogDescription>
+                  {t("profiles.copyTargetHint")}
+                </DialogDescription>
+              )}
             </DialogHeader>
             <form
               id="profile-name-form"

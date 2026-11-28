@@ -6,6 +6,7 @@ import type {
   ProfileConfig,
   ProfileCreateSource,
   ProfileScope,
+  ProfileTarget,
   ProjectDeployResolution,
 } from "@/lib/api/profiles";
 import { extractErrorMessage } from "@/utils/errorUtils";
@@ -59,11 +60,13 @@ export const useCreateProfileMutation = () =>
       name,
       scope,
       source,
+      target,
     }: {
       name: string;
       scope: ProfileScope;
       source: ProfileCreateSource;
-    }) => profilesApi.create(name, scope, source),
+      target: ProfileTarget;
+    }) => profilesApi.create(name, scope, source, target),
     "profiles.createFailed",
     "profiles.createSuccess",
   );
@@ -74,11 +77,13 @@ export const useDuplicateProfileMutation = () =>
       sourceId,
       name,
       scope,
+      target,
     }: {
       sourceId: string;
       name: string;
       scope: ProfileScope;
-    }) => profilesApi.duplicate(sourceId, name, scope),
+      target: ProfileTarget;
+    }) => profilesApi.duplicate(sourceId, name, scope, target),
     "profiles.createFailed",
     "profiles.createSuccess",
   );

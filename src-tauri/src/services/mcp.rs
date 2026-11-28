@@ -864,8 +864,13 @@ mod tests {
 
         // A project snapshot and switch still go through, toggling only readable servers.
         use crate::services::profile::{ProfileScope, ProfileService};
-        let profile = ProfileService::create(&state, "p", ProfileScope::Claude)
-            .expect("snapshot with an unreadable server");
+        let profile = ProfileService::create(
+            &state,
+            "p",
+            ProfileScope::Claude,
+            crate::database::ProfileTarget::Global,
+        )
+        .expect("snapshot with an unreadable server");
         McpService::toggle_app(&state, "good", AppType::Claude, true).unwrap();
         ProfileService::apply(&state, &profile.id, ProfileScope::Claude)
             .expect("switch with an unreadable server");

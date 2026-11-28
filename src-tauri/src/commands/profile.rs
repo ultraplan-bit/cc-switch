@@ -1,6 +1,6 @@
 //! 配置方案（Profile）管理命令
 //!
-//! 方案是某个 Agent 的一份配置；它可以应用到全局，也可以部署到任意已登记的项目目录。
+//! 全局与项目方案独立保存；项目方案可部署到任意已登记的项目目录。
 
 use crate::app_config::AppType;
 use crate::error::AppError;
@@ -8,7 +8,7 @@ use serde::Serialize;
 use tauri::{Emitter, State};
 
 use super::run_db_task;
-use crate::database::Profile;
+use crate::database::{Profile, ProfileTarget};
 use crate::services::profile::{
     ProfileConfig, ProfilePayload, ProfileScope, ProfileService, ProfileSource,
 };
@@ -21,6 +21,7 @@ use crate::store::AppState;
 #[serde(rename_all = "camelCase")]
 pub struct ProfileDto {
     pub id: String,
+    pub target: ProfileTarget,
     pub name: String,
     pub payload: ProfilePayload,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -29,23 +30,24 @@ pub struct ProfileDto {
     pub updated_at: Option<i64>,
 }
 
-impl From<Profile> for ProfileDto {
-    fn from(profile: Profile) -> Self {
-        // 单条 payload 损坏不应拖垮整个列表：降级为默认值并记日志
-        let payload = serde_json::from_str(&profile.payload).unwrap_or_else(|e| {
-            log::warn!(
-                "解析 profile '{}' payload 失败，使用默认值: {e}",
+impl TryFrom<Profile> for ProfileDto {
+    type Error = AppError;
+
+    fn try_from(profile: Profile) -> Result<Self, Self::Error> {
+        let payload = serde_json::from_str(&profile.payload).map_err(|error| {
+            AppError::Config(format!(
+                "Profile '{}' 的内容无法读取，记录保持原样: {error}",
                 profile.id
-            );
-            ProfilePayload::default()
-        });
-        Self {
+            ))
+        })?;
+        Ok(Self {
             id: profile.id,
+            target: profile.target,
             name: profile.name,
             payload,
             created_at: profile.created_at,
             updated_at: profile.updated_at,
-        }
+        })
     }
 }
 
@@ -141,6 +143,10 @@ fn current_profile(
     let Some(id) = state.db.get_current_profile_id(scope.as_str())? else {
         return Ok(None);
     };
+    let Some(profile) = state.db.get_profile(&id)? else {
+        return Ok(None);
+    };
+    ProfileService::require_target(&profile, ProfileTarget::Global)?;
     Ok(Some(CurrentProfile {
         id,
         stale: state.db.is_current_profile_stale(scope.as_str())?,
@@ -171,6 +177,7 @@ fn list_profiles_blocking(state: &AppState) -> Result<ProfilesResponse, String> 
     let profiles = ProfileService::list(state)?;
     let payloads: std::collections::HashMap<&str, &str> = profiles
         .iter()
+        .filter(|profile| profile.target == ProfileTarget::Project)
         .map(|profile| (profile.id.as_str(), profile.payload.as_str()))
         .collect();
     let projects = state
@@ -195,7 +202,10 @@ fn list_profiles_blocking(state: &AppState) -> Result<ProfilesResponse, String> 
             codex: global_state(state, ProfileScope::Codex),
         },
         projects,
-        profiles: profiles.into_iter().map(ProfileDto::from).collect(),
+        profiles: profiles
+            .into_iter()
+            .map(ProfileDto::try_from)
+            .collect::<Result<_, _>>()?,
     })
 }
 
@@ -220,11 +230,12 @@ pub async fn create_profile(
     name: String,
     scope: String,
     source: Option<ProfileSource>,
+    target: ProfileTarget,
 ) -> Result<ProfileDto, String> {
     let scope = ProfileScope::parse(&scope)?;
     profile_mutation(&state, move |state| {
-        ProfileService::create_from(state, &name, scope, source.unwrap_or_default())
-            .map(ProfileDto::from)
+        ProfileService::create_from(state, &name, scope, source.unwrap_or_default(), target)
+            .and_then(ProfileDto::try_from)
     })
     .await
 }
@@ -245,12 +256,12 @@ pub async fn import_project_profile(
 ) -> Result<ProjectImportResult, String> {
     let scope = ProfileScope::parse(&scope)?;
     profile_mutation(&state, move |state| {
-        ProjectProfileService::import_from_project(state, &name, scope, &project_path).map(
-            |(profile, warnings)| ProjectImportResult {
-                profile: profile.into(),
-                warnings,
-            },
-        )
+        let (profile, warnings) =
+            ProjectProfileService::import_from_project(state, &name, scope, &project_path)?;
+        Ok::<_, AppError>(ProjectImportResult {
+            profile: profile.try_into()?,
+            warnings,
+        })
     })
     .await
 }
@@ -261,10 +272,12 @@ pub async fn duplicate_profile(
     source_id: String,
     name: String,
     scope: String,
+    target: ProfileTarget,
 ) -> Result<ProfileDto, String> {
     let scope = ProfileScope::parse(&scope)?;
     profile_mutation(&state, move |state| {
-        ProfileService::duplicate(state, &source_id, &name, scope).map(ProfileDto::from)
+        ProfileService::duplicate(state, &source_id, &name, scope, target)
+            .and_then(ProfileDto::try_from)
     })
     .await
 }
@@ -280,12 +293,12 @@ pub async fn update_profile(
     let scope = scope.map(|s| ProfileScope::parse(&s)).transpose()?;
     profile_mutation(&state, move |state| {
         ProfileService::update(state, &id, name, resnapshot.unwrap_or(false), scope)
-            .map(ProfileDto::from)
+            .and_then(ProfileDto::try_from)
     })
     .await
 }
 
-/// 登记一个项目目录，之后任意方案都可以部署到它。
+/// 登记一个项目目录，之后项目方案可以部署到它。
 #[tauri::command]
 pub async fn add_profile_project(state: State<'_, AppState>, path: String) -> Result<(), String> {
     profile_mutation(&state, move |state| {
@@ -316,7 +329,8 @@ pub async fn update_profile_config(
 ) -> Result<ProfileDto, String> {
     let scope = ProfileScope::parse(&scope)?;
     profile_mutation(&state, move |state| {
-        ProfileService::update_config(state, &id, scope, config, name).map(ProfileDto::from)
+        ProfileService::update_config(state, &id, scope, config, name)
+            .and_then(ProfileDto::try_from)
     })
     .await
 }
@@ -370,4 +384,49 @@ pub async fn deploy_profile_to_project(
             .map_err(|err| err.to_string())
     })
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn profile_list_rejects_unreadable_payload_and_project_global_marker_without_rewriting() {
+        let _home = crate::test_support::TempUserHome::new();
+        let state = AppState::new(std::sync::Arc::new(
+            crate::database::Database::memory().unwrap(),
+        ));
+        let mut profile = ProfileService::create_from(
+            &state,
+            "Example",
+            ProfileScope::Claude,
+            ProfileSource::Blank,
+            ProfileTarget::Project,
+        )
+        .unwrap();
+        assert_eq!(
+            list_profiles_blocking(&state).unwrap().profiles[0].target,
+            ProfileTarget::Project
+        );
+        state
+            .db
+            .set_current_profile_id("claude", Some(&profile.id))
+            .unwrap();
+        assert!(matches!(
+            list_profiles_blocking(&state),
+            Err(error) if error.contains("复制为全局方案")
+        ));
+        state.db.set_current_profile_id("claude", None).unwrap();
+        profile.payload = "unreadable payload".into();
+        state.db.save_profile(&profile).unwrap();
+        assert!(matches!(
+            list_profiles_blocking(&state),
+            Err(error) if error.contains("内容无法读取")
+        ));
+        assert_eq!(
+            state.db.get_profile(&profile.id).unwrap().unwrap().payload,
+            profile.payload
+        );
+    }
 }

@@ -69,6 +69,7 @@ beforeEach(() => {
   profile = {
     id: "project-profile",
     name: "Project profile",
+    target: "project",
     payload: {
       providers: { claude: null, codex: null, "claude-desktop": null },
       mcp: { claude: [], codex: [], "claude-desktop": null },

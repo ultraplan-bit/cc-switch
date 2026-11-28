@@ -3107,9 +3107,8 @@
     "defaultModel": "默认模型",
     "loadFailed": "读取方案失败",
     "searchPlaceholder": "搜索方案、模型或供应商",
-    "empty": "此 Agent 还没有配置方案，新建一份开始使用。",
+    "empty": "此用途下还没有配置方案，新建一份开始使用。",
     "createFromCurrent": "新建方案",
-    "createDescription": "配置方案保存一个 Agent 的连接、模型、行为和资源。新建不会改动任何配置，应用或部署后才生效。",
     "createAndEdit": "创建并编辑",
     "createSource": {
       "label": "初始内容",
@@ -3146,7 +3145,7 @@
     "applyFailed": "应用方案失败：{{detail}}",
     "applyWarnings": "方案已应用，有 {{warningCount}} 条提示：\n{{details}}",
     "scope": {
-      "label": "使用位置",
+      "label": "方案用途",
       "global": "全局",
       "project": "项目"
     },
@@ -3229,7 +3228,7 @@
       "projectConnectionCredentialsHint": "地址和密钥会写入项目的 .claude/settings.local.json，并自动加入 Git 忽略；该文件已被 Git 跟踪时不能部署独立连接。供应商信息更新后需重新部署；恢复继承会移除托管连接字段，请重启 Claude 会话。",
       "projectConnectionProviderRequired": "请选择一个现有供应商，才能使用项目独立直连。",
       "projectConnectionProviderPlaceholder": "请选择项目供应商",
-      "providerReferenceHint": "模型能力复用所选供应商；API 地址、密钥和账号继续引用供应商。项目部署不会切换全局连接。",
+      "providerReferenceHint": "应用到全局时使用所选供应商。地址、密钥和账号继续保存在供应商库。",
       "model": "模型",
       "resetModels": "恢复供应商模型设置",
       "runtimeSettings": "推理与上下文",
@@ -3246,8 +3245,8 @@
       "nativeObjectRequired": "配置必须是 JSON 对象",
       "nativeInvalid": "配置格式有误：{{detail}}",
       "manageResources": "由此方案管理 MCP、Skills 和指令",
-      "resourcesManagedHint": "应用或部署时只启用这里选中的资源，其余会被停用。",
-      "resourcesFollowHint": "此方案不改动 MCP、Skills 和指令，全局已启用的或项目里已有的保持原样。",
+      "resourcesManagedHint": "应用到全局时启用这里选中的资源，停用其他由此功能管理的全局资源。",
+      "resourcesFollowHint": "此方案不改动全局 MCP、Skills 和指令，保留现有配置。",
       "mcp": "MCP 服务器",
       "skills": "Skills",
       "searchResources": "搜索 MCP 或 Skills",
@@ -3262,8 +3261,22 @@
       "noPrompt": "不使用指令模板",
       "instructionHint": "引用提示词库的内容，应用或部署时写入此 Agent 的指令文件。",
       "instructionsFollowHint": "此方案不管理指令。开启资源管理后可选择指令模板。",
-      "saveHint": "保存只更新方案；应用到全局或部署到项目后生效。"
-    }
+      "globalSaveHint": "保存只更新此全局方案；应用到全局后生效。",
+      "projectSaveHint": "保存只更新此项目方案；部署到所选目录后生效。其他引用此方案的目录需分别重新部署。",
+      "projectModelProvider": "模型来源供应商",
+      "projectModelProviderHint": "供应商用于模型获取和可用性校验，不会切换项目连接。模型需由当前全局连接或聚合提供。",
+      "projectResourcesManagedHint": "将所选资源部署到项目，仍遵循此 Agent 的原生继承规则，未托管的全局资源可能继续生效。",
+      "projectResourcesFollowHint": "保留项目现有 MCP、Skills 和指令，不会撤下已有项目覆盖。"
+    },
+    "target": {
+      "global": "全局方案",
+      "project": "项目方案"
+    },
+    "createGlobalDescription": "保存此 Agent 的全局默认配置；创建后需手动应用到全局。",
+    "createProjectDescription": "保存此 Agent 的项目配置，可部署到多个目录；创建后需手动部署。",
+    "copyToGlobal": "复制为全局方案",
+    "copyToProject": "复制为项目方案",
+    "copyTargetHint": "副本独立保存，只保留目标用途支持的配置。复制不会应用或部署。"
   },
   "workspace": {
     "title": "Workspace 文件管理",

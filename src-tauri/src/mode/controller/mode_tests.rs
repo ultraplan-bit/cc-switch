@@ -109,6 +109,7 @@ fn seed_applied_profile(state: &AppState, provider_id: &str) {
         Some(r#"{"env":{"CLAUDE_CODE_MAX_OUTPUT_TOKENS":"4096"}}"#.into());
     let profile = crate::database::Profile {
         id: "applied-profile".into(),
+        target: crate::database::ProfileTarget::Global,
         name: "Applied".into(),
         payload: serde_json::to_string(&payload).unwrap(),
         sort_order: None,

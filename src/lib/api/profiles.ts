@@ -7,6 +7,8 @@ import { invoke } from "@tauri-apps/api/core";
  */
 export type ProfileScope = "claude" | "claude-desktop" | "codex";
 
+export type ProfileTarget = "global" | "project";
+
 /**
  * 按 app 分槽的载荷容器（与后端 services/profile.rs 的 PerApp<T> 严格对应）
  */
@@ -66,10 +68,11 @@ export interface ProfileConfig {
   promptId: string | null;
 }
 
-/** One Agent's configuration. Where it is used (globally or in a project) is not part of it. */
+/** An independent Agent configuration for one target; project profiles can be reused across directories. */
 export interface Profile {
   id: string;
   name: string;
+  target: ProfileTarget;
   payload: ProfilePayload;
   createdAt?: number;
   updatedAt?: number;
@@ -158,8 +161,9 @@ export const profilesApi = {
     name: string,
     scope: ProfileScope,
     source: ProfileCreateSource,
+    target: ProfileTarget,
   ): Promise<Profile> {
-    return await invoke("create_profile", { name, scope, source });
+    return await invoke("create_profile", { name, scope, source, target });
   },
 
   /** 复制某个 Agent 的配置为一份独立的方案 */
@@ -167,8 +171,9 @@ export const profilesApi = {
     sourceId: string,
     name: string,
     scope: ProfileScope,
+    target: ProfileTarget,
   ): Promise<Profile> {
-    return await invoke("duplicate_profile", { sourceId, name, scope });
+    return await invoke("duplicate_profile", { sourceId, name, scope, target });
   },
 
   /** 读取项目目录里已有的配置，保存为方案；不修改项目文件 */
@@ -181,7 +186,7 @@ export const profilesApi = {
   },
 
   /**
-   * 重命名和/或用该 Agent 当前的全局配置覆盖方案（resnapshot 只覆盖 scope 的配置）
+   * 重命名方案；仅全局方案可用该 Agent 当前的全局配置重拍快照。
    */
   async update(
     id: string,
