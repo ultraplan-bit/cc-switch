@@ -355,6 +355,7 @@ impl ProjectProfileService {
         let mut new_prompt = None::<Prompt>;
         let mut profile = Profile {
             id: uuid::Uuid::new_v4().to_string(),
+            target: crate::database::ProfileTarget::Project,
             name: name.into(),
             payload: String::new(),
             sort_order: None,

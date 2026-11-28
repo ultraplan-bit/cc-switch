@@ -1602,12 +1602,13 @@ fn collect_app_snapshot(
         usage_view(&app_state.usage_cache, texts, app, provider, id)
     });
 
-    // 只列出为这个 Agent 配置过的方案；任意方案都可以应用到全局。
+    // 只列出为这个 Agent 配置过的全局方案。
     let profiles = crate::services::profile::ProfileScope::for_app(app)
         .filter(|_| settings.show_profile_switcher)
         .map(|scope| -> Result<Option<ProfileSection>, AppError> {
             let items: Vec<(String, String)> = profiles
                 .iter()
+                .filter(|profile| profile.target == crate::database::ProfileTarget::Global)
                 .filter(|profile| {
                     serde_json::from_str::<crate::services::profile::ProfilePayload>(
                         &profile.payload,

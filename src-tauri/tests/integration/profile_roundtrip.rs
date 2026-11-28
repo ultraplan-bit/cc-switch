@@ -168,8 +168,13 @@ fn profile_snapshot_apply_roundtrip_restores_configuration() {
         .expect("save prompt pr2");
 
     // ---- 保存项目 A（在 Claude 页新建：只拍 Claude 当前状态）----
-    let profile_a = ProfileService::create(&state, "Project A", ProfileScope::Claude)
-        .expect("create profile A");
+    let profile_a = ProfileService::create(
+        &state,
+        "Project A",
+        ProfileScope::Claude,
+        cc_switch_lib::ProfileTarget::Global,
+    )
+    .expect("create profile A");
     let payload: ProfilePayload =
         serde_json::from_str(&profile_a.payload).expect("parse profile A payload");
     assert_eq!(payload.providers.claude.as_deref(), Some("p1"));
@@ -299,8 +304,13 @@ fn shared_profile_sides_are_isolated_and_mergeable() {
         .expect("save mcp m1");
 
     // 在 Codex 页新建项目：快照不应捕获 Claude 侧的任何状态
-    let project = ProfileService::create(&state, "Shared Project", ProfileScope::Codex)
-        .expect("create project from codex tab");
+    let project = ProfileService::create(
+        &state,
+        "Shared Project",
+        ProfileScope::Codex,
+        cc_switch_lib::ProfileTarget::Global,
+    )
+    .expect("create project from codex tab");
     let payload: ProfilePayload =
         serde_json::from_str(&project.payload).expect("parse project payload");
     assert_eq!(
@@ -404,6 +414,7 @@ fn profile_apply_reports_dangling_references_and_continues() {
     });
     let profile = cc_switch_lib::Profile {
         id: "dangling-test".to_string(),
+        target: cc_switch_lib::ProfileTarget::Global,
         name: "Dangling".to_string(),
         payload: payload.to_string(),
         sort_order: None,
@@ -528,8 +539,13 @@ fn switching_profile_preserves_saved_drafts_until_explicit_resnapshot() {
         .expect("save prompt pr2");
 
     // ---- Project A：状态 X（p1 / m1 / pr1）----
-    let project_a = ProfileService::create(&state, "Project A", ProfileScope::Claude)
-        .expect("create project A");
+    let project_a = ProfileService::create(
+        &state,
+        "Project A",
+        ProfileScope::Claude,
+        cc_switch_lib::ProfileTarget::Global,
+    )
+    .expect("create project A");
     let warnings = ProfileService::apply(&state, &project_a.id, ProfileScope::Claude)
         .expect("apply project A");
     assert!(warnings.is_empty(), "unexpected warnings: {warnings:?}");
@@ -540,8 +556,13 @@ fn switching_profile_preserves_saved_drafts_until_explicit_resnapshot() {
     McpService::toggle_app(&state, "m2", AppType::Claude, true).expect("enable m2");
     PromptService::enable_prompt(&state, AppType::Claude, "pr2").expect("enable pr2");
 
-    let project_b = ProfileService::create(&state, "Project B", ProfileScope::Claude)
-        .expect("create project B");
+    let project_b = ProfileService::create(
+        &state,
+        "Project B",
+        ProfileScope::Claude,
+        cc_switch_lib::ProfileTarget::Global,
+    )
+    .expect("create project B");
 
     // ---- 从 A 切换到 B：保留 A 已保存的 X，显式加载 B 的 Y ----
     let warnings = ProfileService::apply(&state, &project_b.id, ProfileScope::Claude)
@@ -650,8 +671,13 @@ fn applying_profile_without_active_prompt_disables_current_prompt() {
         .expect("save prompt pr1");
 
     // 拍快照时没有启用中的提示词：记成「拍到的是无」，不是「没拍过」
-    let project =
-        ProfileService::create(&state, "No Prompt", ProfileScope::Claude).expect("create profile");
+    let project = ProfileService::create(
+        &state,
+        "No Prompt",
+        ProfileScope::Claude,
+        cc_switch_lib::ProfileTarget::Global,
+    )
+    .expect("create profile");
     let payload: ProfilePayload =
         serde_json::from_str(&project.payload).expect("parse project payload");
     assert_eq!(
@@ -732,8 +758,13 @@ fn profile_switch_in_routing_mode_changes_the_route_only() {
     .expect("enter routing mode");
 
     // ---- 构造一个目标为 custom2 的项目快照 ----
-    let project = ProfileService::create(&state, "Custom2 Project", ProfileScope::Claude)
-        .expect("create project");
+    let project = ProfileService::create(
+        &state,
+        "Custom2 Project",
+        ProfileScope::Claude,
+        cc_switch_lib::ProfileTarget::Global,
+    )
+    .expect("create project");
     let mut project = state
         .db
         .get_profile(&project.id)
@@ -864,8 +895,13 @@ fn claude_desktop_profile_scope_is_independent() {
         .expect("set current desktop provider d1");
 
     // 在 Desktop 页新建项目：只拍 Desktop 供应商
-    let project = ProfileService::create(&state, "Desktop Project", ProfileScope::ClaudeDesktop)
-        .expect("create desktop profile");
+    let project = ProfileService::create(
+        &state,
+        "Desktop Project",
+        ProfileScope::ClaudeDesktop,
+        cc_switch_lib::ProfileTarget::Global,
+    )
+    .expect("create desktop profile");
     let payload: ProfilePayload =
         serde_json::from_str(&project.payload).expect("parse desktop payload");
     assert_eq!(payload.providers.claude_desktop.as_deref(), Some("d1"));

@@ -36,8 +36,8 @@ pub(crate) use dao::providers_seed::{
 };
 pub(crate) use dao::proxy::{PRICING_SOURCE_REQUEST, PRICING_SOURCE_RESPONSE};
 pub use dao::FailoverQueueItem;
-pub use dao::Profile;
 pub use dao::UnreadableEntry;
+pub use dao::{Profile, ProfileTarget};
 
 use crate::config::get_app_config_dir;
 use crate::error::AppError;
@@ -49,7 +49,7 @@ use std::sync::{Mutex, MutexGuard};
 
 /// 当前 Schema 版本号
 /// 当前格式唯一受支持；格式变化递增版本，不提供旧版本升级路径。
-pub(crate) const SCHEMA_VERSION: i32 = 29;
+pub(crate) const SCHEMA_VERSION: i32 = 30;
 
 /// 安全地序列化 JSON，避免 unwrap panic
 pub(crate) fn to_json_string<T: Serialize>(value: &T) -> Result<String, AppError> {

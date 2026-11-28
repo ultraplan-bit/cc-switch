@@ -139,13 +139,14 @@ function ProfileEditForm({
 }) {
   const { t } = useTranslation();
   const id = useId();
+  const project = profile.target === "project";
   const saving = useRef(false);
   const providerSelect = useRef<HTMLSelectElement>(null);
   const [addingProvider, setAddingProvider] = useState(false);
   const connectionStatus = useQuery({
     queryKey: ["profile-connection", projectPath ?? null],
     queryFn: () => profilesApi.getConnectionStatus(projectPath),
-    enabled: scope === "claude",
+    enabled: project && scope === "claude",
     retry: false,
     networkMode: "always",
   });
@@ -160,7 +161,7 @@ function ProfileEditForm({
     const defaults = providerModelDefaults(providers[providerId ?? ""], scope);
     return {
       providerId,
-      ...(scope === "claude"
+      ...(project && scope === "claude"
         ? {
             claudeProjectConnection:
               profile.payload.claudeProjectConnection ?? "inherit",
@@ -200,19 +201,25 @@ function ProfileEditForm({
   };
   const provider = providers[config.providerId ?? ""];
   const projectDirect =
-    scope === "claude" && config.claudeProjectConnection === "direct";
+    project &&
+    scope === "claude" &&
+    config.claudeProjectConnection === "direct";
   const missingProjectProvider = projectDirect && !provider;
   const checkingConnection =
     connectionStatus.isPending && !connectionStatus.data;
   useEffect(() => {
-    if (initialProjectConnection === "direct") {
+    if (
+      project &&
+      scope === "claude" &&
+      initialProjectConnection === "direct"
+    ) {
       setConfig((current) => ({
         ...current,
         claudeProjectConnection: "direct",
       }));
       providerSelect.current?.focus();
     }
-  }, [initialProjectConnection]);
+  }, [initialProjectConnection, project, scope]);
   const chooseProjectProvider = () => {
     setConfig((current) => ({ ...current, claudeProjectConnection: "direct" }));
     providerSelect.current?.focus();
@@ -338,7 +345,11 @@ function ProfileEditForm({
       footer={
         <>
           <span className="mr-auto hidden text-xs text-fg-2 sm:block">
-            {t("profiles.editor.saveHint")}
+            {t(
+              project
+                ? "profiles.editor.projectSaveHint"
+                : "profiles.editor.globalSaveHint",
+            )}
           </span>
           <Button
             type="button"
@@ -384,7 +395,8 @@ function ProfileEditForm({
               : scope === "codex"
                 ? "Codex"
                 : "Claude Desktop",
-        })}
+        })}{" "}
+        · {t(project ? "profiles.target.project" : "profiles.target.global")}
       </p>
       <div data-unsaved-ignore>
         <PageTabs
@@ -495,7 +507,13 @@ function ProfileEditForm({
                   />
                 </label>
                 <label className="space-y-2 text-sm">
-                  <span>{t("profiles.editor.provider")}</span>
+                  <span>
+                    {t(
+                      project && !projectDirect
+                        ? "profiles.editor.projectModelProvider"
+                        : "profiles.editor.provider",
+                    )}
+                  </span>
                   <select
                     ref={providerSelect}
                     className={selectClass}
@@ -546,10 +564,14 @@ function ProfileEditForm({
                 )}
                 {!projectDirect && (
                   <p className="text-xs leading-relaxed text-fg-2 sm:col-span-2">
-                    {t("profiles.editor.providerReferenceHint")}
+                    {t(
+                      project
+                        ? "profiles.editor.projectModelProviderHint"
+                        : "profiles.editor.providerReferenceHint",
+                    )}
                   </p>
                 )}
-                {scope === "claude" && (
+                {project && scope === "claude" && (
                   <div className="space-y-2 sm:col-span-2">
                     <h2 className="text-sm font-medium">
                       {t("profiles.connection.section", {
@@ -736,8 +758,12 @@ function ProfileEditForm({
                     <span className="block text-xs leading-relaxed text-fg-2">
                       {t(
                         config.followGlobalResources
-                          ? "profiles.editor.resourcesFollowHint"
-                          : "profiles.editor.resourcesManagedHint",
+                          ? project
+                            ? "profiles.editor.projectResourcesFollowHint"
+                            : "profiles.editor.resourcesFollowHint"
+                          : project
+                            ? "profiles.editor.projectResourcesManagedHint"
+                            : "profiles.editor.resourcesManagedHint",
                       )}
                     </span>
                   </span>

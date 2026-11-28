@@ -14,6 +14,7 @@ import {
   SCOPE_RESPONSE_KEY,
   type Profile,
   type ProfileScope,
+  type ProfileTarget,
 } from "@/lib/api/profiles";
 import {
   useAddProfileProjectMutation,
@@ -45,9 +46,8 @@ interface ProfilesPageProps {
 }
 
 /**
- * One Agent's profiles, and the location they are used in. The same list is
- * shown for the global location and for every project; only the status and the
- * primary action of each card change with the location.
+ * Global and project profiles are independent records. Project profiles can be
+ * reused across registered directories, each with its own deployment status.
  */
 export function ProfilesPage({ activeApp, ...options }: ProfilesPageProps) {
   const scope = APP_PROFILE_SCOPE[activeApp];
@@ -63,7 +63,11 @@ function ProfilesPageContent({
 }: Omit<ProfilesPageProps, "activeApp"> & { scope: ProfileScope }) {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<{
+    scope: ProfileScope;
+    target: ProfileTarget;
+    projectPath?: string;
+  } | null>(null);
   // The editor keeps the Agent it was opened for, even if the page moves on.
   const [editing, setEditing] = useState<{
     profile: Profile;
@@ -83,18 +87,19 @@ function ProfilesPageContent({
   const addProjectMutation = useAddProfileProjectMutation();
   const removeProjectMutation = useRemoveProfileProjectMutation();
   const deployment = useProjectProfileDeployment(scope, !deploymentDisabled);
-  const { location, setMode, selectProject } = useProfileLocation(
-    scope,
-    data?.projects,
-    { projectOnly, initialProjectPath },
-  );
+  const { location, selectedProject, setMode, selectProject } =
+    useProfileLocation(scope, data?.projects, {
+      projectOnly,
+      initialProjectPath,
+    });
 
-  useEffect(() => setSearch(""), [scope]);
+  useEffect(() => setSearch(""), [scope, location.mode]);
 
   const providerName = (id: string | null | undefined) =>
     id ? (providers?.[id]?.name ?? id) : null;
-  const profiles = (data?.profiles ?? []).filter((profile) =>
-    hasScopeSnapshot(profile, scope),
+  const profiles = (data?.profiles ?? []).filter(
+    (profile) =>
+      profile.target === location.mode && hasScopeSnapshot(profile, scope),
   );
   const keyword = profiles.length > 5 ? search.trim().toLocaleLowerCase() : "";
   const visibleProfiles = profiles.filter((profile) =>
@@ -209,7 +214,13 @@ function ProfilesPageContent({
           <Button
             type="button"
             className="ms-auto h-9"
-            onClick={() => setCreating(true)}
+            onClick={() =>
+              setCreating({
+                scope,
+                target: location.mode,
+                projectPath: project?.path,
+              })
+            }
           >
             <Plus className="h-4 w-4" />
             {t("profiles.createFromCurrent")}
@@ -371,7 +382,23 @@ function ProfilesPageContent({
                   <Pencil className="h-3.5 w-3.5" />
                   {t("common.edit")}
                 </Button>
-                <ProfileActionsMenu profile={profile} scope={scope} />
+                <ProfileActionsMenu
+                  profile={profile}
+                  scope={scope}
+                  allowTargetCopy={!projectOnly}
+                  onCopied={(copied) => {
+                    setMode(copied.target);
+                    setSearch("");
+                    setEditing({
+                      profile: copied,
+                      scope,
+                      projectPath:
+                        copied.target === "project"
+                          ? selectedProject?.path
+                          : undefined,
+                    });
+                  }}
+                />
               </ProfileCard>
             ))}
           </ul>
@@ -384,13 +411,20 @@ function ProfilesPageContent({
 
       {creating && (
         <ProfileCreateDialog
-          scope={scope}
-          projectPath={project?.path}
-          onClose={() => setCreating(false)}
-          onCreated={(created) => {
-            setCreating(false);
+          scope={creating.scope}
+          target={creating.target}
+          projectPath={creating.projectPath}
+          onClose={() => setCreating(null)}
+          onCreated={(created, projectPath) => {
+            const createdScope = creating.scope;
+            setCreating(null);
             setSearch("");
-            setEditing({ profile: created, scope, projectPath: project?.path });
+            setEditing({
+              profile: created,
+              scope: createdScope,
+              projectPath:
+                created.target === "project" ? projectPath : undefined,
+            });
           }}
         />
       )}

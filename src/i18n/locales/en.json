@@ -3107,9 +3107,8 @@
     "defaultModel": "Default model",
     "loadFailed": "Could not load profiles",
     "searchPlaceholder": "Search profiles, models or providers",
-    "empty": "No profiles for this agent yet. Create one to get started.",
+    "empty": "No profiles for this target yet. Create one to get started.",
     "createFromCurrent": "New profile",
-    "createDescription": "A profile saves one agent's connection, models, behavior and resources. Creating it changes nothing until you apply or deploy it.",
     "createAndEdit": "Create and edit",
     "createSource": {
       "label": "Start from",
@@ -3146,7 +3145,7 @@
     "applyFailed": "Could not apply the profile: {{detail}}",
     "applyWarnings": "Profile applied with {{warningCount}} note(s):\n{{details}}",
     "scope": {
-      "label": "Location",
+      "label": "Profile target",
       "global": "Global",
       "project": "Project"
     },
@@ -3229,7 +3228,7 @@
       "projectConnectionCredentialsHint": "The address and key are written to .claude/settings.local.json and excluded from Git. Direct deployment is blocked if Git already tracks this file. Redeploy after provider changes. Returning to inheritance removes managed connection fields; restart the Claude session afterwards.",
       "projectConnectionProviderRequired": "Select an existing provider to use an independent project connection.",
       "projectConnectionProviderPlaceholder": "Select a project provider",
-      "providerReferenceHint": "Model features use the selected provider. API addresses, keys and accounts stay with the provider. Project deployment does not switch the global connection.",
+      "providerReferenceHint": "Applying globally uses the selected provider. Addresses, keys, and accounts remain in the provider library.",
       "model": "Model",
       "resetModels": "Restore provider model settings",
       "runtimeSettings": "Reasoning & context",
@@ -3246,8 +3245,8 @@
       "nativeObjectRequired": "Configuration must be a JSON object",
       "nativeInvalid": "Invalid configuration: {{detail}}",
       "manageResources": "Manage MCP, Skills and instructions with this profile",
-      "resourcesManagedHint": "Applying or deploying enables exactly the resources selected here and turns the others off.",
-      "resourcesFollowHint": "This profile leaves MCP, Skills and instructions alone. Whatever is enabled globally or already in the project stays as it is.",
+      "resourcesManagedHint": "Enable the selected resources globally and disable other global resources managed by this feature.",
+      "resourcesFollowHint": "Leave global MCP, Skills, and instructions unchanged.",
       "mcp": "MCP servers",
       "skills": "Skills",
       "searchResources": "Search MCP or Skills",
@@ -3262,7 +3261,12 @@
       "noPrompt": "No instruction template",
       "instructionHint": "Reference a prompt from the library. Applying or deploying writes it to this agent's instruction file.",
       "instructionsFollowHint": "This profile does not manage instructions. Turn on resource management to choose a template.",
-      "saveHint": "Saving only updates the profile. Apply it globally or deploy it to a project to use the changes."
+      "globalSaveHint": "Saving updates this global profile. Apply it globally to use the changes.",
+      "projectSaveHint": "Saving updates this project profile. Deploy it to the selected directory to use the changes; other directories using it need separate deployment.",
+      "projectModelProvider": "Model source provider",
+      "projectModelProviderHint": "This provider supplies models and availability checks; it does not switch the project connection. Models must be available through the current global connection or aggregation.",
+      "projectResourcesManagedHint": "Deploy selected resources using this Agent’s native inheritance rules. Unmanaged global resources may remain active.",
+      "projectResourcesFollowHint": "Keep existing project MCP, Skills, and instructions. Existing project overrides are not removed."
     },
     "connection": {
       "section": "API connection",
@@ -3287,7 +3291,16 @@
         "login": "Claude sign-in",
         "routing": "Local routing"
       }
-    }
+    },
+    "target": {
+      "global": "Global profile",
+      "project": "Project profile"
+    },
+    "createGlobalDescription": "Save this Agent’s global defaults. Apply the profile globally when ready.",
+    "createProjectDescription": "Save this Agent’s project settings for deployment to one or more directories. Deploy manually when ready.",
+    "copyToGlobal": "Copy as global profile",
+    "copyToProject": "Copy as project profile",
+    "copyTargetHint": "The copy is independent and keeps only settings supported by its target. Copying does not apply or deploy it."
   },
   "workspace": {
     "title": "Workspace Files",

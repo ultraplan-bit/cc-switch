@@ -3107,9 +3107,8 @@
     "defaultModel": "Standardmodell",
     "loadFailed": "Profile konnten nicht geladen werden",
     "searchPlaceholder": "Profile, Modelle oder Anbieter suchen",
-    "empty": "Für diesen Agent gibt es noch keine Profile. Erstellen Sie eines, um zu beginnen.",
+    "empty": "Für dieses Ziel gibt es noch keine Profile. Erstellen Sie ein Profil.",
     "createFromCurrent": "Neues Profil",
-    "createDescription": "Ein Profil speichert Verbindung, Modelle, Verhalten und Ressourcen eines Agents. Das Erstellen ändert nichts; das Profil gilt erst, wenn es angewendet oder bereitgestellt wird.",
     "createAndEdit": "Erstellen und bearbeiten",
     "createSource": {
       "label": "Ausgangsinhalt",
@@ -3146,7 +3145,7 @@
     "applyFailed": "Profil konnte nicht angewendet werden: {{detail}}",
     "applyWarnings": "Profil mit {{warningCount}} Hinweis(en) angewendet:\n{{details}}",
     "scope": {
-      "label": "Einsatzort",
+      "label": "Profilziel",
       "global": "Global",
       "project": "Projekt"
     },
@@ -3229,7 +3228,7 @@
       "projectConnectionCredentialsHint": "Adresse und Schlüssel werden in .claude/settings.local.json geschrieben und von Git ausgeschlossen. Wird die Datei bereits von Git verfolgt, ist die direkte Bereitstellung gesperrt. Nach Anbieteränderungen erneut bereitstellen. Bei Rückkehr zur Übernahme werden verwaltete Verbindungsfelder entfernt; starten Sie danach die Claude-Sitzung neu.",
       "projectConnectionProviderRequired": "Wählen Sie einen vorhandenen Anbieter für eine eigene Projektverbindung.",
       "projectConnectionProviderPlaceholder": "Projektanbieter auswählen",
-      "providerReferenceHint": "Modellfunktionen verwenden den gewählten Anbieter. API-Adressen, Schlüssel und Konten bleiben beim Anbieter. Die Projektbereitstellung ändert die globale Verbindung nicht.",
+      "providerReferenceHint": "Beim globalen Anwenden wird der gewählte Anbieter verwendet. Adressen, Schlüssel und Konten bleiben in der Anbieterbibliothek.",
       "model": "Modell",
       "resetModels": "Modelleinstellungen des Anbieters wiederherstellen",
       "runtimeSettings": "Denktiefe & Kontext",
@@ -3246,8 +3245,8 @@
       "nativeObjectRequired": "Die Konfiguration muss ein JSON-Objekt sein",
       "nativeInvalid": "Ungültige Konfiguration: {{detail}}",
       "manageResources": "MCP, Skills und Anweisungen mit diesem Profil verwalten",
-      "resourcesManagedHint": "Beim Anwenden oder Bereitstellen werden genau die hier gewählten Ressourcen aktiviert, alle anderen deaktiviert.",
-      "resourcesFollowHint": "Dieses Profil lässt MCP, Skills und Anweisungen unverändert. Was global aktiviert oder im Projekt bereits vorhanden ist, bleibt bestehen.",
+      "resourcesManagedHint": "Ausgewählte Ressourcen global aktivieren und andere durch diese Funktion verwaltete globale Ressourcen deaktivieren.",
+      "resourcesFollowHint": "Globale MCP, Skills und Anweisungen unverändert lassen.",
       "mcp": "MCP-Server",
       "skills": "Skills",
       "searchResources": "MCP oder Skills suchen",
@@ -3262,7 +3261,12 @@
       "noPrompt": "Keine Anweisungsvorlage",
       "instructionHint": "Verweist auf eine Vorlage aus der Bibliothek. Beim Anwenden oder Bereitstellen wird sie in die Anweisungsdatei dieses Agents geschrieben.",
       "instructionsFollowHint": "Dieses Profil verwaltet keine Anweisungen. Aktivieren Sie die Ressourcenverwaltung, um eine Vorlage zu wählen.",
-      "saveHint": "Speichern aktualisiert nur das Profil. Wenden Sie es global an oder stellen Sie es in einem Projekt bereit, um die Änderungen zu nutzen."
+      "globalSaveHint": "Speichern aktualisiert dieses globale Profil. Änderungen anschließend global anwenden.",
+      "projectSaveHint": "Speichern aktualisiert dieses Projektprofil. Änderungen im gewählten Verzeichnis bereitstellen; andere Verzeichnisse benötigen eine eigene Bereitstellung.",
+      "projectModelProvider": "Anbieter der Modelle",
+      "projectModelProviderHint": "Dieser Anbieter dient zum Abrufen und Prüfen von Modellen und ändert die Projektverbindung nicht. Modelle müssen über die globale Verbindung oder Aggregation verfügbar sein.",
+      "projectResourcesManagedHint": "Ausgewählte Ressourcen nach den nativen Vererbungsregeln dieses Agents bereitstellen. Nicht verwaltete globale Ressourcen können weiterhin aktiv sein.",
+      "projectResourcesFollowHint": "Vorhandene MCP, Skills und Anweisungen des Projekts beibehalten. Bestehende Projektüberschreibungen werden nicht entfernt."
     },
     "connection": {
       "section": "API-Verbindung",
@@ -3287,7 +3291,16 @@
         "login": "Claude-Anmeldung",
         "routing": "Lokales Routing"
       }
-    }
+    },
+    "target": {
+      "global": "Globales Profil",
+      "project": "Projektprofil"
+    },
+    "createGlobalDescription": "Speichert die globalen Standardeinstellungen dieses Agents. Das Profil anschließend manuell global anwenden.",
+    "createProjectDescription": "Speichert Projekteinstellungen dieses Agents für ein oder mehrere Verzeichnisse. Anschließend manuell bereitstellen.",
+    "copyToGlobal": "Als globales Profil kopieren",
+    "copyToProject": "Als Projektprofil kopieren",
+    "copyTargetHint": "Die Kopie ist unabhängig und enthält nur vom Ziel unterstützte Einstellungen. Kopieren wendet nichts an und stellt nichts bereit."
   },
   "workspace": {
     "title": "Workspace-Dateien",

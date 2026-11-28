@@ -16,7 +16,7 @@ import {
   useCreateProfileMutation,
   useImportProjectProfileMutation,
 } from "@/lib/query/profiles";
-import type { Profile, ProfileScope } from "@/lib/api/profiles";
+import type { Profile, ProfileScope, ProfileTarget } from "@/lib/api/profiles";
 import { toast } from "@/lib/toast";
 import { extractErrorMessage } from "@/utils/errorUtils";
 
@@ -24,15 +24,17 @@ type Source = "blank" | "current" | "project";
 
 interface ProfileCreateDialogProps {
   scope: ProfileScope;
+  target: ProfileTarget;
   /** Preselected folder when the user is looking at a project. */
   projectPath?: string;
   onClose: () => void;
-  onCreated: (profile: Profile) => void;
+  onCreated: (profile: Profile, projectPath?: string) => void;
 }
 
 /** Creating only saves a profile. It is applied or deployed later, from its card. */
 export function ProfileCreateDialog({
   scope,
+  target,
   projectPath: initialProjectPath,
   onClose,
   onCreated,
@@ -48,7 +50,7 @@ export function ProfileCreateDialog({
   // Enter and the button can both submit before the pending state re-renders.
   const submitting = useRef(false);
   const sources: Source[] =
-    scope === "claude-desktop"
+    target === "global" || scope === "claude-desktop"
       ? ["blank", "current"]
       : ["blank", "current", "project"];
   const ready =
@@ -71,8 +73,12 @@ export function ProfileCreateDialog({
               name: name.trim(),
               scope,
               source,
+              target,
             });
-      onCreated(created);
+      onCreated(
+        created,
+        source === "project" ? projectPath : initialProjectPath,
+      );
     } catch {
       // The mutation reports the failure; the form stays open for another try.
     } finally {
@@ -104,7 +110,11 @@ export function ProfileCreateDialog({
         <DialogHeader>
           <DialogTitle>{t("profiles.createFromCurrent")}</DialogTitle>
           <DialogDescription>
-            {t("profiles.createDescription")}
+            {t(
+              target === "global"
+                ? "profiles.createGlobalDescription"
+                : "profiles.createProjectDescription",
+            )}
           </DialogDescription>
         </DialogHeader>
         <form

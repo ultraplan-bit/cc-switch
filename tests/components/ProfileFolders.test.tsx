@@ -119,9 +119,13 @@ vi.mock("@/lib/toast", () => ({
   },
 }));
 
-const profile = (capturedScope: "claude" | "codex" = "claude"): Profile => ({
+const profile = (
+  capturedScope: ProfileScope = "claude",
+  target: Profile["target"] = "global",
+): Profile => ({
   id: "demo",
   name: "Demo",
+  target,
   payload: {
     providers: { claude: null, "claude-desktop": null, codex: null },
     mcp: {
@@ -173,7 +177,9 @@ beforeEach(() => {
   current = { claude: null, claudeDesktop: null, codex: null };
   mocks.updateTrayMenu.mockResolvedValue(true);
   mocks.pickDirectory.mockResolvedValue("/projects/demo");
-  mocks.create.mockResolvedValue(profile());
+  mocks.create.mockImplementation(({ scope, target }) =>
+    Promise.resolve(profile(scope, target)),
+  );
   mocks.apply.mockResolvedValue([]);
   mocks.connectionStatus.mockResolvedValue({
     status: "configured",
@@ -205,11 +211,8 @@ beforeEach(() => {
               name: name ?? item.name,
               payload: {
                 ...item.payload,
-                ...(scope === "claude"
-                  ? {
-                      claudeProjectConnection:
-                        config.claudeProjectConnection ?? "inherit",
-                    }
+                ...(scope === "claude" && item.target === "project"
+                  ? { claudeProjectConnection: config.claudeProjectConnection }
                   : {}),
                 providers: {
                   ...item.payload.providers,
@@ -381,23 +384,31 @@ describe("ProfilesPage", () => {
     },
   );
 
-  it("shows the same Agent's profiles at each location and only writes after an explicit action", async () => {
+  it("separates profiles by Agent and target while reusing project profiles across directories", async () => {
     profiles = [
       profile(),
+      { ...profile("claude", "project"), id: "project", name: "Project" },
       { ...profile("codex"), id: "other", name: "Codex only" },
+      {
+        ...profile("codex", "project"),
+        id: "other-project",
+        name: "Codex project",
+      },
     ];
     current.claude = { id: "demo", stale: true };
     projects = [
       {
         path: "/first",
         available: true,
-        deployed: { claude: { profileId: "demo", stale: false } },
+        deployed: { claude: { profileId: "project", stale: false } },
       },
       { path: "/second", available: true, deployed: {} },
     ];
     renderWithQueryClient(<ProfilesPage activeApp="claude" />);
     const row = await screen.findByRole("listitem", { name: "Demo" });
     expect(screen.queryByText("Codex only")).toBeNull();
+    expect(screen.queryByRole("listitem", { name: "Project" })).toBeNull();
+    expect(screen.queryByText("Codex project")).toBeNull();
     expect(within(row).getByText("profiles.pendingApply")).toBeVisible();
     expect(
       screen.getByRole("status", { name: "profiles.inEffect.global" }),
@@ -411,8 +422,11 @@ describe("ProfilesPage", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "profiles.scope.project" }),
     );
+    const projectRow = await screen.findByRole("listitem", { name: "Project" });
+    expect(screen.queryByRole("listitem", { name: "Demo" })).toBeNull();
+    expect(screen.queryByText("Codex project")).toBeNull();
     expect(
-      within(row).getByText("profiles.projectDeploy.current"),
+      within(projectRow).getByText("profiles.projectDeploy.current"),
     ).toBeVisible();
     await userEvent.click(
       screen.getByRole("combobox", { name: "profiles.projects.select" }),
@@ -422,13 +436,13 @@ describe("ProfilesPage", () => {
     );
     expect(mocks.deploy).not.toHaveBeenCalled();
     fireEvent.click(
-      within(row).getByRole("button", {
+      within(projectRow).getByRole("button", {
         name: "profiles.projectDeploy.button",
       }),
     );
     await waitFor(() =>
       expect(mocks.deploy).toHaveBeenCalledWith({
-        id: "demo",
+        id: "project",
         scope: "claude",
         projectPath: "/second",
         resolution: null,
@@ -439,7 +453,7 @@ describe("ProfilesPage", () => {
   });
 
   it("registers and removes a directory independently of the profiles", async () => {
-    profiles = [profile()];
+    profiles = [profile("claude", "project")];
     renderWithQueryClient(<ProfilesPage activeApp="claude" projectOnly />);
     expect(await screen.findByText("profiles.projects.empty")).toBeVisible();
     fireEvent.click(
@@ -465,7 +479,7 @@ describe("ProfilesPage", () => {
   });
 
   it("duplicates a profile independently of an unavailable deployment location", async () => {
-    profiles = [profile()];
+    profiles = [profile("claude", "project")];
     projects = [{ path: "/offline", available: false, deployed: {} }];
     renderWithQueryClient(<ProfilesPage activeApp="claude" projectOnly />);
     const row = within(await screen.findByRole("listitem", { name: "Demo" }));
@@ -488,14 +502,145 @@ describe("ProfilesPage", () => {
         sourceId: "demo",
         name: "Second",
         scope: "claude",
+        target: "project",
       }),
     );
     expect(mocks.addProject).not.toHaveBeenCalled();
     expect(mocks.deploy).not.toHaveBeenCalled();
   });
 
+  it.each(["global", "project"] as const)(
+    "copies a %s profile to the other target and edits only the independent copy",
+    async (sourceTarget) => {
+      const destination = sourceTarget === "global" ? "project" : "global";
+      const original = profile("claude", sourceTarget);
+      original.payload.models = {
+        claude: "original-model",
+        codex: null,
+        "claude-desktop": null,
+      };
+      profiles = [original];
+      current.claude =
+        sourceTarget === "global" ? { id: original.id, stale: false } : null;
+      projects = [{ path: "/demo", available: true, deployed: {} }];
+      const originalSnapshot = structuredClone(original);
+      mocks.duplicate.mockImplementation(({ name, target }) => {
+        const copied = {
+          ...structuredClone(original),
+          id: "copy",
+          name,
+          target,
+        };
+        profiles = [...profiles, copied];
+        return Promise.resolve(copied);
+      });
+      renderWithQueryClient(<ProfilesPage activeApp="claude" />);
+      if (sourceTarget === "project")
+        fireEvent.click(
+          screen.getByRole("button", { name: "profiles.scope.project" }),
+        );
+      const row = within(await screen.findByRole("listitem", { name: "Demo" }));
+      await userEvent.click(
+        row.getByRole("button", { name: "profiles.context.rowActions" }),
+      );
+      await userEvent.click(
+        await screen.findByRole("menuitem", {
+          name:
+            destination === "project"
+              ? "profiles.copyToProject"
+              : "profiles.copyToGlobal",
+        }),
+      );
+      const dialog = within(await screen.findByRole("dialog"));
+      fireEvent.change(dialog.getByLabelText("profiles.editor.name"), {
+        target: { value: "Independent copy" },
+      });
+      fireEvent.click(dialog.getByRole("button", { name: "common.confirm" }));
+      const model = await screen.findByLabelText("profiles.editor.model", {
+        selector: "input",
+      });
+      expect(mocks.duplicate).toHaveBeenCalledWith({
+        sourceId: original.id,
+        name: "Independent copy",
+        scope: "claude",
+        target: destination,
+      });
+      expect(model).toHaveValue("original-model");
+      if (destination === "project") {
+        expect(mocks.connectionStatus).toHaveBeenCalledWith({
+          projectPath: "/demo",
+        });
+      } else {
+        expect(mocks.connectionStatus).not.toHaveBeenCalled();
+      }
+      fireEvent.change(model, { target: { value: "copy-model" } });
+      fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+      await waitFor(() =>
+        expect(screen.queryByText("profiles.editor.title")).toBeNull(),
+      );
+      expect(profiles.find((item) => item.id === original.id)).toEqual(
+        originalSnapshot,
+      );
+      expect(profiles.find((item) => item.id === "copy")).toMatchObject({
+        target: destination,
+        payload: { models: { claude: "copy-model" } },
+      });
+      expect(
+        screen.getByRole("listitem", { name: "Independent copy" }),
+      ).toBeVisible();
+      expect(screen.queryByRole("listitem", { name: "Demo" })).toBeNull();
+      expect(mocks.apply).not.toHaveBeenCalled();
+      expect(mocks.deploy).not.toHaveBeenCalled();
+      expect(mocks.update).not.toHaveBeenCalled();
+      expect(projects[0].deployed).toEqual({});
+    },
+  );
+
+  it("does not offer a global resnapshot or global copy in the project-only flow", async () => {
+    profiles = [profile("claude", "project")];
+    renderWithQueryClient(<ProfilesPage activeApp="claude" projectOnly />);
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: "profiles.context.rowActions",
+      }),
+    );
+    expect(
+      screen.queryByRole("menuitem", { name: "profiles.captureCurrent" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("menuitem", { name: "profiles.copyToGlobal" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("menuitem", { name: "profiles.duplicate" }),
+    ).toBeVisible();
+  });
+
+  it("only lists global Desktop profiles and offers no project conversion", async () => {
+    profiles = [
+      profile("claude-desktop"),
+      {
+        ...profile("claude-desktop", "project"),
+        id: "invalid-project",
+        name: "Unsupported project",
+      },
+    ];
+    renderWithQueryClient(<ProfilesPage activeApp="claude-desktop" />);
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: "profiles.context.rowActions",
+      }),
+    );
+    expect(screen.queryByText("Unsupported project")).toBeNull();
+    expect(
+      screen.queryByRole("menuitem", { name: "profiles.copyToProject" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("menuitem", { name: "profiles.captureCurrent" }),
+    ).toBeVisible();
+  });
+
   it("preserves the destination of a deployment conflict and checks readiness again", async () => {
-    profiles = [profile()];
+    profiles = [profile("claude", "project")];
     projects = [{ path: "/demo", available: true, deployed: {} }];
     mocks.deploy.mockResolvedValueOnce({
       status: "needsResolution",
@@ -532,20 +677,34 @@ describe("ProfilesPage", () => {
     );
   });
 
-  it.each(["blank", "current", "project"])(
-    "creates from %s and opens the editor without applying",
-    async (source) => {
+  it.each([
+    ["global", "blank"],
+    ["global", "current"],
+    ["project", "blank"],
+    ["project", "current"],
+    ["project", "project"],
+  ] as const)(
+    "creates a %s profile from %s and opens the editor without applying",
+    async (target, source) => {
       mocks.importProject.mockResolvedValue({
-        profile: profile(),
+        profile: profile("claude", "project"),
         warnings: [],
       });
-      renderWithQueryClient(<ProfilesPage activeApp="claude" />);
+      renderWithQueryClient(
+        <ProfilesPage activeApp="claude" projectOnly={target === "project"} />,
+      );
       fireEvent.click(
         await screen.findByRole("button", {
           name: "profiles.createFromCurrent",
         }),
       );
       const dialog = within(screen.getByRole("dialog"));
+      if (target === "global")
+        expect(
+          dialog.queryByRole("radio", {
+            name: /profiles.createSource.project/,
+          }),
+        ).toBeNull();
       fireEvent.change(
         dialog.getByRole("textbox", { name: "profiles.editor.name" }),
         { target: { value: " Demo " } },
@@ -574,9 +733,19 @@ describe("ProfilesPage", () => {
       await screen.findByLabelText("profiles.editor.model", {
         selector: "input",
       });
-      expect(
-        screen.getByLabelText("profiles.editor.projectConnection"),
-      ).toHaveValue("inherit");
+      if (target === "project") {
+        expect(
+          screen.getByLabelText("profiles.editor.projectConnection"),
+        ).toHaveValue("inherit");
+        expect(mocks.connectionStatus).toHaveBeenCalledWith({
+          projectPath: source === "project" ? "/projects/demo" : null,
+        });
+      } else {
+        expect(
+          screen.queryByLabelText("profiles.editor.projectConnection"),
+        ).toBeNull();
+        expect(mocks.connectionStatus).not.toHaveBeenCalled();
+      }
       if (source === "project")
         expect(mocks.importProject).toHaveBeenCalledWith({
           name: "Demo",
@@ -588,6 +757,7 @@ describe("ProfilesPage", () => {
           name: "Demo",
           scope: "claude",
           source,
+          target,
         });
       expect(mocks.apply).not.toHaveBeenCalled();
       expect(mocks.deploy).not.toHaveBeenCalled();
@@ -611,6 +781,59 @@ describe("ProfilesPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "common.cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("keeps the original Agent, target and connection directory while a create dialog is open", async () => {
+    projects = [
+      { path: "/projects/original", available: true, deployed: {} },
+      { path: "/projects/other", available: true, deployed: {} },
+    ];
+    const { rerender } = renderWithQueryClient(
+      <ProfilesPage
+        activeApp="claude"
+        projectOnly
+        initialProjectPath="/projects/original"
+      />,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "profiles.createFromCurrent" }),
+    );
+    fireEvent.change(screen.getByLabelText("profiles.editor.name"), {
+      target: { value: "Prepared project" },
+    });
+    rerender(
+      <ProfilesPage
+        activeApp="codex"
+        projectOnly
+        initialProjectPath="/projects/other"
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "profiles.createAndEdit" }),
+    );
+    await screen.findByLabelText("profiles.editor.projectConnection");
+    expect(mocks.create).toHaveBeenCalledWith({
+      name: "Prepared project",
+      scope: "claude",
+      source: "blank",
+      target: "project",
+    });
+    expect(mocks.connectionStatus).toHaveBeenCalledWith({
+      projectPath: "/projects/original",
+    });
+    expect(
+      mocks.connectionStatus.mock.calls.every(
+        ([args]) => args.projectPath === "/projects/original",
+      ),
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    await waitFor(() =>
+      expect(mocks.saveConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ scope: "claude" }),
+      ),
+    );
+    expect(mocks.apply).not.toHaveBeenCalled();
+    expect(mocks.deploy).not.toHaveBeenCalled();
   });
 
   it("only shows search above five profiles and searches connection and model", async () => {
@@ -649,7 +872,7 @@ describe("ProfilesPage", () => {
 
 describe("direct profile configuration editing", () => {
   it("adds a project provider without writing global configuration or losing the profile draft", async () => {
-    profiles = [profile()];
+    profiles = [profile("claude", "project")];
     availableProviders = {};
     mocks.connectionStatus.mockResolvedValue({
       status: "missing",
@@ -657,7 +880,7 @@ describe("direct profile configuration editing", () => {
       providerName: null,
       reason: null,
     });
-    renderWithQueryClient(<ProfilesPage activeApp="claude" />);
+    renderWithQueryClient(<ProfilesPage activeApp="claude" projectOnly />);
     fireEvent.click(await screen.findByRole("button", { name: "common.edit" }));
     fireEvent.change(await screen.findByLabelText("profiles.editor.name"), {
       target: { value: "Unsaved project" },
@@ -713,7 +936,7 @@ describe("direct profile configuration editing", () => {
   });
 
   it("shows missing inherited access without changing the draft, then guides an explicit project provider choice", async () => {
-    profiles = [profile()];
+    profiles = [profile("claude", "project")];
     projects = [{ path: "/projects/empty", available: true, deployed: {} }];
     mocks.connectionStatus.mockResolvedValue({
       status: "missing",
@@ -758,7 +981,7 @@ describe("direct profile configuration editing", () => {
 
   it("keeps connection check failures non-blocking and preserves the editor's project context", async () => {
     mocks.connectionStatus.mockRejectedValue(new Error("unavailable"));
-    profiles = [profile()];
+    profiles = [profile("claude", "project")];
     projects = [{ path: "/projects/context", available: true, deployed: {} }];
     const { rerender } = renderWithQueryClient(
       <ProfilesPage activeApp="claude" projectOnly />,
@@ -800,7 +1023,7 @@ describe("direct profile configuration editing", () => {
   });
 
   it("asks before deploying without detected access and preserves the target when applying configuration only", async () => {
-    profiles = [profile()];
+    profiles = [profile("claude", "project")];
     projects = [{ path: "/projects/pending", available: true, deployed: {} }];
     const connection = {
       status: "missing",
@@ -846,7 +1069,7 @@ describe("direct profile configuration editing", () => {
   });
 
   it("opens a direct connection draft from deployment guidance without saving or retrying automatically", async () => {
-    profiles = [profile()];
+    profiles = [profile("claude", "project")];
     projects = [{ path: "/projects/choose", available: true, deployed: {} }];
     mocks.deploy.mockResolvedValueOnce({
       status: "needsConnection",
@@ -887,7 +1110,7 @@ describe("direct profile configuration editing", () => {
   });
 
   it("retains a saved direct connection through list refresh, reopening, and project deployment", async () => {
-    const item = profile();
+    const item = profile("claude", "project");
     profiles = [item];
     projects = [
       { path: "/projects/first", available: true, deployed: {} },
@@ -902,16 +1125,19 @@ describe("direct profile configuration editing", () => {
       return Promise.resolve({ status: "applied", changed: [], warnings: [] });
     });
     const { unmount } = renderWithQueryClient(
-      <ProfilesPage activeApp="claude" />,
+      <ProfilesPage activeApp="claude" projectOnly />,
     );
     fireEvent.click(await screen.findByRole("button", { name: "common.edit" }));
     const connection = await screen.findByLabelText(
       "profiles.editor.projectConnection",
     );
     expect(connection).toHaveValue("inherit");
-    fireEvent.change(screen.getByLabelText("profiles.editor.provider"), {
-      target: { value: "provider-b" },
-    });
+    fireEvent.change(
+      screen.getByLabelText("profiles.editor.projectModelProvider"),
+      {
+        target: { value: "provider-b" },
+      },
+    );
     expect(connection).toHaveValue("inherit");
     fireEvent.change(connection, { target: { value: "direct" } });
     fireEvent.click(screen.getByRole("button", { name: "common.save" }));
@@ -927,6 +1153,7 @@ describe("direct profile configuration editing", () => {
       claudeProjectConnection: "direct",
       providers: { claude: "provider-b" },
     });
+    expect(profiles[0].target).toBe("project");
     expect(mocks.deploy).not.toHaveBeenCalled();
 
     // A fresh query client forces this view to read the saved list again.
@@ -934,7 +1161,7 @@ describe("direct profile configuration editing", () => {
     const readsBeforeReload = mocks.invoke.mock.calls.filter(
       ([command]) => command === "list_profiles",
     ).length;
-    renderWithQueryClient(<ProfilesPage activeApp="claude" />);
+    renderWithQueryClient(<ProfilesPage activeApp="claude" projectOnly />);
     fireEvent.click(await screen.findByRole("button", { name: "common.edit" }));
     expect(
       await screen.findByLabelText("profiles.editor.projectConnection"),
@@ -947,9 +1174,6 @@ describe("direct profile configuration editing", () => {
         .length,
     ).toBeGreaterThan(readsBeforeReload);
     fireEvent.click(screen.getByRole("button", { name: "common.cancel" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "profiles.scope.project" }),
-    );
     await userEvent.click(
       screen.getByRole("combobox", { name: "profiles.projects.select" }),
     );
@@ -1133,7 +1357,7 @@ describe("direct profile configuration editing", () => {
   it("edits a project's independent model and resource references without preparing or changing global configuration", async () => {
     profiles = [
       {
-        ...profile(),
+        ...profile("claude", "project"),
         id: "a",
         name: "Project A",
         payload: {
@@ -1151,7 +1375,7 @@ describe("direct profile configuration editing", () => {
         },
       },
       {
-        ...profile(),
+        ...profile("claude", "project"),
         id: "b",
         name: "Project B",
         payload: {
@@ -1169,7 +1393,7 @@ describe("direct profile configuration editing", () => {
         },
       },
     ];
-    renderWithQueryClient(<ProfilesPage activeApp="claude" />);
+    renderWithQueryClient(<ProfilesPage activeApp="claude" projectOnly />);
     fireEvent.click(
       (await screen.findAllByRole("button", { name: "common.edit" }))[0],
     );
@@ -1178,9 +1402,12 @@ describe("direct profile configuration editing", () => {
         selector: "input",
       }),
     ).toHaveValue("independent-a");
-    fireEvent.change(screen.getByLabelText("profiles.editor.provider"), {
-      target: { value: "provider-b" },
-    });
+    fireEvent.change(
+      screen.getByLabelText("profiles.editor.projectModelProvider"),
+      {
+        target: { value: "provider-b" },
+      },
+    );
     expect(
       screen.getByLabelText("profiles.editor.model", { selector: "input" }),
     ).toHaveValue("independent-a");
@@ -1389,7 +1616,6 @@ describe("direct profile configuration editing", () => {
         scope: "claude",
         name: "Renamed",
         config: {
-          claudeProjectConnection: "inherit",
           followGlobalResources: false,
           providerId: null,
           model: "",

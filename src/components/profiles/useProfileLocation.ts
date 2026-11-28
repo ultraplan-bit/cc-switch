@@ -80,19 +80,22 @@ export function useProfileLocation(
     }
   };
 
+  // Resolve the remembered directory even while viewing global profiles, so a
+  // copy into the project target opens with the same deployment context.
+  const selectedProject =
+    projects?.find((item) => own?.path && samePath(item.path, own.path)) ??
+    projects?.[0];
   const location: ProfileLocation = projectMode
     ? {
         mode: "project",
         // A remembered project that was removed falls back to the first one.
-        project:
-          projects?.find(
-            (item) => own?.path && samePath(item.path, own.path),
-          ) ?? projects?.[0],
+        project: selectedProject,
       }
     : { mode: "global" };
 
   return {
     location,
+    selectedProject,
     setMode: (mode: "global" | "project") => update({ ...own, mode }),
     selectProject: (path: string) => update({ mode: "project", path }),
   };

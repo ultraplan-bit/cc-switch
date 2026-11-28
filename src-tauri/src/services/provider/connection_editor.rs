@@ -281,9 +281,14 @@ mod tests {
                 assert!(ProfileService::list(&state).unwrap().is_empty());
                 assert!(state.db.get_all_profiles().unwrap().is_empty());
             }
-            let profile =
-                ProfileService::create_from(&state, "My profile", scope, ProfileSource::Blank)
-                    .unwrap();
+            let profile = ProfileService::create_from(
+                &state,
+                "My profile",
+                scope,
+                ProfileSource::Blank,
+                crate::database::ProfileTarget::Global,
+            )
+            .unwrap();
             let profiles = ProfileService::list(&state).unwrap();
             assert_eq!(profiles.len(), 1);
             assert_eq!(profiles[0].id, profile.id);

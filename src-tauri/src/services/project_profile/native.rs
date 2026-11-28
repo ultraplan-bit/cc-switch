@@ -250,6 +250,7 @@ mod tests {
         *payload.native_config.get_mut(&scope.apps()[0]).unwrap() = Some(text.into());
         let profile = Profile {
             id: "native".into(),
+            target: crate::database::ProfileTarget::Project,
             name: "Native".into(),
             payload: serde_json::to_string(&payload).unwrap(),
             sort_order: None,

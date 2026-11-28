@@ -689,13 +689,28 @@ fn schema_initializes_only_empty_databases_and_rejects_other_versions_without_wr
     for version in [0, SCHEMA_VERSION - 1, SCHEMA_VERSION + 1] {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
-            "CREATE TABLE original (value TEXT); INSERT INTO original VALUES ('keep');",
+            "CREATE TABLE original (value TEXT); INSERT INTO original VALUES ('keep');
+             CREATE TABLE profiles (id TEXT PRIMARY KEY, name TEXT NOT NULL, payload TEXT NOT NULL);
+             INSERT INTO profiles VALUES ('old-profile', 'Original profile', '{\"preserved\":true}');",
         )
         .unwrap();
         Database::set_user_version(&conn, version).unwrap();
         assert!(Database::create_tables_on_conn(&conn).is_err());
         assert_eq!(Database::get_user_version(&conn).unwrap(), version);
         assert!(!Database::table_exists(&conn, "providers").unwrap());
+        assert!(!Database::has_column(&conn, "profiles", "target").unwrap());
+        assert_eq!(
+            conn.query_row(
+                "SELECT name, payload FROM profiles WHERE id = 'old-profile'",
+                [],
+                |row| { Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)) }
+            )
+            .unwrap(),
+            (
+                "Original profile".to_string(),
+                "{\"preserved\":true}".to_string()
+            )
+        );
         assert_eq!(
             conn.query_row("SELECT value FROM original", [], |row| row
                 .get::<_, String>(0))
@@ -707,5 +722,72 @@ fn schema_initializes_only_empty_databases_and_rejects_other_versions_without_wr
     Database::create_tables_on_conn(&conn).unwrap();
     assert_eq!(Database::get_user_version(&conn).unwrap(), SCHEMA_VERSION);
     assert!(!Database::has_column(&conn, "profiles", "project_path").unwrap());
+    let target = get_column_info(&conn, "profiles", "target");
+    assert_eq!(target.r#type, "TEXT");
+    assert_eq!(target.notnull, 1);
+    assert_eq!(target.default, None);
+    assert!(conn
+        .execute(
+            "INSERT INTO profiles (id, name, payload) VALUES ('missing', 'Missing target', '{}')",
+            []
+        )
+        .is_err());
+    for target in [None, Some(""), Some("unknown")] {
+        assert!(conn.execute(
+            "INSERT INTO profiles (id, name, target, payload) VALUES ('invalid', 'Invalid target', ?1, '{}')",
+            [target],
+        ).is_err());
+    }
+    for target in ["global", "project"] {
+        conn.execute(
+            "INSERT INTO profiles (id, name, target, payload) VALUES (?1, 'Current profile', ?1, '{}')",
+            [target],
+        ).unwrap();
+    }
     Database::create_tables_on_conn(&conn).unwrap();
+    assert_eq!(
+        conn.query_row("SELECT COUNT(*) FROM profiles", [], |row| row
+            .get::<_, i64>(0))
+            .unwrap(),
+        2
+    );
+}
+
+#[test]
+fn saving_a_profile_cannot_change_its_target_or_overwrite_its_other_fields() {
+    let db = Database::memory().unwrap();
+    for target in [ProfileTarget::Global, ProfileTarget::Project] {
+        let original = Profile {
+            id: target.as_str().to_string(),
+            name: "Original".into(),
+            target,
+            payload: "{}".into(),
+            sort_order: Some(3),
+            created_at: Some(10),
+            updated_at: Some(20),
+        };
+        db.save_profile(&original).unwrap();
+        let mut changed = original.clone();
+        changed.target = if target == ProfileTarget::Global {
+            ProfileTarget::Project
+        } else {
+            ProfileTarget::Global
+        };
+        changed.name = "Overwritten".into();
+        changed.payload = "{\"changed\":true}".into();
+        changed.updated_at = Some(30);
+        assert!(db.save_profile(&changed).is_err());
+        let saved = db.get_profile(&original.id).unwrap().unwrap();
+        assert_eq!(saved.target, original.target);
+        assert_eq!(saved.name, original.name);
+        assert_eq!(saved.payload, original.payload);
+        assert_eq!(saved.sort_order, original.sort_order);
+        assert_eq!(saved.created_at, original.created_at);
+        assert_eq!(saved.updated_at, original.updated_at);
+        changed.target = target;
+        db.save_profile(&changed).unwrap();
+        let saved = db.get_profile(&original.id).unwrap().unwrap();
+        assert_eq!(saved.target, target);
+        assert_eq!(saved.name, changed.name);
+    }
 }

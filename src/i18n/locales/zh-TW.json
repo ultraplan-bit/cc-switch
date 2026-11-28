@@ -3107,9 +3107,8 @@
     "defaultModel": "預設模型",
     "loadFailed": "無法讀取設定方案",
     "searchPlaceholder": "搜尋方案、模型或供應商",
-    "empty": "此 Agent 尚無設定方案，新增一份開始使用。",
+    "empty": "此用途下還沒有設定方案，建立一份開始使用。",
     "createFromCurrent": "新增方案",
-    "createDescription": "設定方案儲存一個 Agent 的連線、模型、行為和資源。新增不會變更任何設定，套用或部署後才生效。",
     "createAndEdit": "建立並編輯",
     "createSource": {
       "label": "初始內容",
@@ -3146,7 +3145,7 @@
     "applyFailed": "套用方案失敗：{{detail}}",
     "applyWarnings": "方案已套用，有 {{warningCount}} 則提示：\n{{details}}",
     "scope": {
-      "label": "使用位置",
+      "label": "方案用途",
       "global": "全域",
       "project": "專案"
     },
@@ -3229,7 +3228,7 @@
       "projectConnectionCredentialsHint": "網址與金鑰會寫入專案的 .claude/settings.local.json，並自動加入 Git 忽略；若此檔案已被 Git 追蹤，則無法部署獨立連線。供應商資訊更新後需重新部署；恢復沿用全域時會移除管理的連線欄位，請重新啟動 Claude 工作階段。",
       "projectConnectionProviderRequired": "請選擇現有供應商，才能使用專案獨立直連。",
       "projectConnectionProviderPlaceholder": "請選擇專案供應商",
-      "providerReferenceHint": "模型能力沿用所選供應商；API 位址、金鑰和帳號仍引用供應商。專案部署不會切換全域連線。",
+      "providerReferenceHint": "套用到全域時使用所選供應商。位址、金鑰及帳號繼續儲存在供應商庫。",
       "model": "模型",
       "resetModels": "還原供應商模型設定",
       "runtimeSettings": "推理與上下文",
@@ -3246,8 +3245,8 @@
       "nativeObjectRequired": "設定必須是 JSON 物件",
       "nativeInvalid": "設定格式有誤：{{detail}}",
       "manageResources": "由此方案管理 MCP、Skills 和指令",
-      "resourcesManagedHint": "套用或部署時只啟用這裡選取的資源，其餘會停用。",
-      "resourcesFollowHint": "此方案不變更 MCP、Skills 和指令，全域已啟用的或專案中已有的維持原樣。",
+      "resourcesManagedHint": "套用到全域時啟用此處選取的資源，停用其他由此功能管理的全域資源。",
+      "resourcesFollowHint": "此方案不變更全域 MCP、Skills 和指令，保留現有設定。",
       "mcp": "MCP 伺服器",
       "skills": "Skills",
       "searchResources": "搜尋 MCP 或 Skills",
@@ -3262,7 +3261,12 @@
       "noPrompt": "不使用指令範本",
       "instructionHint": "引用提示詞庫的內容，套用或部署時寫入此 Agent 的指令檔。",
       "instructionsFollowHint": "此方案不管理指令。開啟資源管理後可選擇指令範本。",
-      "saveHint": "儲存只更新方案；套用至全域或部署到專案後生效。"
+      "globalSaveHint": "儲存只更新此全域方案；套用到全域後生效。",
+      "projectSaveHint": "儲存只更新此專案方案；部署到所選目錄後生效。其他使用此方案的目錄需分別重新部署。",
+      "projectModelProvider": "模型來源供應商",
+      "projectModelProviderHint": "供應商用於取得模型及驗證可用性，不會切換專案連線。模型須由目前全域連線或聚合提供。",
+      "projectResourcesManagedHint": "將所選資源部署到專案，仍遵循此 Agent 的原生繼承規則，未託管的全域資源可能繼續生效。",
+      "projectResourcesFollowHint": "保留專案現有 MCP、Skills 和指令，不會移除既有專案覆寫。"
     },
     "connection": {
       "section": "API 接入",
@@ -3287,7 +3291,16 @@
         "login": "Claude 登入",
         "routing": "本機路由"
       }
-    }
+    },
+    "target": {
+      "global": "全域方案",
+      "project": "專案方案"
+    },
+    "createGlobalDescription": "儲存此 Agent 的全域預設設定；建立後需手動套用到全域。",
+    "createProjectDescription": "儲存此 Agent 的專案設定，可部署到多個目錄；建立後需手動部署。",
+    "copyToGlobal": "複製為全域方案",
+    "copyToProject": "複製為專案方案",
+    "copyTargetHint": "副本獨立儲存，只保留目標用途支援的設定。複製不會套用或部署。"
   },
   "workspace": {
     "title": "Workspace 檔案管理",

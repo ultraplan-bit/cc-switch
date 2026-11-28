@@ -3036,9 +3036,8 @@
     "defaultModel": "Varsayılan model",
     "loadFailed": "Profiller yüklenemedi",
     "searchPlaceholder": "Profil, model veya sağlayıcı ara",
-    "empty": "Bu Agent için henüz profil yok. Başlamak için bir tane oluşturun.",
+    "empty": "Bu hedef için henüz profil yok. Başlamak için bir profil oluşturun.",
     "createFromCurrent": "Yeni profil",
-    "createDescription": "Profil, tek bir Agent’ın bağlantısını, modellerini, davranışını ve kaynaklarını kaydeder. Oluşturmak hiçbir şeyi değiştirmez; profil uygulandığında veya dağıtıldığında geçerli olur.",
     "createAndEdit": "Oluştur ve düzenle",
     "createSource": {
       "label": "Başlangıç içeriği",
@@ -3075,7 +3074,7 @@
     "applyFailed": "Profil uygulanamadı: {{detail}}",
     "applyWarnings": "Profil {{warningCount}} notla uygulandı:\n{{details}}",
     "scope": {
-      "label": "Kullanım yeri",
+      "label": "Profil hedefi",
       "global": "Genel",
       "project": "Proje"
     },
@@ -3158,7 +3157,7 @@
       "projectConnectionCredentialsHint": "Adres ve anahtar .claude/settings.local.json dosyasına yazılır ve dosya Git dışında tutulur. Git dosyayı zaten izliyorsa bağımsız bağlantı uygulanamaz. Sağlayıcı değişikliklerinden sonra yeniden uygulayın. Devralmaya dönmek yönetilen bağlantı alanlarını kaldırır; ardından Claude oturumunu yeniden başlatın.",
       "projectConnectionProviderRequired": "Bağımsız proje bağlantısı için mevcut bir sağlayıcı seçin.",
       "projectConnectionProviderPlaceholder": "Proje sağlayıcısını seçin",
-      "providerReferenceHint": "Model özellikleri seçilen sağlayıcıyı kullanır. API adresleri, anahtarlar ve hesaplar sağlayıcıda kalır. Projeye dağıtım genel bağlantıyı değiştirmez.",
+      "providerReferenceHint": "Genele uygularken seçili sağlayıcı kullanılır. Adresler, anahtarlar ve hesaplar sağlayıcı kitaplığında kalır.",
       "model": "Model",
       "resetModels": "Sağlayıcı model ayarlarını geri yükle",
       "runtimeSettings": "Akıl yürütme ve bağlam",
@@ -3175,8 +3174,8 @@
       "nativeObjectRequired": "Yapılandırma bir JSON nesnesi olmalıdır",
       "nativeInvalid": "Geçersiz yapılandırma: {{detail}}",
       "manageResources": "MCP, Skills ve talimatları bu profille yönet",
-      "resourcesManagedHint": "Uygulama veya dağıtım sırasında yalnızca burada seçilen kaynaklar etkinleştirilir, diğerleri kapatılır.",
-      "resourcesFollowHint": "Bu profil MCP, Skills ve talimatlara dokunmaz. Genel olarak etkin olanlar veya projede zaten bulunanlar olduğu gibi kalır.",
+      "resourcesManagedHint": "Seçili kaynakları genel olarak etkinleştirir ve bu özelliğin yönettiği diğer genel kaynakları devre dışı bırakır.",
+      "resourcesFollowHint": "Genel MCP, Skills ve talimatları değiştirmez.",
       "mcp": "MCP sunucuları",
       "skills": "Beceriler",
       "searchResources": "MCP veya Skills ara",
@@ -3191,7 +3190,12 @@
       "noPrompt": "Talimat şablonu yok",
       "instructionHint": "Kitaplıktaki bir istemi kullanır. Uygulama veya dağıtım sırasında bu Agent’ın talimat dosyasına yazılır.",
       "instructionsFollowHint": "Bu profil talimatları yönetmiyor. Şablon seçmek için kaynak yönetimini açın.",
-      "saveHint": "Kaydetmek yalnızca profili günceller. Değişiklikleri kullanmak için genel olarak uygulayın veya bir projeye dağıtın."
+      "globalSaveHint": "Kaydetme bu genel profili günceller. Değişiklikleri kullanmak için genele uygulayın.",
+      "projectSaveHint": "Kaydetme bu proje profilini günceller. Seçili dizine dağıtınca değişiklikler etkinleşir; diğer dizinlere ayrı ayrı dağıtılmalıdır.",
+      "projectModelProvider": "Model kaynağı sağlayıcı",
+      "projectModelProviderHint": "Bu sağlayıcı modelleri almak ve kullanılabilirliği denetlemek içindir; proje bağlantısını değiştirmez. Modeller mevcut genel bağlantı veya toplama üzerinden kullanılabilir olmalıdır.",
+      "projectResourcesManagedHint": "Seçili kaynakları bu Agent’ın yerel devralma kurallarına göre dağıtın. Yönetilmeyen genel kaynaklar etkin kalabilir.",
+      "projectResourcesFollowHint": "Projedeki mevcut MCP, Skills ve talimatları korur. Mevcut proje geçersiz kılmaları kaldırılmaz."
     },
     "connection": {
       "section": "API bağlantısı",
@@ -3216,7 +3220,16 @@
         "login": "Claude oturumu",
         "routing": "Yerel yönlendirme"
       }
-    }
+    },
+    "target": {
+      "global": "Genel profil",
+      "project": "Proje profili"
+    },
+    "createGlobalDescription": "Bu Agent’ın genel varsayılanlarını kaydeder. Hazır olduğunda profili genele elle uygulayın.",
+    "createProjectDescription": "Bu Agent’ın proje ayarlarını bir veya daha fazla dizine dağıtmak için kaydeder. Hazır olduğunda elle dağıtın.",
+    "copyToGlobal": "Genel profil olarak kopyala",
+    "copyToProject": "Proje profili olarak kopyala",
+    "copyTargetHint": "Kopya bağımsızdır ve yalnızca hedefin desteklediği ayarları korur. Kopyalama uygulama veya dağıtım yapmaz."
   },
   "workspace": {
     "title": "Çalışma Alanı Dosyaları",

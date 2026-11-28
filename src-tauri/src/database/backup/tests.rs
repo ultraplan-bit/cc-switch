@@ -1,4 +1,5 @@
 use super::{lock_backup_file_operations, Database};
+use crate::database::ProfileTarget;
 use crate::error::AppError;
 use crate::settings::{get_settings, update_settings, AppSettings};
 use crate::test_support::EnvVars;
@@ -343,7 +344,7 @@ fn export_sql_sets_private_0600_permissions() -> Result<(), AppError> {
 
 #[test]
 #[serial]
-fn sql_roundtrip_preserves_project_profiles_and_scoped_state() -> Result<(), AppError> {
+fn sql_roundtrip_preserves_global_and_project_profiles_and_scoped_state() -> Result<(), AppError> {
     let home = TestHomeGuard::new();
     let source = Database::memory()?;
     let project_path = home.path().join("project").to_string_lossy().into_owned();
@@ -356,15 +357,25 @@ fn sql_roundtrip_preserves_project_profiles_and_scoped_state() -> Result<(), App
         "projectAliases": {"claude": {"mcp": {"project-server": "local-server"}}}
     })
     .to_string();
+    let global_payload = serde_json::json!({
+        "providers": {"claude": "connection-a"},
+        "models": {"claude": "global-model"},
+        "mcp": {"claude": ["global-server"]},
+    })
+    .to_string();
     {
         let conn = crate::database::lock_conn!(source.conn);
         conn.execute(
-            "INSERT INTO profiles (id, name, payload) VALUES (?1, ?2, ?3)",
+            "INSERT INTO profiles (id, name, target, payload) VALUES (?1, ?2, 'project', ?3)",
             rusqlite::params!["project-profile", "Project profile", payload],
+        )?;
+        conn.execute(
+            "INSERT INTO profiles (id, name, target, payload) VALUES (?1, ?2, 'global', ?3)",
+            rusqlite::params!["global-profile", "Global profile", global_payload],
         )?;
     }
     source.add_profile_project(&project_path)?;
-    source.set_current_profile("claude", Some("project-profile"), true)?;
+    source.set_current_profile("claude", Some("global-profile"), true)?;
     source.set_current_profile("codex", None, false)?;
     let sql_path = home.path().join("profiles.sql");
     source.export_sql(&sql_path)?;
@@ -376,13 +387,35 @@ fn sql_roundtrip_preserves_project_profiles_and_scoped_state() -> Result<(), App
         target.get_profile("project-profile")?.unwrap().payload,
         payload
     );
+    assert_eq!(
+        target.get_profile("project-profile")?.unwrap().target,
+        ProfileTarget::Project
+    );
+    let mut global = target.get_profile("global-profile")?.unwrap();
+    assert_eq!(global.target, ProfileTarget::Global);
+    assert_eq!(global.payload, global_payload);
     assert_eq!(target.get_profile_projects()?, vec![project_path.clone()]);
     assert_eq!(
         target.get_current_profile_id("claude")?.as_deref(),
-        Some("project-profile")
+        Some("global-profile")
     );
     assert!(target.is_current_profile_stale("claude")?);
     assert_eq!(target.get_current_profile_id("codex")?, None);
+    global.name = "Edited global profile".into();
+    global.payload = "{}".into();
+    target.save_profile(&global)?;
+    assert_eq!(
+        target.get_profile("project-profile")?.unwrap().payload,
+        payload
+    );
+    assert_eq!(
+        target.get_profile("project-profile")?.unwrap().name,
+        "Project profile"
+    );
+    assert_eq!(
+        source.get_profile("global-profile")?.unwrap().payload,
+        global_payload
+    );
     let conn = crate::database::lock_conn!(target.conn);
     assert_eq!(
         Database::get_user_version(&conn)?,
@@ -849,15 +882,125 @@ fn import_rejects_truncated_open_transaction_and_keeps_live_database() -> Result
 fn import_rejects_unsupported_schema_without_changing_live_database() -> Result<(), AppError> {
     let _test_home = TestHomeGuard::new();
     let source = Database::memory()?;
-    let exported = source.export_sql_string()?;
-    let unsupported = exported.replace(
-        &format!("PRAGMA user_version={};", crate::database::SCHEMA_VERSION),
-        "PRAGMA user_version=1;",
-    );
+    {
+        let conn = crate::database::lock_conn!(source.conn);
+        conn.execute_batch(
+            "DROP TABLE profiles;
+             CREATE TABLE profiles (id TEXT PRIMARY KEY, name TEXT NOT NULL, payload TEXT NOT NULL);
+             INSERT INTO profiles VALUES ('old-profile', 'Old shared profile', '{}');",
+        )?;
+        Database::set_user_version(&conn, crate::database::SCHEMA_VERSION - 1)?;
+    }
+    let unsupported = source.export_sql_string()?;
     let target = Database::memory()?;
     target.set_setting("sentinel", "keep")?;
-    assert!(target.import_sql_string(&unsupported).is_err());
+    {
+        let conn = crate::database::lock_conn!(target.conn);
+        conn.execute(
+            "INSERT INTO profiles (id, name, target, payload) VALUES ('live-profile', 'Keep live', 'global', '{\"preserved\":true}')",
+            [],
+        )?;
+    }
+    let error = target
+        .import_sql_string(&unsupported)
+        .expect_err("old shared Profile format must be rejected");
+    assert!(error.to_string().contains(&format!(
+        "不支持数据库格式版本 {}",
+        crate::database::SCHEMA_VERSION - 1
+    )));
     assert_eq!(target.get_setting("sentinel")?.as_deref(), Some("keep"));
+    let live = target.get_profile("live-profile")?.unwrap();
+    assert_eq!(live.name, "Keep live");
+    assert_eq!(live.target, ProfileTarget::Global);
+    assert_eq!(live.payload, "{\"preserved\":true}");
+    assert!(target.get_profile("old-profile")?.is_none());
+    let conn = crate::database::lock_conn!(target.conn);
+    assert_eq!(
+        Database::get_user_version(&conn)?,
+        crate::database::SCHEMA_VERSION
+    );
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn import_and_restore_reject_invalid_profile_targets_without_replacing_live_data(
+) -> Result<(), AppError> {
+    let _test_home = TestHomeGuard::new();
+    let target = Database::init()?;
+    target.set_setting("sentinel", "keep")?;
+    {
+        let conn = crate::database::lock_conn!(target.conn);
+        conn.execute(
+            "INSERT INTO profiles (id, name, target, payload) VALUES ('live-profile', 'Keep live', 'project', '{\"preserved\":true}')",
+            [],
+        )?;
+    }
+    let backup_dir = backups_dir()?;
+    for (label, definition, values) in [
+        ("missing", "", "'bad-profile', 'Invalid profile', '{}'"),
+        (
+            "invalid",
+            "target TEXT,",
+            "'bad-profile', 'Invalid profile', 'shared', '{}'",
+        ),
+        (
+            "null",
+            "target TEXT,",
+            "'bad-profile', 'Invalid profile', NULL, '{}'",
+        ),
+    ] {
+        let filename = format!("invalid-target-{label}.db");
+        let source_path = backup_dir.join(&filename);
+        let unsupported = {
+            let conn = Connection::open(&source_path)?;
+            Database::create_tables_on_conn(&conn)?;
+            conn.execute_batch(&format!(
+                "DROP TABLE profiles;
+                 CREATE TABLE profiles (id TEXT PRIMARY KEY, name TEXT NOT NULL, {definition} payload TEXT NOT NULL);
+                 INSERT INTO profiles VALUES ({values});"
+            ))?;
+            // This backup falsely claims the current version; row and column
+            // validation must still reject it before either replacement path.
+            assert_eq!(
+                Database::get_user_version(&conn)?,
+                crate::database::SCHEMA_VERSION
+            );
+            Database::dump_sql(&conn, &[])?
+        };
+        let source_before =
+            std::fs::read(&source_path).map_err(|e| AppError::io(&source_path, e))?;
+        let backups_before = Database::list_backups()?.len();
+        for result in [
+            target.import_sql_string(&unsupported),
+            target.restore_from_backup(&filename),
+        ] {
+            let error =
+                result.expect_err("invalid Profile target must be rejected before replacement");
+            assert!(error.to_string().contains("Profile"), "{label}: {error}");
+            let live = target.get_profile("live-profile")?.unwrap();
+            assert_eq!(live.name, "Keep live");
+            assert_eq!(live.target, ProfileTarget::Project);
+            assert_eq!(live.payload, "{\"preserved\":true}");
+            assert!(target.get_profile("bad-profile")?.is_none());
+            assert_eq!(target.get_setting("sentinel")?.as_deref(), Some("keep"));
+            let conn = crate::database::lock_conn!(target.conn);
+            assert_eq!(
+                Database::get_user_version(&conn)?,
+                crate::database::SCHEMA_VERSION
+            );
+        }
+        assert_eq!(
+            Database::list_backups()?.len(),
+            backups_before,
+            "failed staging must not create safety backups"
+        );
+        assert_eq!(
+            std::fs::read(&source_path).map_err(|e| AppError::io(&source_path, e))?,
+            source_before,
+            "rejected source backup must remain unchanged"
+        );
+    }
     Ok(())
 }
 

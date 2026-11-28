@@ -125,7 +125,7 @@ paru -S cc-switch-bin
 - **MCP**：点击侧栏的“MCP” → 通过模板或自定义配置添加服务器（或“导入已有”）→ 切换各工具的同步开关
 - **提示词**：点击侧栏的“提示词” → 使用 Markdown 编辑器创建提示词 → 启用后写入该工具的提示词文件
 - **Skills**：点击侧栏的“Skills” →“发现技能” → 搜索 skills.sh 或浏览 GitHub 仓库 → 选择目标 Agent，或选择“仅保存到资源库”。ZIP 导入与备份恢复沿用同一目标选择；存储位置为 `~/.agents/skills` 时，仍遵循 Agent 的原生自动发现规则。
-- **Profile 与项目**：Claude Code/Codex 页头下方提供固定 Profile 入口，也可从「Agent 管理 → 配置项目」提前准备。Profile 统一编辑模型、行为、MCP、Skills 和指令；API 地址、密钥和账号引用供应商连接库。已有配置会保留源记录并迁入 Profile，支持从项目原生配置导入。保存后手动应用或部署，项目更新采用手动覆盖，不持续追踪或自动同步。Claude Desktop 支持全局连接引用与策略配置，模型路由保留原有管理能力。详见[项目级 Agent Profile](docs/project-agent-profiles-zh.md)。
+- **Profile 与项目**：Claude Code/Codex 页头下方提供固定 Profile 入口，也可从「Agent 管理 → 配置项目」提前准备。全局和项目 Profile 分别保存，跨用途通过复制生成独立方案；两者共用模型、行为、MCP、Skills 和指令编辑能力，API 地址、密钥和账号引用供应商连接库。项目方案支持从项目原生配置导入，并可部署到多个目录。保存后手动应用或部署，项目更新采用手动覆盖，不持续追踪或自动同步。Claude Desktop 支持全局连接引用与策略配置，模型路由保留原有管理能力。详见[项目级 Agent Profile](docs/project-agent-profiles-zh.md)。
 - **会话**：点击侧栏的“会话” → 浏览、搜索会话历史，打开阅读页，或恢复各工具的会话
 - **授权中心**：点击侧栏的“授权中心”，登录 GitHub Copilot、ChatGPT、xAI（Grok）、Kimi Code 账号，把订阅当作供应商使用。Kimi Code 支持同时保存多个官方账号，每个账号使用独立凭据和原生供应商，首个登录沿用 Kimi 原生默认凭据槽位，在此添加、重新登录和退出账号。仍在原生配置中的 Kimi 官方 OAuth 节点在供应商页受到保护；原生节点被移除后，可以删除留下的档案。
 

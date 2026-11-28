@@ -3107,9 +3107,8 @@
     "defaultModel": "既定のモデル",
     "loadFailed": "プロファイルを読み込めませんでした",
     "searchPlaceholder": "プロファイル・モデル・プロバイダーを検索",
-    "empty": "この Agent のプロファイルはまだありません。作成して始めましょう。",
+    "empty": "この用途のプロファイルはまだありません。新規作成してください。",
     "createFromCurrent": "プロファイルを作成",
-    "createDescription": "プロファイルは 1 つの Agent の接続、モデル、動作、リソースを保存します。作成しただけでは何も変更されず、適用またはデプロイすると有効になります。",
     "createAndEdit": "作成して編集",
     "createSource": {
       "label": "初期内容",
@@ -3146,7 +3145,7 @@
     "applyFailed": "プロファイルを適用できませんでした：{{detail}}",
     "applyWarnings": "プロファイルを適用しました（注意 {{warningCount}} 件）：\n{{details}}",
     "scope": {
-      "label": "使用先",
+      "label": "プロファイルの用途",
       "global": "グローバル",
       "project": "プロジェクト"
     },
@@ -3229,7 +3228,7 @@
       "projectConnectionCredentialsHint": "アドレスとキーは .claude/settings.local.json に書き込まれ、Git の無視対象になります。Git がすでに追跡している場合、直接接続のデプロイはできません。プロバイダーの変更後は再デプロイしてください。継承に戻すと管理対象の接続フィールドが削除されます。その後、Claude セッションを再起動してください。",
       "projectConnectionProviderRequired": "プロジェクト専用の直接接続には既存のプロバイダーを選択してください。",
       "projectConnectionProviderPlaceholder": "プロジェクトのプロバイダーを選択",
-      "providerReferenceHint": "モデル機能は選択したプロバイダーを使用します。API アドレス、キー、アカウントは引き続きプロバイダーを参照します。プロジェクトへのデプロイでグローバル接続は切り替わりません。",
+      "providerReferenceHint": "グローバル適用時に選択したプロバイダーを使用します。アドレス、キー、アカウントはプロバイダーライブラリに保持します。",
       "model": "モデル",
       "resetModels": "プロバイダーのモデル設定に戻す",
       "runtimeSettings": "推論とコンテキスト",
@@ -3246,8 +3245,8 @@
       "nativeObjectRequired": "設定は JSON オブジェクトである必要があります",
       "nativeInvalid": "設定形式が無効です：{{detail}}",
       "manageResources": "このプロファイルで MCP、Skills、指示を管理する",
-      "resourcesManagedHint": "適用またはデプロイすると、ここで選択したリソースだけが有効になり、それ以外は無効になります。",
-      "resourcesFollowHint": "このプロファイルは MCP、Skills、指示を変更しません。グローバルで有効なものやプロジェクトに既にあるものはそのまま残ります。",
+      "resourcesManagedHint": "選択したリソースをグローバルに有効化し、この機能が管理する他のグローバルリソースを無効化します。",
+      "resourcesFollowHint": "グローバルの MCP、Skills、指示を変更しません。",
       "mcp": "MCP サーバー",
       "skills": "Skills",
       "searchResources": "MCP または Skills を検索",
@@ -3262,7 +3261,12 @@
       "noPrompt": "指示テンプレートなし",
       "instructionHint": "ライブラリのプロンプトを参照します。適用またはデプロイ時に、この Agent の指示ファイルへ書き込みます。",
       "instructionsFollowHint": "このプロファイルは指示を管理しません。リソース管理をオンにするとテンプレートを選択できます。",
-      "saveHint": "保存はプロファイルのみを更新します。グローバルに適用するか、プロジェクトにデプロイすると有効になります。"
+      "globalSaveHint": "保存はこのグローバルプロファイルのみを更新します。変更を使うにはグローバルに適用してください。",
+      "projectSaveHint": "保存はこのプロジェクトプロファイルのみを更新します。選択したディレクトリに配置すると反映されます。他のディレクトリには個別の再配置が必要です。",
+      "projectModelProvider": "モデルの取得元プロバイダー",
+      "projectModelProviderHint": "このプロバイダーはモデルの取得と利用可否の確認に使われ、プロジェクトの接続は切り替えません。モデルは現在のグローバル接続または集約で利用可能である必要があります。",
+      "projectResourcesManagedHint": "この Agent のネイティブな継承ルールに従って選択したリソースを配置します。管理対象外のグローバルリソースが引き続き有効になる場合があります。",
+      "projectResourcesFollowHint": "プロジェクトの既存 MCP、Skills、指示を保持します。既存のプロジェクト上書き設定は削除しません。"
     },
     "connection": {
       "section": "API 接続",
@@ -3287,7 +3291,16 @@
         "login": "Claude ログイン",
         "routing": "ローカルルーティング"
       }
-    }
+    },
+    "target": {
+      "global": "グローバルプロファイル",
+      "project": "プロジェクトプロファイル"
+    },
+    "createGlobalDescription": "この Agent のグローバル既定設定を保存します。作成後、手動でグローバルに適用してください。",
+    "createProjectDescription": "この Agent のプロジェクト設定を保存し、複数のディレクトリに配置できます。作成後、手動で配置してください。",
+    "copyToGlobal": "グローバルプロファイルとして複製",
+    "copyToProject": "プロジェクトプロファイルとして複製",
+    "copyTargetHint": "複製は独立して保存され、対象でサポートされる設定のみを保持します。複製だけでは適用・配置されません。"
   },
   "workspace": {
     "title": "ワークスペースファイル",

@@ -35,6 +35,7 @@ fn the_tray_lists_profiles_configured_for_that_agent_and_keeps_a_pending_one_che
         *payload.native_config.get_mut(app).unwrap() = Some("{}".into());
         let own = crate::database::Profile {
             id: "own".to_string(),
+            target: crate::database::ProfileTarget::Global,
             name: "Own".to_string(),
             payload: serde_json::to_string(&payload).unwrap(),
             sort_order: None,
@@ -44,8 +45,14 @@ fn the_tray_lists_profiles_configured_for_that_agent_and_keeps_a_pending_one_che
         // Configured only for other Agents, or not at all.
         let foreign = crate::database::Profile {
             id: "foreign".to_string(),
+            target: crate::database::ProfileTarget::Global,
             name: "Foreign".to_string(),
             payload: "{}".to_string(),
+            ..own.clone()
+        };
+        let project = crate::database::Profile {
+            id: "project-only".into(),
+            target: crate::database::ProfileTarget::Project,
             ..own.clone()
         };
         let snapshot = |profiles: &[crate::database::Profile]| {
@@ -64,10 +71,13 @@ fn the_tray_lists_profiles_configured_for_that_agent_and_keeps_a_pending_one_che
             .db
             .set_current_profile_id(scope.as_str(), Some(&foreign.id))
             .unwrap();
-        let section = snapshot(&[own.clone(), foreign.clone()]).profiles.unwrap();
+        let section = snapshot(&[own.clone(), foreign.clone(), project.clone()])
+            .profiles
+            .unwrap();
         assert_eq!(section.items, [(own.id.clone(), own.name.clone())]);
         assert_eq!(section.current, None);
         assert!(snapshot(std::slice::from_ref(&foreign)).profiles.is_none());
+        assert!(snapshot(std::slice::from_ref(&project)).profiles.is_none());
 
         state
             .db

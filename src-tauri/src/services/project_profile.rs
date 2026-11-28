@@ -809,6 +809,10 @@ impl ProjectProfileService {
             .db
             .get_profile(profile_id)?
             .ok_or_else(|| AppError::InvalidInput(format!("Profile not found: {profile_id}")))?;
+        crate::services::profile::ProfileService::require_target(
+            &profile,
+            crate::database::ProfileTarget::Project,
+        )?;
         let project_root = Path::new(&project_path)
             .canonicalize()
             .map_err(|err| AppError::io(Path::new(&project_path), err))?;
@@ -4273,6 +4277,7 @@ mod tests {
         *payload.skills.get_mut(&app).unwrap() = skill_ids;
         let profile = Profile {
             id: "profile".to_string(),
+            target: crate::database::ProfileTarget::Project,
             name: "Project profile".to_string(),
             payload: serde_json::to_string(&payload).unwrap(),
             sort_order: None,
@@ -4485,8 +4490,13 @@ mod tests {
                 },
             )
             .unwrap();
-        let mut profile =
-            ProfileService::create(&state, "Named resources", ProfileScope::Claude).unwrap();
+        let mut profile = ProfileService::create(
+            &state,
+            "Named resources",
+            ProfileScope::Claude,
+            crate::database::ProfileTarget::Project,
+        )
+        .unwrap();
         test_projects::use_project(project.path());
         let mut payload: ProfilePayload = serde_json::from_str(&profile.payload).unwrap();
         assert_eq!(
@@ -4623,6 +4633,7 @@ mod tests {
         }
         let global = Profile {
             id: "global-copy".into(),
+            target: crate::database::ProfileTarget::Global,
             ..edited.clone()
         };
         state.db.save_profile(&global).unwrap();
@@ -5257,8 +5268,14 @@ mod tests {
         assert_eq!(settings["model_auto_compact_token_limit"], "900000");
         let target = tempfile::tempdir().unwrap();
         assert_eq!(state.db.get_profile_projects().unwrap().len(), 1);
-        let copied =
-            ProfileService::duplicate(&state, &imported.id, "Copy", ProfileScope::Codex).unwrap();
+        let copied = ProfileService::duplicate(
+            &state,
+            &imported.id,
+            "Copy",
+            ProfileScope::Codex,
+            crate::database::ProfileTarget::Project,
+        )
+        .unwrap();
         test_projects::bind(&copied.id, target.path());
         let mut config = ProfileConfig {
             claude_project_connection: Default::default(),

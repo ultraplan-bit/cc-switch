@@ -382,12 +382,13 @@ impl Database {
         )
         .map_err(|e| AppError::Database(e.to_string()))?;
 
-        // 19. Profiles 表（全应用共享的项目实体，payload 按 app 分槽快照
+        // 19. Profiles 表（用途固定为全局或项目，payload 按 app 分槽快照
         //     供应商/MCP/Skills/Prompt；各应用分组的 current 标记在 settings 表）
         conn.execute(
             "CREATE TABLE IF NOT EXISTS profiles (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
+                target TEXT NOT NULL CHECK (target IN ('global', 'project')),
                 payload TEXT NOT NULL,
                 sort_order INTEGER,
                 created_at INTEGER,
@@ -1841,6 +1842,21 @@ impl Database {
             return Err(AppError::Database(format!(
                 "不支持数据库格式版本 {version}；当前仅支持 {SCHEMA_VERSION}，不会转换或修改此数据库。"
             )));
+        }
+        if !Self::has_column(conn, "profiles", "target")? {
+            return Err(AppError::Database(
+                "数据库缺少当前格式必需的 Profile target 列；原数据库保持不变".into(),
+            ));
+        }
+        let invalid_target: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM profiles WHERE target IS NULL OR target NOT IN ('global', 'project'))",
+            [],
+            |row| row.get(0),
+        ).map_err(|error| AppError::Database(error.to_string()))?;
+        if invalid_target {
+            return Err(AppError::Database(
+                "数据库含不支持的 Profile 用途；原数据库保持不变".into(),
+            ));
         }
         Ok(())
     }

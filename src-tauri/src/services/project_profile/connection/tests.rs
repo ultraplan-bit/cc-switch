@@ -52,6 +52,7 @@ fn profile(
     payload.model_settings.claude = Some(BTreeMap::new());
     let profile = Profile {
         id: id.into(),
+        target: crate::database::ProfileTarget::Project,
         name: id.into(),
         payload: serde_json::to_string(&payload).unwrap(),
         sort_order: None,
